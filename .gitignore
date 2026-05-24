@@ -1,0 +1,21 @@
+# Python
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/.env
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env.local
+
+# Tauri build artefacts
+frontend/src-tauri/target/
+
+# Capacitor native projects (generated — open in Android Studio / Xcode)
+frontend/android/
+frontend/ios/
+
+# Misc
+*.DS_Store
