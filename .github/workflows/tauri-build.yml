@@ -6,11 +6,12 @@ on:
       - 'v*'           # triggers on version tags like v0.1.0
   workflow_dispatch:   # allows manual runs from the GitHub Actions tab
 
+# Required for tauri-action to create and upload release assets
+permissions:
+  contents: write
+
 jobs:
   build-tauri:
-    permissions:
-      contents: write  # needed to upload release assets
-
     strategy:
       fail-fast: false
       matrix:
@@ -20,7 +21,7 @@ jobs:
           - platform: windows-latest
             args: ''
           - platform: macos-latest
-            args: '--target universal-apple-darwin'  # builds fat binary for Intel + Apple Silicon
+            args: '--target universal-apple-darwin'  # fat binary: Intel + Apple Silicon
 
     runs-on: ${{ matrix.platform }}
 
@@ -45,7 +46,6 @@ jobs:
         with:
           workspaces: frontend/src-tauri
 
-      # Linux-only: install webkit2gtk and other GTK deps
       - name: Install Linux dependencies
         if: matrix.platform == 'ubuntu-22.04'
         run: |
@@ -69,7 +69,6 @@ jobs:
           VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://ai.nebualax.co.uk/api/v1' }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
-          # macOS code signing (optional — skip if no Apple Developer account)
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
           APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
           APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
@@ -89,6 +88,6 @@ jobs:
             | macOS | `.dmg` (universal — Intel + Apple Silicon) |
             | Linux (Ubuntu/Debian) | `.deb` |
             | Linux (any) | `.AppImage` |
-          releaseDraft: true
+          releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
