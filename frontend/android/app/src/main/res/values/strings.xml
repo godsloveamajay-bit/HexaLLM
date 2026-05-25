@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">NebulaX AI</string>
+    <string name="title_activity_main">NebulaX AI</string>
+    <string name="package_name">ai.nebulax.app</string>
+    <string name="custom_url_scheme">ai.nebulax.app</string>
+</resources>

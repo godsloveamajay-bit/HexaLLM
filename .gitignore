@@ -13,9 +13,13 @@ frontend/.env.local
 # Tauri build artefacts
 frontend/src-tauri/target/
 
-# Capacitor native projects (generated — open in Android Studio / Xcode)
-frontend/android/
-frontend/ios/
+# Capacitor — ignore build output but track the projects (needed for CI)
+frontend/android/build/
+frontend/android/app/build/
+frontend/android/.gradle/
+frontend/android/capacitor-cordova-android-plugins/build/
+frontend/ios/App/Pods/
+frontend/ios/App/build/
 
 # Misc
 *.DS_Store

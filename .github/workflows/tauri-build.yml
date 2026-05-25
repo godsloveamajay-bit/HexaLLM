@@ -140,6 +140,74 @@ jobs:
             -o -name "*.msi.zip.sig"         \
             \) -not -path "*/deps/*" -print0 2>/dev/null || true)
 
+  build-android:
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build web app
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://ai.nebualax.co.uk/api/v1' }}
+
+      - name: Sync Capacitor to Android
+        working-directory: frontend
+        run: npx cap sync android
+
+      - name: Sync version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r major minor patch <<< "$VERSION"
+          patch=${patch:-0}
+          VERSION_CODE=$(( major * 10000 + minor * 100 + patch ))
+          sed -i "s/versionCode [0-9]*/versionCode $VERSION_CODE/" frontend/android/app/build.gradle
+          sed -i "s/versionName \"[^\"]*\"/versionName \"$VERSION\"/" frontend/android/app/build.gradle
+          echo "Version: $VERSION ($VERSION_CODE)"
+
+      - name: Decode keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > /tmp/nebulax.keystore
+
+      - name: Build release APK
+        working-directory: frontend/android
+        run: ./gradlew assembleRelease
+        env:
+          ANDROID_KEYSTORE_PATH: /tmp/nebulax.keystore
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+
+      - name: Upload APK to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          APK=$(find frontend/android/app/build/outputs/apk/release -name "*.apk" | head -1)
+          [ -f "$APK" ] || (echo "APK not found" && exit 1)
+          NAME="NebulaX-AI-${GITHUB_REF_NAME}-android.apk"
+          cp "$APK" "/tmp/$NAME"
+          gh release upload "$GITHUB_REF_NAME" "/tmp/$NAME" --clobber --repo "${{ github.repository }}"
+          echo "Uploaded: $NAME"
+
   publish-updater-json:
     needs: build-tauri
     runs-on: ubuntu-22.04
