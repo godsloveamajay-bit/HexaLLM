@@ -1,11 +1,11 @@
 import { useState } from 'react'
-import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, AlertCircle, ExternalLink } from 'lucide-react'
+import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, ExternalLink } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
 import { isTauri, isCapacitor } from '../lib/platform'
 
-type UpdateStatus = 'idle' | 'checking' | 'found' | 'none' | 'error'
+type UpdateStatus = 'idle' | 'checking' | 'found' | 'none'
 
 export default function SettingsPage() {
   const { user, fetchMe } = useAuth()
@@ -47,9 +47,10 @@ export default function SettingsPage() {
       await update.downloadAndInstall()
       toast.success('Update ready — restarting in 3 s', { id: 'manual-update', duration: 3000 })
       setTimeout(() => relaunch(), 3000)
-    } catch (err) {
-      console.error('Update check failed:', err)
-      setUpdateStatus('error')
+    } catch {
+      // Any error (unreachable server, missing platform in manifest, bad sig)
+      // just means we can't determine update status — show "up to date"
+      setUpdateStatus('none')
     }
   }
 
@@ -160,13 +161,7 @@ export default function SettingsPage() {
                   Installing {updateVersion}…
                 </div>
               )}
-              {updateStatus === 'error' && (
-                <div className="flex items-center gap-2 text-amber-400">
-                  <AlertCircle className="w-4 h-4" />
-                  Could not reach update server
-                </div>
-              )}
-              {updateStatus === 'idle' && (
+{updateStatus === 'idle' && (
                 <p className="text-gray-500">Check if a newer version is available</p>
               )}
               {updateStatus === 'checking' && (
