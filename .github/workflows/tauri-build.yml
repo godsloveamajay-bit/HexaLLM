@@ -3,10 +3,9 @@ name: Build Desktop Apps
 on:
   push:
     tags:
-      - 'v*'           # triggers on version tags like v0.2.0
-  workflow_dispatch:   # allows manual runs from the GitHub Actions tab
+      - 'v*'
+  workflow_dispatch:
 
-# Required for tauri-action to create and upload release assets
 permissions:
   contents: write
 
@@ -21,7 +20,7 @@ jobs:
           - platform: windows-latest
             args: ''
           - platform: macos-latest
-            args: '--target universal-apple-darwin'  # fat binary: Intel + Apple Silicon
+            args: '--target universal-apple-darwin'
 
     runs-on: ${{ matrix.platform }}
 
@@ -100,5 +99,99 @@ jobs:
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
-          updaterJsonPreferNsis: true
-          updaterJsonKeepUniversal: true
+
+      # Upload the updater archives + signatures that tauri-action skips
+      - name: Upload updater artifacts
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          REPO="${{ github.repository }}"
+          upload() {
+            local f="$1"
+            local name
+            name=$(basename "$f" | tr ' ' '.')
+            cp "$f" "/tmp/$name"
+            gh release upload "$TAG" "/tmp/$name" --clobber --repo "$REPO" && echo "Uploaded: $name" || echo "Skip: $name"
+          }
+          # Linux: AppImage updater bundle
+          find frontend/src-tauri/target/release/bundle/appimage \
+               -name "*.AppImage.tar.gz" -o -name "*.AppImage.tar.gz.sig" 2>/dev/null | while read f; do upload "$f"; done
+          # macOS: .app.tar.gz updater bundle
+          find frontend/src-tauri/target \
+               -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" 2>/dev/null | while read f; do upload "$f"; done
+          # Windows: NSIS zip updater bundle
+          find frontend/src-tauri/target/release/bundle/nsis \
+               -name "*.nsis.zip" -o -name "*.nsis.zip.sig" 2>/dev/null | while read f; do upload "$f"; done
+          # Windows: MSI zip updater bundle (fallback)
+          find frontend/src-tauri/target/release/bundle/msi \
+               -name "*.msi.zip" -o -name "*.msi.zip.sig" 2>/dev/null | while read f; do upload "$f"; done
+
+  publish-updater-json:
+    needs: build-tauri
+    runs-on: ubuntu-22.04
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Generate and upload latest.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          REPO="${{ github.repository }}"
+          mkdir -p /tmp/assets
+          gh release download "$TAG" --repo "$REPO" --dir /tmp/assets
+
+          python3 << 'PYEOF'
+          import json, os, glob
+
+          tag     = os.environ['GITHUB_REF_NAME']
+          repo    = os.environ['REPO']
+          version = tag.lstrip('v')
+          base    = f"https://github.com/{repo}/releases/download/{tag}"
+
+          def find_sig(pattern):
+              files = glob.glob(f"/tmp/assets/{pattern}")
+              return open(files[0]).read().strip() if files else None
+
+          def asset_url(pattern):
+              files = glob.glob(f"/tmp/assets/{pattern}")
+              if not files:
+                  return None
+              return base + '/' + os.path.basename(files[0]).replace(' ', '.')
+
+          data = {
+              "version": version,
+              "notes": "",
+              "pub_date": __import__('datetime').datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
+              "platforms": {}
+          }
+
+          # Linux
+          sig = find_sig("*.AppImage.tar.gz.sig")
+          url = asset_url("*.AppImage.tar.gz")
+          if sig and url:
+              data["platforms"]["linux-x86_64"] = {"signature": sig, "url": url}
+
+          # Windows (NSIS preferred, MSI fallback)
+          sig = find_sig("*.nsis.zip.sig") or find_sig("*.msi.zip.sig")
+          url = asset_url("*.nsis.zip") or asset_url("*.msi.zip")
+          if sig and url:
+              data["platforms"]["windows-x86_64"] = {"signature": sig, "url": url}
+
+          # macOS universal — register for both Intel and Apple Silicon
+          sig = find_sig("*.app.tar.gz.sig")
+          url = asset_url("*.app.tar.gz")
+          if sig and url:
+              data["platforms"]["darwin-x86_64"]  = {"signature": sig, "url": url}
+              data["platforms"]["darwin-aarch64"] = {"signature": sig, "url": url}
+
+          print(json.dumps(data, indent=2))
+          with open("/tmp/latest.json", "w") as f:
+              json.dump(data, f, indent=2)
+          PYEOF
+
+          gh release upload "$TAG" /tmp/latest.json --clobber --repo "$REPO"
+          echo "latest.json uploaded successfully"
