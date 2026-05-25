@@ -15,6 +15,7 @@ import SettingsPage from './pages/Settings'
 import KnowledgePage from './pages/Knowledge'
 import PrivacyPolicyPage from './pages/PrivacyPolicy'
 import ImageGenPage from './pages/ImageGen'
+import SharePage from './pages/Share'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth()
@@ -32,6 +33,7 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/share/:token" element={<SharePage />} />
       <Route
         element={
           <PrivateRoute>

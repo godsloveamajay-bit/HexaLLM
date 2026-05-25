@@ -18,6 +18,9 @@ class ChatRequest(BaseModel):
     stream: bool = True
     knowledge_base_id: Optional[int] = None
     top_k: int = 4
+    attachment_base64: Optional[str] = None  # data URL or raw base64
+    attachment_type: Optional[str] = None    # "image" | "pdf" | "text"
+    attachment_name: Optional[str] = None
 
 
 class ChatSessionCreate(BaseModel):

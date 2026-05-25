@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Send, Plus, Trash2, Bot, User, Loader2, ChevronDown, BookOpen, FileText, Sparkles, Sparkle, Zap, Scale, Brain, Settings2, Menu, X } from 'lucide-react'
+import { Send, Plus, Trash2, Bot, User, Loader2, ChevronDown, BookOpen, FileText, Sparkles, Sparkle, Zap, Scale, Brain, Settings2, Menu, X, Paperclip, Share2, BookMarked } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -25,7 +25,11 @@ interface Message {
   content: string
   citations?: Citation[]
   route?: RouteInfo
+  usage?: { prompt_tokens: number; completion_tokens: number }
+  latency_ms?: number
 }
+interface Template { id: number; name: string; content: string }
+interface Attachment { type: 'image' | 'pdf' | 'text'; name: string; base64: string; preview?: string }
 interface Session { id: number; title: string; model_name: string; updated_at: string }
 interface KB { id: number; name: string; document_count: number; chunk_count: number }
 interface NebulaVariant {
@@ -47,14 +51,17 @@ const VARIANT_ICONS: Record<string, any> = {
 const CUSTOM_VARIANT_ID = 'nebulax:custom'
 
 // ── Module-level: survives component remounts ─────────────────────────────
-// Keeps the stream alive and the accumulated text reachable even if the user
-// navigates away before generation finishes.
 interface StreamEntry {
   content: string
   citations: Citation[]
   route: RouteInfo | undefined
+  usage: { prompt_tokens: number; completion_tokens: number } | undefined
+  latency_ms: number
   done: boolean
-  onComplete: Array<(content: string, citations: Citation[], route: RouteInfo | undefined) => void>
+  onComplete: Array<(
+    content: string, citations: Citation[], route: RouteInfo | undefined,
+    usage: StreamEntry['usage'], latency_ms: number,
+  ) => void>
 }
 const liveStreams = new Map<number, StreamEntry>()
 // ─────────────────────────────────────────────────────────────────────────
@@ -74,8 +81,13 @@ export default function ChatPage() {
   const [kbId, setKbId] = useState<number | null>(null)
   const [variants, setVariants] = useState<NebulaVariant[]>([])
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
+  const [attachment, setAttachment] = useState<Attachment | null>(null)
+  const [templates, setTemplates] = useState<Template[]>([])
+  const [showTemplates, setShowTemplates] = useState(false)
+  const [newTemplateName, setNewTemplateName] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
   const typeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const typeIndexRef = useRef(0)
   const mountedRef = useRef(true)
@@ -89,20 +101,40 @@ export default function ChatPage() {
   }, [])
 
   useEffect(() => {
+    if (!showTemplates) return
+    const close = (e: MouseEvent) => {
+      const target = e.target as Element
+      if (!target.closest('[data-templates-panel]')) setShowTemplates(false)
+    }
+    document.addEventListener('mousedown', close)
+    return () => document.removeEventListener('mousedown', close)
+  }, [showTemplates])
+
+  useEffect(() => {
     loadSessions()
     loadKbs()
     loadVariants()
     loadOllamaModels()
+    loadTemplates()
   }, [])
+
+  // Set default model from first ready variant only when no session is active
+  useEffect(() => {
+    if (variants.length > 0 && sessions.length === 0) {
+      const firstReady = variants.find((v) => v.ready)
+      if (firstReady) setModel(firstReady.id)
+    }
+  }, [variants, sessions])
 
   const loadVariants = async () => {
     try {
       const { data } = await api.get('/models/nebulax/variants')
-      const list: NebulaVariant[] = data.variants || []
-      setVariants(list)
-      const firstReady = list.find((v) => v.ready)
-      if (firstReady) setModel(firstReady.id)
+      setVariants(data.variants || [])
     } catch {}
+  }
+
+  const loadTemplates = async () => {
+    try { const { data } = await api.get('/templates'); setTemplates(data) } catch {}
   }
 
   const loadOllamaModels = async () => {
@@ -145,7 +177,13 @@ export default function ChatPage() {
   }
 
   // ── Typewriter ──────────────────────────────────────────────────────────
-  function startTypewriter(content: string, citations: Citation[], route: RouteInfo | undefined) {
+  function startTypewriter(
+    content: string,
+    citations: Citation[],
+    route: RouteInfo | undefined,
+    usage?: StreamEntry['usage'],
+    latency_ms?: number,
+  ) {
     if (!mountedRef.current) return
     const total = content.length
     if (!total) { setStreamPhase('idle'); return }
@@ -172,7 +210,7 @@ export default function ChatPage() {
           updated[updated.length - 1] = {
             ...last,
             content: slice,
-            ...(done ? { citations: citations.length ? citations : undefined, route } : {}),
+            ...(done ? { citations: citations.length ? citations : undefined, route, usage, latency_ms } : {}),
           }
         }
         return updated
@@ -210,6 +248,7 @@ export default function ChatPage() {
     cancelTypewriter()
     setActiveSession(session)
     setModel(session.model_name)
+    setAttachment(null)
     setSessionPanelOpen(false)
 
     // Re-attach to a live stream if the user navigated away mid-generation
@@ -234,10 +273,9 @@ export default function ChatPage() {
           setMessages([{ role: 'assistant' as const, content: '' }])
         }
         setStreamPhase('thinking')
-        live.onComplete.push((content, citations, route) => {
+        live.onComplete.push((content, citations, route, usage, latency_ms) => {
           if (!mountedRef.current) return
           liveStreams.delete(session.id)
-          // Set full content so typewriter starts from the right place
           setMessages(prev => {
             const updated = [...prev]
             const last = updated[updated.length - 1]
@@ -246,7 +284,7 @@ export default function ChatPage() {
             }
             return updated
           })
-          startTypewriter(content, citations, route)
+          startTypewriter(content, citations, route, usage, latency_ms)
         })
       }
       return
@@ -283,7 +321,8 @@ export default function ChatPage() {
 
     // Register stream entry so page navigation can re-attach
     const entry: StreamEntry = {
-      content: '', citations: [], route: undefined, done: false, onComplete: [],
+      content: '', citations: [], route: undefined, usage: undefined, latency_ms: 0,
+      done: false, onComplete: [],
     }
     liveStreams.set(session.id, entry)
 
@@ -307,6 +346,9 @@ export default function ChatPage() {
           system_prompt: systemPrompt || null,
           stream: true,
           knowledge_base_id: kbId,
+          attachment_base64: attachment?.base64 || null,
+          attachment_type: attachment?.type || null,
+          attachment_name: attachment?.name || null,
         }),
       })
 
@@ -356,6 +398,12 @@ export default function ChatPage() {
                 })
               }
             } catch {}
+          } else if (event === 'usage') {
+            try {
+              const parsed = JSON.parse(data)
+              entry.usage = { prompt_tokens: parsed.prompt_tokens || 0, completion_tokens: parsed.completion_tokens || 0 }
+              entry.latency_ms = parsed.latency_ms || 0
+            } catch {}
           } else if (data !== '[DONE]' && data) {
             entry.content += data
             // Fast mode: stream chunks directly to UI; typewriter mode: only accumulate
@@ -380,17 +428,25 @@ export default function ChatPage() {
       liveStreams.delete(session.id)
     } finally {
       entry.done = true
-      // Notify any listener that re-attached after navigation
-      entry.onComplete.forEach(fn => fn(entry.content, entry.citations, entry.route))
-      // Clean up the registry after a grace period
+      entry.onComplete.forEach(fn => fn(entry.content, entry.citations, entry.route, entry.usage, entry.latency_ms))
       setTimeout(() => liveStreams.delete(session.id), 10_000)
 
       if (useTypewriter) {
-        // Begin typewriter reveal (no-ops if component unmounted)
-        startTypewriter(entry.content, entry.citations, entry.route)
+        startTypewriter(entry.content, entry.citations, entry.route, entry.usage, entry.latency_ms)
       } else {
-        if (mountedRef.current) setSending(false)
+        if (mountedRef.current) {
+          setSending(false)
+          if (entry.usage) {
+            setMessages(m => {
+              const u = [...m]
+              const last = u[u.length - 1]
+              if (last?.role === 'assistant') u[u.length - 1] = { ...last, usage: entry.usage, latency_ms: entry.latency_ms }
+              return u
+            })
+          }
+        }
       }
+      setAttachment(null)
 
       // AI-generated title after first exchange
       if (isFirstMessage && session) {
@@ -406,6 +462,52 @@ export default function ChatPage() {
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
+  }
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    e.target.value = ''
+    const reader = new FileReader()
+    const type: Attachment['type'] = file.type.startsWith('image/') ? 'image' : file.type === 'application/pdf' ? 'pdf' : 'text'
+    reader.onload = () => {
+      const base64 = reader.result as string
+      setAttachment({ type, name: file.name, base64, preview: type === 'image' ? base64 : undefined })
+    }
+    reader.readAsDataURL(file)
+  }
+
+  const shareSession = async () => {
+    if (!activeSession) return
+    try {
+      const { data } = await api.post(`/chat/sessions/${activeSession.id}/share`)
+      const url = `${window.location.origin}/share/${data.token}`
+      await navigator.clipboard.writeText(url)
+      toast.success('Share link copied!')
+    } catch { toast.error('Failed to share') }
+  }
+
+  const applyTemplate = (t: Template) => {
+    setSystemPrompt(t.content)
+    setShowSystem(true)
+    setShowTemplates(false)
+    if (model !== CUSTOM_VARIANT_ID) setModel(CUSTOM_VARIANT_ID)
+  }
+
+  const saveTemplate = async () => {
+    if (!newTemplateName.trim() || !systemPrompt.trim()) return
+    try {
+      const { data } = await api.post('/templates', { name: newTemplateName.trim(), content: systemPrompt })
+      setTemplates(t => [data, ...t])
+      setNewTemplateName('')
+      toast.success('Template saved!')
+    } catch { toast.error('Failed to save') }
+  }
+
+  const deleteTemplate = async (id: number, e: React.MouseEvent) => {
+    e.stopPropagation()
+    await api.delete(`/templates/${id}`)
+    setTemplates(t => t.filter(x => x.id !== id))
   }
 
   const activeKb = kbs.find((k) => k.id === kbId)
@@ -453,9 +555,16 @@ export default function ChatPage() {
                 <p className="truncate">{s.title}</p>
                 <p className="text-xs text-gray-600 truncate">{s.model_name.replace('nebulax:', '')}</p>
               </div>
-              <button onClick={(e) => deleteSession(s.id, e)} className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all flex-shrink-0">
-                <Trash2 className="w-3 h-3" />
-              </button>
+              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-all flex-shrink-0">
+                {activeSession?.id === s.id && (
+                  <button onClick={(e) => { e.stopPropagation(); shareSession() }} className="hover:text-primary-400" title="Share">
+                    <Share2 className="w-3 h-3" />
+                  </button>
+                )}
+                <button onClick={(e) => deleteSession(s.id, e)} className="hover:text-red-400">
+                  <Trash2 className="w-3 h-3" />
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -513,12 +622,49 @@ export default function ChatPage() {
               {variants.find((v) => v.id === model)?.label || model}
             </span>
 
-            {model === CUSTOM_VARIANT_ID && (
-              <button onClick={() => setShowSystem(!showSystem)} className="btn-ghost text-xs gap-1 flex-shrink-0 ml-auto">
-                <ChevronDown className={clsx('w-3 h-3 transition-transform', showSystem && 'rotate-180')} />
-                <span className="hidden sm:inline">System Prompt</span>
+            <div className="relative flex items-center gap-1 ml-auto flex-shrink-0" data-templates-panel>
+              <button
+                onClick={() => setShowTemplates(!showTemplates)}
+                className="btn-ghost text-xs gap-1"
+                title="Prompt templates"
+              >
+                <BookMarked className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Templates</span>
               </button>
-            )}
+              {model === CUSTOM_VARIANT_ID && (
+                <button onClick={() => setShowSystem(!showSystem)} className="btn-ghost text-xs gap-1">
+                  <ChevronDown className={clsx('w-3 h-3 transition-transform', showSystem && 'rotate-180')} />
+                  <span className="hidden sm:inline">System Prompt</span>
+                </button>
+              )}
+              {showTemplates && (
+                <div className="absolute right-0 top-full mt-1 w-72 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 p-3 space-y-2">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Saved templates</p>
+                  {templates.length === 0 && <p className="text-xs text-gray-600">No templates yet. Save a system prompt below.</p>}
+                  {templates.map((t) => (
+                    <div key={t.id} onClick={() => applyTemplate(t)}
+                      className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-gray-800 group">
+                      <span className="flex-1 text-sm text-gray-300 truncate">{t.name}</span>
+                      <button onClick={(e) => deleteTemplate(t.id, e)} className="opacity-0 group-hover:opacity-100 hover:text-red-400">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </div>
+                  ))}
+                  {systemPrompt.trim() && (
+                    <div className="pt-2 border-t border-gray-800 flex gap-2">
+                      <input
+                        value={newTemplateName}
+                        onChange={(e) => setNewTemplateName(e.target.value)}
+                        placeholder="Template name…"
+                        className="input text-xs flex-1 py-1"
+                        onKeyDown={(e) => e.key === 'Enter' && saveTemplate()}
+                      />
+                      <button onClick={saveTemplate} className="btn-primary text-xs px-2 py-1">Save</button>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
 
           {/* Row 2: Knowledge base selector — own row so it never overflows */}
@@ -657,6 +803,14 @@ export default function ChatPage() {
                       </div>
                     )}
 
+                    {/* Token / latency badge */}
+                    {!isThinking && !isTyping && !isFastStream && msg.usage && (
+                      <div className="mt-1 flex items-center gap-2 text-xs text-gray-600">
+                        <span>{(msg.usage.prompt_tokens + msg.usage.completion_tokens).toLocaleString()} tokens</span>
+                        {msg.latency_ms ? <span>· {(msg.latency_ms / 1000).toFixed(1)}s</span> : null}
+                      </div>
+                    )}
+
                     {/* Citations — only after reveal is complete */}
                     {!isThinking && !isTyping && !isFastStream && msg.citations && msg.citations.length > 0 && (
                       <div className="mt-3 pt-3 border-t border-gray-800 not-prose">
@@ -692,9 +846,31 @@ export default function ChatPage() {
           <div ref={bottomRef} />
         </div>
 
+        {/* Attachment preview */}
+        {attachment && (
+          <div className="px-4 py-2 border-t border-gray-800 bg-gray-900/60 flex items-center gap-3">
+            {attachment.preview
+              ? <img src={attachment.preview} alt="attachment" className="w-10 h-10 object-cover rounded" />
+              : <FileText className="w-5 h-5 text-gray-500 flex-shrink-0" />
+            }
+            <span className="text-xs text-gray-400 flex-1 truncate">{attachment.name}</span>
+            <button onClick={() => setAttachment(null)} className="text-gray-600 hover:text-gray-400">
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
+
         {/* Input */}
         <div className="px-4 py-3 border-t border-gray-800 bg-gray-900">
           <div className="flex items-end gap-2 max-w-4xl mx-auto">
+            <input ref={fileInputRef} type="file" accept="image/*,.pdf,.txt,.md" className="hidden" onChange={handleFile} />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              className="btn-ghost p-2 flex-shrink-0"
+              title="Attach file or image"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
             <textarea
               ref={textareaRef}
               value={input}

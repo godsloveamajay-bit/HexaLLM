@@ -26,6 +26,7 @@ class User(Base):
     training_jobs = relationship("TrainingJob", back_populates="user", cascade="all, delete-orphan")
     request_logs = relationship("RequestLog", back_populates="user", cascade="all, delete-orphan")
     knowledge_bases = relationship("KnowledgeBase", back_populates="user", cascade="all, delete-orphan")
+    prompt_templates = relationship("PromptTemplate", back_populates="user", cascade="all, delete-orphan")
 
 
 class APIKey(Base):

@@ -12,6 +12,7 @@ class ChatSession(Base):
     title = Column(String, default="New Chat")
     model_name = Column(String, nullable=False)
     system_prompt = Column(Text, nullable=True)
+    share_token = Column(String, unique=True, nullable=True, index=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 

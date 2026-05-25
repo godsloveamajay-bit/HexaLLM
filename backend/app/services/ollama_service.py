@@ -51,6 +51,8 @@ class OllamaService:
         temperature: float = 0.7,
         max_tokens: Optional[int] = None,
         num_ctx: Optional[int] = None,
+        images: Optional[List[str]] = None,
+        usage: Optional[Dict] = None,
     ) -> AsyncGenerator[str, None]:
         # Ollama's /api/chat takes system messages via the messages array,
         # NOT a top-level "system" field (that's only for /api/generate).
@@ -58,6 +60,14 @@ class OllamaService:
         # hasn't already included one.
         if system_prompt and not (messages and messages[0].get("role") == "system"):
             messages = [{"role": "system", "content": system_prompt}] + list(messages)
+
+        # Attach images to the last user message for multimodal models
+        if images:
+            messages = list(messages)
+            for i in range(len(messages) - 1, -1, -1):
+                if messages[i].get("role") == "user":
+                    messages[i] = {**messages[i], "images": images}
+                    break
 
         payload = {
             "model": model,
@@ -85,6 +95,9 @@ class OllamaService:
                             if content:
                                 yield content
                             if data.get("done"):
+                                if usage is not None:
+                                    usage["prompt_tokens"] = data.get("prompt_eval_count", 0)
+                                    usage["completion_tokens"] = data.get("eval_count", 0)
                                 break
                         except json.JSONDecodeError:
                             continue

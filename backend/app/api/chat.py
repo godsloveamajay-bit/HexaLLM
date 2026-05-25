@@ -1,10 +1,13 @@
+import base64
+import io
 import json
 import time
+import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 from ..core.database import get_db
 from ..core.security import get_current_user
 from ..models.user import User
@@ -119,6 +122,41 @@ async def _apply_router(req: ChatRequest):
     )
 
 
+def _resolve_attachment(req: ChatRequest, messages: List[Dict]) -> List[str]:
+    """Extract attachment from request. Mutates messages in-place for text/pdf.
+    Returns list of base64 image strings for multimodal, or empty list."""
+    if not req.attachment_base64 or not req.attachment_type:
+        return []
+
+    raw_b64 = req.attachment_base64
+    if "," in raw_b64:
+        raw_b64 = raw_b64.split(",", 1)[1]
+
+    if req.attachment_type == "image":
+        return [raw_b64]
+
+    # Text or PDF: decode and prepend to last user message
+    try:
+        raw_bytes = base64.b64decode(raw_b64)
+        if req.attachment_type == "pdf":
+            from pypdf import PdfReader
+            reader = PdfReader(io.BytesIO(raw_bytes))
+            text = "\n".join(p.extract_text() or "" for p in reader.pages)
+        else:
+            text = raw_bytes.decode("utf-8", errors="replace")
+        name = req.attachment_name or "document"
+        for i in range(len(messages) - 1, -1, -1):
+            if messages[i].get("role") == "user":
+                messages[i] = {
+                    **messages[i],
+                    "content": f"[Attached: {name}]\n\n{text[:8000]}\n\n---\n\n{messages[i]['content']}",
+                }
+                break
+    except Exception:
+        pass
+    return []
+
+
 @router.post("/completions")
 async def chat_completions(
     req: ChatRequest,
@@ -132,6 +170,7 @@ async def chat_completions(
         ).first()
 
     messages = [{"role": m.role, "content": m.content} for m in req.messages]
+    images = _resolve_attachment(req, messages)
     start = time.time()
 
     # Route nebulax:* variants → concrete Ollama model + variant params.
@@ -152,6 +191,7 @@ async def chat_completions(
     if req.stream:
         async def generate():
             full_response = ""
+            usage_info: Dict = {}
             try:
                 if route_meta:
                     yield f"event: route\ndata: {json.dumps(route_meta)}\n\n"
@@ -159,13 +199,14 @@ async def chat_completions(
                     yield f"event: citations\ndata: {json.dumps(citations)}\n\n"
                 async for chunk in ollama.chat_stream(
                     eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx,
+                    images=images, usage=usage_info,
                 ):
                     full_response += chunk
                     yield f"data: {chunk}\n\n"
             finally:
                 latency = int((time.time() - start) * 1000)
-                # Save messages to session — store the requested model name (variant),
-                # not the underlying one, so the UI can re-render correctly.
+                prompt_tok = usage_info.get("prompt_tokens", 0)
+                completion_tok = usage_info.get("completion_tokens", 0)
                 if session:
                     last_user_msg = next((m for m in reversed(req.messages) if m.role == "user"), None)
                     if last_user_msg:
@@ -173,11 +214,15 @@ async def chat_completions(
                     db.add(ChatMessage(
                         session_id=session.id, role="assistant", content=full_response,
                         latency_ms=latency,
+                        tokens_used=(prompt_tok + completion_tok) or None,
                     ))
                     session.updated_at = datetime.now(timezone.utc)
                     db.commit()
                 log_request(db, current_user.id, "/chat/completions", "POST", 200,
-                            model_name=req.model, latency_ms=latency)
+                            model_name=req.model, latency_ms=latency,
+                            prompt_tokens=prompt_tok, completion_tokens=completion_tok)
+                if usage_info:
+                    yield f"event: usage\ndata: {json.dumps({'prompt_tokens': prompt_tok, 'completion_tokens': completion_tok, 'latency_ms': latency})}\n\n"
                 yield "data: [DONE]\n\n"
 
         return StreamingResponse(generate(), media_type="text/event-stream")
@@ -305,3 +350,35 @@ def delete_session(session_id: int, db: Session = Depends(get_db), current_user:
         raise HTTPException(status_code=404, detail="Session not found")
     db.delete(session)
     db.commit()
+
+
+@router.post("/sessions/{session_id}/share")
+def share_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    session = db.query(ChatSession).filter(
+        ChatSession.id == session_id, ChatSession.user_id == current_user.id
+    ).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if not session.share_token:
+        session.share_token = str(uuid.uuid4())
+        db.commit()
+    return {"token": session.share_token}
+
+
+@router.get("/share/{token}")
+def get_shared_session(token: str, db: Session = Depends(get_db)):
+    session = db.query(ChatSession).filter(ChatSession.share_token == token).first()
+    if not session:
+        raise HTTPException(status_code=404, detail="Share not found")
+    return {
+        "title": session.title,
+        "model_name": session.model_name,
+        "messages": [
+            {"role": m.role, "content": m.content}
+            for m in session.messages
+        ],
+    }
