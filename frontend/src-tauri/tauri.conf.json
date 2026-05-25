@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "NebulaX AI",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "identifier": "ai.nebulax.app",
   "build": {
     "frontendDist": "../dist",
@@ -36,5 +36,14 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ]
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDlEMTdGREQ1MDEyNTFEQkQKUldTOUhTVUIxZjBYbldxOE5MUGJvbFo2T1Y5VEwxQWRMcStrajZtR2lMT3N3T2RBY1BIV3V2eUcK",
+      "endpoints": [
+        "https://github.com/godsloveamajay-bit/nebulaxai/releases/latest/download/latest.json"
+      ],
+      "dialog": false
+    }
   }
 }

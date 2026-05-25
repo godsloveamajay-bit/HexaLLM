@@ -3,10 +3,12 @@ import { Outlet, Link } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import { Sparkle, Menu } from 'lucide-react'
 import { useAuth } from '../../store/auth'
+import { useAutoUpdate } from '../../hooks/useAutoUpdate'
 
 export default function Layout() {
   const { user } = useAuth()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  useAutoUpdate()
 
   return (
     <div className="flex flex-col h-screen bg-gray-950 overflow-hidden">
