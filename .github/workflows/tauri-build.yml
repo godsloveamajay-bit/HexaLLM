@@ -161,6 +161,14 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
+      - name: Install Android SDK components
+        run: |
+          yes | sdkmanager --install \
+            "platforms;android-35" \
+            "build-tools;35.0.0" \
+            "platform-tools" 2>/dev/null | grep -v "^Unpacking\|^Downloading" || true
+          yes | sdkmanager --licenses 2>/dev/null || true
+
       - name: Install frontend dependencies
         working-directory: frontend
         run: npm ci
@@ -191,11 +199,14 @@ jobs:
 
       - name: Build release APK
         working-directory: frontend/android
-        run: ./gradlew assembleRelease
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleRelease --no-daemon --stacktrace
         env:
           ANDROID_KEYSTORE_PATH: /tmp/nebulax.keystore
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2g"
 
       - name: Upload APK to release
         env:
