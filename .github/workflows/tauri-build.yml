@@ -155,51 +155,30 @@ jobs:
           mkdir -p /tmp/assets
           gh release download "$TAG" --repo "$REPO" --dir /tmp/assets
 
-          python3 - << 'PYEOF'
-import json, os, glob, datetime
-
-tag     = os.environ['GITHUB_REF_NAME']
-repo    = os.environ['REPO']
-version = tag.lstrip('v')
-base    = f"https://github.com/{repo}/releases/download/{tag}"
-
-def find_sig(pattern):
-    files = glob.glob(f"/tmp/assets/{pattern}")
-    return open(files[0]).read().strip() if files else None
-
-def asset_url(pattern):
-    files = glob.glob(f"/tmp/assets/{pattern}")
-    if not files:
-        return None
-    return base + '/' + os.path.basename(files[0]).replace(' ', '.')
-
-data = {
-    "version": version,
-    "notes": "",
-    "pub_date": datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'),
-    "platforms": {}
-}
-
-sig = find_sig("*.AppImage.tar.gz.sig")
-url = asset_url("*.AppImage.tar.gz")
-if sig and url:
-    data["platforms"]["linux-x86_64"] = {"signature": sig, "url": url}
-
-sig = find_sig("*.nsis.zip.sig") or find_sig("*.msi.zip.sig")
-url = asset_url("*.nsis.zip") or asset_url("*.msi.zip")
-if sig and url:
-    data["platforms"]["windows-x86_64"] = {"signature": sig, "url": url}
-
-sig = find_sig("*.app.tar.gz.sig")
-url = asset_url("*.app.tar.gz")
-if sig and url:
-    data["platforms"]["darwin-x86_64"]  = {"signature": sig, "url": url}
-    data["platforms"]["darwin-aarch64"] = {"signature": sig, "url": url}
-
-print(json.dumps(data, indent=2))
-with open("/tmp/latest.json", "w") as f:
-    json.dump(data, f, indent=2)
-PYEOF
+          python3 << 'PYEOF'
+          import json, os, glob, datetime
+          tag     = os.environ['GITHUB_REF_NAME']
+          repo    = os.environ['REPO']
+          version = tag.lstrip('v')
+          base    = f"https://github.com/{repo}/releases/download/{tag}"
+          def find_sig(p):
+              files = glob.glob(f"/tmp/assets/{p}")
+              return open(files[0]).read().strip() if files else None
+          def asset_url(p):
+              files = glob.glob(f"/tmp/assets/{p}")
+              return (base + '/' + os.path.basename(files[0]).replace(' ', '.')) if files else None
+          data = {"version": version, "notes": "", "pub_date": datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), "platforms": {}}
+          sig = find_sig("*.AppImage.tar.gz.sig"); url = asset_url("*.AppImage.tar.gz")
+          if sig and url: data["platforms"]["linux-x86_64"] = {"signature": sig, "url": url}
+          sig = find_sig("*.nsis.zip.sig") or find_sig("*.msi.zip.sig"); url = asset_url("*.nsis.zip") or asset_url("*.msi.zip")
+          if sig and url: data["platforms"]["windows-x86_64"] = {"signature": sig, "url": url}
+          sig = find_sig("*.app.tar.gz.sig"); url = asset_url("*.app.tar.gz")
+          if sig and url:
+              data["platforms"]["darwin-x86_64"]  = {"signature": sig, "url": url}
+              data["platforms"]["darwin-aarch64"] = {"signature": sig, "url": url}
+          print(json.dumps(data, indent=2))
+          open("/tmp/latest.json", "w").write(json.dumps(data, indent=2))
+          PYEOF
 
           gh release upload "$TAG" /tmp/latest.json --clobber --repo "$REPO"
           echo "latest.json uploaded successfully"
