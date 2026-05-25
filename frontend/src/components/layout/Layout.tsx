@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Outlet, Link } from 'react-router-dom'
 import Sidebar from './Sidebar'
-import { Flame, Menu } from 'lucide-react'
+import { Sparkle, Menu } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 
 export default function Layout() {
@@ -26,7 +26,7 @@ export default function Layout() {
           <Link to="/chat" className="flex items-center gap-2.5 select-none">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700
                             flex items-center justify-center shadow-sm">
-              <Flame className="w-4 h-4 text-white" />
+              <Sparkle className="w-4 h-4 text-white fill-white" />
             </div>
             <span className="font-bold text-gray-100 text-sm tracking-wide">NebulaX AI</span>
           </Link>

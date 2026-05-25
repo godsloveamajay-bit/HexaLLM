@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Brain, Loader2 } from 'lucide-react'
+import { Sparkle, Loader2 } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 
@@ -30,7 +30,7 @@ export default function LoginPage() {
         {/* Logo */}
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center shadow-2xl shadow-primary-900/60 mb-4">
-            <Brain className="w-8 h-8 text-white" />
+            <Sparkle className="w-8 h-8 text-white fill-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-100">NebulaX AI</h1>
           <p className="text-gray-500 text-sm mt-1">Open-source AI Platform</p>
