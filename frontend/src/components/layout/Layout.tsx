@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Outlet, Link } from 'react-router-dom'
 import Sidebar from './Sidebar'
-import { Sparkle, Menu } from 'lucide-react'
+import { Menu } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { useAutoUpdate } from '../../hooks/useAutoUpdate'
 
@@ -14,12 +14,11 @@ export default function Layout() {
     <div className="flex flex-col h-screen bg-gray-950 overflow-hidden">
       {/* Topbar */}
       <header className="fixed top-0 left-0 right-0 h-12 z-50 flex items-center justify-between px-4
-                         bg-gray-900 border-b border-gray-700 flex-shrink-0">
+                         glass border-b border-gray-700/50 flex-shrink-0">
         <div className="flex items-center gap-3">
-          {/* Hamburger — visible only below lg */}
           <button
             onClick={() => setSidebarOpen(true)}
-            className="lg:hidden p-1.5 rounded-lg hover:bg-gray-800 text-gray-400"
+            className="lg:hidden p-1.5 rounded-lg hover:bg-gray-800/70 text-gray-400 transition-colors"
             aria-label="Open menu"
           >
             <Menu className="w-5 h-5" />
@@ -27,8 +26,10 @@ export default function Layout() {
 
           <Link to="/chat" className="flex items-center gap-2.5 select-none">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-500 to-primary-700
-                            flex items-center justify-center shadow-sm">
-              <Sparkle className="w-4 h-4 text-white fill-white" />
+                            flex items-center justify-center shadow-lg shadow-primary-900/40">
+              <svg viewBox="0 0 24 24" className="w-4 h-4 fill-white">
+                <path d="M12 2L14.5 9.5L22 12L14.5 14.5L12 22L9.5 14.5L2 12L9.5 9.5L12 2Z"/>
+              </svg>
             </div>
             <span className="font-bold text-gray-100 text-sm tracking-wide">NebulaX AI</span>
           </Link>
@@ -39,7 +40,8 @@ export default function Layout() {
             <span className="text-xs text-gray-500 hidden sm:block">{user.email}</span>
             <Link to="/settings">
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-600 to-primary-800
-                              flex items-center justify-center text-xs font-bold text-white">
+                              flex items-center justify-center text-xs font-bold text-white shadow
+                              hover:shadow-primary-900/40 transition-shadow">
                 {user.username?.[0]?.toUpperCase()}
               </div>
             </Link>
@@ -47,12 +49,10 @@ export default function Layout() {
         )}
       </header>
 
-      {/* Below topbar */}
       <div className="flex flex-1 pt-12 min-h-0">
-        {/* Mobile overlay — tap outside to close sidebar */}
         {sidebarOpen && (
           <div
-            className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+            className="fixed inset-0 z-40 bg-black/60 lg:hidden backdrop-blur-sm"
             onClick={() => setSidebarOpen(false)}
           />
         )}

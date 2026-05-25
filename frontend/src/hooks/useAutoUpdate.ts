@@ -1,10 +1,10 @@
 import { useEffect } from 'react'
 import toast from 'react-hot-toast'
+import { isTauri } from '../lib/platform'
 
 export function useAutoUpdate() {
   useEffect(() => {
-    // Only runs inside the Tauri desktop app
-    if (!('__TAURI_INTERNALS__' in window)) return
+    if (!isTauri()) return
 
     let cancelled = false
     ;(async () => {
@@ -16,14 +16,13 @@ export function useAutoUpdate() {
         if (cancelled || !update) return
 
         toast.loading(`Downloading update ${update.version}…`, { id: 'auto-update', duration: Infinity })
-
         await update.downloadAndInstall()
         if (cancelled) return
 
         toast.success('Update ready — restarting in 3 s', { id: 'auto-update', duration: 3000 })
         setTimeout(() => relaunch(), 3000)
       } catch {
-        // Silently swallow — updater errors must not affect normal usage
+        // Silently ignore — updater errors must not disturb normal usage
       }
     })()
 

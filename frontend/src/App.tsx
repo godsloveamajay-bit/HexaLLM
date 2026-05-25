@@ -1,6 +1,8 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import Layout from './components/layout/Layout'
+import MobileLayout from './components/layout/MobileLayout'
+import { isCapacitor } from './lib/platform'
 import LoginPage from './pages/Login'
 import RegisterPage from './pages/Register'
 import DashboardPage from './pages/Dashboard'
@@ -27,6 +29,9 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return user?.is_admin ? <>{children}</> : <Navigate to="/chat" replace />
 }
 
+// Use mobile bottom-nav layout on Capacitor native apps
+const AppLayout = isCapacitor() ? MobileLayout : Layout
+
 export default function App() {
   return (
     <Routes>
@@ -37,7 +42,7 @@ export default function App() {
       <Route
         element={
           <PrivateRoute>
-            <Layout />
+            <AppLayout />
           </PrivateRoute>
         }
       >

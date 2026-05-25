@@ -3,25 +3,18 @@
 @tailwind utilities;
 
 @layer base {
-  :root {
-    color-scheme: light;
-  }
   html {
-    /* Prevent any element from making the page scroll horizontally */
     overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent;
   }
   body {
     @apply bg-gray-950 text-gray-100 font-sans;
     overflow-x: hidden;
-    /* Use the full dynamic viewport height on mobile (avoids browser chrome overlap) */
     min-height: 100dvh;
   }
   * {
-    @apply border-gray-700;
-    /* All boxes include padding/border in their stated width */
     box-sizing: border-box;
   }
-  /* Make images and media never wider than their container */
   img, video, canvas, svg {
     max-width: 100%;
   }
@@ -29,86 +22,132 @@
 
 @layer components {
   .card {
-    @apply bg-gray-900 border border-gray-700 rounded-xl p-5;
+    @apply bg-gray-900 border border-gray-700/60 rounded-2xl p-5 shadow-sm;
+  }
+  .card-sm {
+    @apply bg-gray-900 border border-gray-700/60 rounded-xl p-4 shadow-sm;
   }
   .btn {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm transition-all duration-150 disabled:opacity-50 disabled:cursor-not-allowed;
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm
+           transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed
+           active:scale-[0.98];
   }
   .btn-primary {
-    @apply btn bg-primary-600 hover:bg-primary-500 text-white shadow-sm;
+    @apply btn bg-primary-600 hover:bg-primary-500 active:bg-primary-700
+           text-white shadow-sm shadow-primary-900/30;
   }
   .btn-secondary {
-    @apply btn bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700;
+    @apply btn bg-gray-800 hover:bg-gray-700 text-gray-200
+           border border-gray-700/60;
   }
   .btn-ghost {
-    @apply btn hover:bg-gray-800 text-gray-400 hover:text-gray-200;
+    @apply btn hover:bg-gray-800/70 text-gray-400 hover:text-gray-200;
+  }
+  .btn-danger {
+    @apply btn bg-red-900/30 hover:bg-red-800/50 text-red-400
+           border border-red-800/40;
   }
   .input {
-    @apply w-full bg-gray-900 border border-gray-700 rounded-lg px-4 py-2.5 text-sm text-gray-100
-           placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500
-           focus:border-transparent transition-all;
+    @apply w-full bg-gray-800/60 border border-gray-700/60 rounded-xl px-4 py-2.5
+           text-sm text-gray-100 placeholder-gray-500
+           focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500/50
+           transition-all;
   }
   .label {
-    @apply block text-sm font-medium text-gray-300 mb-1.5;
+    @apply block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide;
   }
   .badge {
-    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;
   }
   .sidebar-link {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
-           text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-all;
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
+           text-gray-400 hover:text-gray-100 hover:bg-gray-800/60 transition-all;
   }
   .sidebar-link.active {
-    @apply bg-primary-900/30 text-primary-400 border border-primary-800/40;
+    @apply bg-primary-600/10 text-primary-400 ring-1 ring-primary-500/20;
+  }
+  /* Mobile bottom nav tab */
+  .tab-link {
+    @apply flex flex-col items-center gap-0.5 py-2 px-1 text-[10px] font-medium
+           transition-colors duration-150;
+  }
+  .tab-link.active {
+    @apply text-primary-400;
+  }
+  .tab-link:not(.active) {
+    @apply text-gray-500;
   }
 }
 
-/* Custom scrollbar */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { @apply bg-gray-950; }
-::-webkit-scrollbar-thumb { @apply bg-gray-700 rounded-full; }
+/* Scrollbar */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { @apply bg-transparent; }
+::-webkit-scrollbar-thumb { @apply bg-gray-700/60 rounded-full; }
 ::-webkit-scrollbar-thumb:hover { @apply bg-gray-600; }
 
-/* Prose for markdown */
-.prose { @apply text-gray-200 max-w-none; }
-.prose h1, .prose h2, .prose h3 { @apply text-gray-100 font-semibold; }
-.prose code { @apply bg-gray-800 text-primary-400 px-1.5 py-0.5 rounded text-sm font-mono; }
-.prose pre { @apply bg-gray-900 border border-gray-700 rounded-lg; }
-.prose a { @apply text-primary-500 hover:text-primary-400; }
-.prose blockquote { @apply border-l-4 border-primary-600 pl-4 text-gray-400; }
+/* Prose (markdown) */
+.prose { @apply text-gray-200 max-w-none leading-relaxed; }
+.prose h1, .prose h2, .prose h3, .prose h4 { @apply text-gray-100 font-semibold mt-4 mb-2; }
+.prose h1 { @apply text-xl; }
+.prose h2 { @apply text-lg; }
+.prose h3 { @apply text-base; }
+.prose p { @apply my-2; }
+.prose ul, .prose ol { @apply my-2 ml-4; }
+.prose li { @apply my-1; }
+.prose code { @apply bg-gray-800 text-primary-300 px-1.5 py-0.5 rounded-md text-[0.85em] font-mono; }
+.prose pre { @apply bg-gray-900 border border-gray-700/60 rounded-xl my-3 overflow-x-auto; }
+.prose pre code { @apply bg-transparent text-gray-200 p-0 rounded-none; }
+.prose a { @apply text-primary-400 hover:text-primary-300 underline underline-offset-2; }
+.prose blockquote { @apply border-l-2 border-primary-600/50 pl-4 text-gray-400 italic my-3; }
+.prose strong { @apply text-gray-100 font-semibold; }
+.prose hr { @apply border-gray-700/60 my-4; }
+.prose table { @apply border-collapse w-full my-3 text-sm; }
+.prose th { @apply bg-gray-800 px-3 py-2 text-left font-semibold border border-gray-700/60; }
+.prose td { @apply px-3 py-2 border border-gray-700/60; }
 
 /* Animations */
-@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
-.fade-in { animation: fadeIn 0.2s ease-out; }
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.fade-in { animation: fadeIn 0.18s ease-out; }
 
-@keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.slide-up { animation: slideUp 0.22s ease-out; }
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
 .typing-dot { animation: pulse-dot 1.2s ease-in-out infinite; }
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .typing-dot:nth-child(3) { animation-delay: 0.4s; }
 
-/* Star streaming indicator — glows + spins while generating, like ChatGPT but warmer */
+/* AI streaming indicator */
 @keyframes star-shine {
   0%, 100% {
-    transform: scale(0.80) rotate(0deg);
-    opacity: 0.60;
-    filter: drop-shadow(0 0 3px rgba(168, 74, 10, 0.4));
+    transform: scale(0.82) rotate(0deg);
+    opacity: 0.65;
+    filter: drop-shadow(0 0 4px rgba(99,102,241,0.4));
   }
   50% {
-    transform: scale(1.22) rotate(36deg);
+    transform: scale(1.2) rotate(45deg);
     opacity: 1;
-    filter: drop-shadow(0 0 8px rgba(192, 96, 28, 0.85))
-            drop-shadow(0 0 16px rgba(168, 74, 10, 0.5));
+    filter: drop-shadow(0 0 10px rgba(99,102,241,0.8))
+            drop-shadow(0 0 20px rgba(99,102,241,0.4));
   }
 }
-.star-shine { animation: star-shine 1.4s ease-in-out infinite; }
+.star-shine { animation: star-shine 1.5s ease-in-out infinite; }
 
-/* Resting star — completed assistant messages */
 .star-rest {
-  opacity: 0.75;
-  filter: drop-shadow(0 0 2px rgba(168, 74, 10, 0.35));
+  opacity: 0.7;
+  filter: drop-shadow(0 0 3px rgba(99,102,241,0.35));
 }
 
-/* Streaming text cursor — blinks at end of partial response */
+/* Stream cursor */
 @keyframes blink {
   0%, 45% { opacity: 1; }
   55%, 100% { opacity: 0; }
@@ -123,3 +162,14 @@
   border-radius: 1px;
   animation: blink 1s ease-in-out infinite;
 }
+
+/* Glass morphism surface */
+.glass {
+  background: rgba(15, 23, 42, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Safe area padding helpers */
+.pb-safe { padding-bottom: env(safe-area-inset-bottom); }
+.pt-safe { padding-top: env(safe-area-inset-top); }

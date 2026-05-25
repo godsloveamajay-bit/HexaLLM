@@ -1,38 +1,36 @@
 /** @type {import('tailwindcss').Config} */
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
-  darkMode: 'class',
   theme: {
     extend: {
       colors: {
-        // Gray — inverted warm-beige scale (950 = lightest/body, 100 = darkest/text).
-        // Darker than before so the UI reads as warm parchment, not white.
         gray: {
-          50:  '#150E08',
-          100: '#22190F',  // body text (very dark warm brown)
-          200: '#342C24',
-          300: '#4A4038',
-          400: '#635850',  // muted text
-          500: '#7E746C',
-          600: '#9A9088',
-          700: '#B5AB9D',  // borders
-          800: '#C9C0B0',  // input backgrounds
-          900: '#D6CDBD',  // card backgrounds
-          950: '#E4DBD0',  // body background (dark beige)
+          50:  '#f8fafc',
+          100: '#f1f5f9',
+          200: '#e2e8f0',
+          300: '#cbd5e1',
+          400: '#94a3b8',
+          500: '#64748b',
+          600: '#475569',
+          700: '#334155',
+          800: '#1e293b',
+          850: '#172033',
+          900: '#0f172a',
+          925: '#0a0f1e',
+          950: '#060b18',
         },
-        // Primary — warm terracotta/copper (replaces indigo).
         primary: {
-          50:  '#FFF5EE',
-          100: '#FFE8D6',
-          200: '#FFCBA6',
-          300: '#F09A5A',
-          400: '#D97A38',
-          500: '#C0601C',
-          600: '#A84A0A',  // button background
-          700: '#8C3A06',
-          800: '#6E2C04',
-          900: '#4E1C02',
-          950: '#320E00',
+          50:  '#eef2ff',
+          100: '#e0e7ff',
+          200: '#c7d2fe',
+          300: '#a5b4fc',
+          400: '#818cf8',
+          500: '#6366f1',
+          600: '#4f46e5',
+          700: '#4338ca',
+          800: '#3730a3',
+          900: '#312e81',
+          950: '#1e1b4b',
         },
       },
       fontFamily: {

@@ -1,8 +1,11 @@
 import { useState } from 'react'
-import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2 } from 'lucide-react'
+import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, AlertCircle, ExternalLink } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
+import { isTauri, isCapacitor } from '../lib/platform'
+
+type UpdateStatus = 'idle' | 'checking' | 'found' | 'none' | 'error'
 
 export default function SettingsPage() {
   const { user, fetchMe } = useAuth()
@@ -12,29 +15,41 @@ export default function SettingsPage() {
     avatar_url: user?.avatar_url || '',
   })
   const [saving, setSaving] = useState(false)
-  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'found' | 'none'>('idle')
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle')
   const [updateVersion, setUpdateVersion] = useState<string | null>(null)
 
   const checkForUpdate = async () => {
-    if (!('__TAURI_INTERNALS__' in window)) {
-      toast('Updates are managed by your browser for the web version.', { icon: 'ℹ️' })
+    // ── Mobile (Capacitor) ────────────────────────────────────────────────
+    if (isCapacitor()) {
+      window.open('https://github.com/godsloveamajay-bit/nebulaxai/releases/latest', '_system')
       return
     }
+
+    // ── Web browser ───────────────────────────────────────────────────────
+    if (!isTauri()) {
+      toast('Refresh the page to get the latest web version.', { icon: 'ℹ️' })
+      return
+    }
+
+    // ── Desktop (Tauri) ───────────────────────────────────────────────────
     setUpdateStatus('checking')
     try {
       const { check } = await import('@tauri-apps/plugin-updater')
       const { relaunch } = await import('@tauri-apps/plugin-process')
       const update = await check()
-      if (!update) { setUpdateStatus('none'); return }
+      if (!update) {
+        setUpdateStatus('none')
+        return
+      }
       setUpdateStatus('found')
       setUpdateVersion(update.version)
       toast.loading(`Downloading ${update.version}…`, { id: 'manual-update', duration: Infinity })
       await update.downloadAndInstall()
       toast.success('Update ready — restarting in 3 s', { id: 'manual-update', duration: 3000 })
       setTimeout(() => relaunch(), 3000)
-    } catch {
-      // Any error (404, network, malformed response) means no update is available
-      setUpdateStatus('none')
+    } catch (err) {
+      console.error('Update check failed:', err)
+      setUpdateStatus('error')
     }
   }
 
@@ -58,22 +73,25 @@ export default function SettingsPage() {
       </div>
 
       {/* Profile */}
-      <div className="card mb-6">
+      <div className="card mb-5">
         <div className="flex items-center gap-3 mb-5">
-          <User className="w-5 h-5 text-primary-400" />
+          <div className="w-8 h-8 rounded-lg bg-primary-600/20 flex items-center justify-center">
+            <User className="w-4 h-4 text-primary-400" />
+          </div>
           <h2 className="font-semibold text-gray-100">Profile</h2>
         </div>
 
         <div className="flex items-center gap-4 mb-6">
-          <div className="w-16 h-16 rounded-full bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center text-xl font-bold text-white">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-primary-700
+                          flex items-center justify-center text-xl font-bold text-white shadow-lg shadow-primary-900/30">
             {user?.username?.[0]?.toUpperCase()}
           </div>
           <div>
-            <p className="font-medium text-gray-100">{user?.username}</p>
+            <p className="font-semibold text-gray-100">{user?.username}</p>
             <p className="text-sm text-gray-500">{user?.email}</p>
             {user?.is_admin && (
-              <span className="badge bg-primary-900/40 text-primary-300 mt-1">
-                <Shield className="w-3 h-3 mr-1" />Admin
+              <span className="badge bg-primary-900/40 text-primary-300 mt-1.5 gap-1">
+                <Shield className="w-3 h-3" />Admin
               </span>
             )}
           </div>
@@ -82,15 +100,21 @@ export default function SettingsPage() {
         <form onSubmit={save} className="space-y-4">
           <div>
             <label className="label">Full Name</label>
-            <input className="input" value={form.full_name} onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))} placeholder="Your full name" />
+            <input className="input" value={form.full_name}
+              onChange={(e) => setForm((f) => ({ ...f, full_name: e.target.value }))}
+              placeholder="Your full name" />
           </div>
           <div>
             <label className="label">Bio</label>
-            <textarea className="input resize-none" rows={3} value={form.bio} onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))} placeholder="A short bio..." />
+            <textarea className="input resize-none" rows={3} value={form.bio}
+              onChange={(e) => setForm((f) => ({ ...f, bio: e.target.value }))}
+              placeholder="A short bio..." />
           </div>
           <div>
             <label className="label">Avatar URL</label>
-            <input className="input" value={form.avatar_url} onChange={(e) => setForm((f) => ({ ...f, avatar_url: e.target.value }))} placeholder="https://..." />
+            <input className="input" value={form.avatar_url}
+              onChange={(e) => setForm((f) => ({ ...f, avatar_url: e.target.value }))}
+              placeholder="https://..." />
           </div>
           <button type="submit" disabled={saving} className="btn-primary">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
@@ -100,44 +124,77 @@ export default function SettingsPage() {
       </div>
 
       {/* Updates */}
-      <div className="card mb-6">
+      <div className="card mb-5">
         <div className="flex items-center gap-3 mb-4">
-          <RefreshCw className="w-5 h-5 text-primary-400" />
+          <div className="w-8 h-8 rounded-lg bg-primary-600/20 flex items-center justify-center">
+            <RefreshCw className="w-4 h-4 text-primary-400" />
+          </div>
           <h2 className="font-semibold text-gray-100">Updates</h2>
         </div>
-        <div className="flex items-center justify-between gap-4">
-          <div>
-            {updateStatus === 'none' && (
-              <div className="flex items-center gap-2 text-sm text-green-400">
-                <CheckCircle2 className="w-4 h-4" />
-                You're on the latest version
-              </div>
-            )}
-            {updateStatus === 'found' && updateVersion && (
-              <div className="flex items-center gap-2 text-sm text-primary-400">
-                <RefreshCw className="w-4 h-4 animate-spin" />
-                Installing {updateVersion}…
-              </div>
-            )}
-            {updateStatus === 'idle' && (
-              <p className="text-sm text-gray-500">Check if a newer version is available</p>
-            )}
-            {updateStatus === 'checking' && (
-              <div className="flex items-center gap-2 text-sm text-gray-400">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Checking…
-              </div>
-            )}
+
+        {isCapacitor() ? (
+          /* Mobile: direct to GitHub releases */
+          <div className="flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-sm text-gray-400">
+              <Smartphone className="w-4 h-4 text-gray-500" />
+              Download the latest APK from GitHub Releases
+            </div>
+            <button onClick={checkForUpdate} className="btn-secondary flex-shrink-0 gap-1.5">
+              <ExternalLink className="w-4 h-4" />
+              Releases
+            </button>
           </div>
-          <button
-            onClick={checkForUpdate}
-            disabled={updateStatus === 'checking' || updateStatus === 'found'}
-            className="btn-secondary flex-shrink-0"
-          >
-            <RefreshCw className={`w-4 h-4 ${updateStatus === 'checking' ? 'animate-spin' : ''}`} />
-            Check for Updates
-          </button>
-        </div>
+        ) : isTauri() ? (
+          /* Desktop: in-app updater */
+          <div className="flex items-center justify-between gap-4">
+            <div className="text-sm">
+              {updateStatus === 'none' && (
+                <div className="flex items-center gap-2 text-green-400">
+                  <CheckCircle2 className="w-4 h-4" />
+                  You're on the latest version
+                </div>
+              )}
+              {updateStatus === 'found' && updateVersion && (
+                <div className="flex items-center gap-2 text-primary-400">
+                  <RefreshCw className="w-4 h-4 animate-spin" />
+                  Installing {updateVersion}…
+                </div>
+              )}
+              {updateStatus === 'error' && (
+                <div className="flex items-center gap-2 text-amber-400">
+                  <AlertCircle className="w-4 h-4" />
+                  Could not reach update server
+                </div>
+              )}
+              {updateStatus === 'idle' && (
+                <p className="text-gray-500">Check if a newer version is available</p>
+              )}
+              {updateStatus === 'checking' && (
+                <div className="flex items-center gap-2 text-gray-400">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  Checking…
+                </div>
+              )}
+            </div>
+            <button
+              onClick={checkForUpdate}
+              disabled={updateStatus === 'checking' || updateStatus === 'found'}
+              className="btn-secondary flex-shrink-0"
+            >
+              <RefreshCw className={`w-4 h-4 ${updateStatus === 'checking' ? 'animate-spin' : ''}`} />
+              Check for Updates
+            </button>
+          </div>
+        ) : (
+          /* Web */
+          <div className="flex items-center justify-between gap-4">
+            <p className="text-sm text-gray-500">Reload the page to get the latest web version.</p>
+            <button onClick={() => window.location.reload()} className="btn-secondary flex-shrink-0">
+              <RefreshCw className="w-4 h-4" />
+              Reload
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Account info */}
@@ -150,9 +207,9 @@ export default function SettingsPage() {
             { label: 'Member since', value: user?.created_at ? new Date(user.created_at).toLocaleDateString() : '—' },
             { label: 'Role', value: user?.is_admin ? 'Administrator' : 'Member' },
           ].map(({ label, value }) => (
-            <div key={label} className="flex items-center justify-between">
+            <div key={label} className="flex items-center justify-between py-1 border-b border-gray-800 last:border-0">
               <dt className="text-sm text-gray-500">{label}</dt>
-              <dd className="text-sm text-gray-200">{value}</dd>
+              <dd className="text-sm text-gray-200 font-medium">{value}</dd>
             </div>
           ))}
         </dl>

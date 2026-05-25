@@ -12,19 +12,19 @@ interface Props {
 }
 
 const BASE_NAV = [
-  { to: '/chat', icon: MessageSquare, label: 'Chat' },
-  { to: '/image', icon: ImageIcon, label: 'Image Gen' },
-  { to: '/agents', icon: Bot, label: 'Agents' },
-  { to: '/models', icon: Cpu, label: 'Model Hub' },
-  { to: '/knowledge', icon: BookOpen, label: 'Knowledge' },
-  { to: '/train', icon: Wand2, label: 'Training' },
-  { to: '/analytics', icon: BarChart3, label: 'Analytics' },
-  { to: '/api-keys', icon: Key, label: 'API Keys' },
+  { to: '/chat',     icon: MessageSquare, label: 'Chat'       },
+  { to: '/image',    icon: ImageIcon,     label: 'Image Gen'  },
+  { to: '/agents',   icon: Bot,           label: 'Agents'     },
+  { to: '/models',   icon: Cpu,           label: 'Model Hub'  },
+  { to: '/knowledge',icon: BookOpen,      label: 'Knowledge'  },
+  { to: '/train',    icon: Wand2,         label: 'Training'   },
+  { to: '/analytics',icon: BarChart3,     label: 'Analytics'  },
+  { to: '/api-keys', icon: Key,           label: 'API Keys'   },
 ]
 
 const ADMIN_EXTRA = [
   { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/logs', icon: FileText, label: 'Logs' },
+  { to: '/logs',      icon: FileText,         label: 'Logs'      },
 ]
 
 export default function Sidebar({ isOpen, onClose }: Props) {
@@ -36,18 +36,13 @@ export default function Sidebar({ isOpen, onClose }: Props) {
   return (
     <aside
       className={clsx(
-        // Base styles (both mobile and desktop)
-        'flex flex-col w-52 bg-gray-900 border-r border-gray-700 px-2 py-3',
-        // Mobile/tablet: fixed drawer below the topbar
+        'flex flex-col w-52 bg-gray-900/95 border-r border-gray-700/50 px-2 py-3',
         'fixed top-12 bottom-0 left-0 z-50',
         'transition-transform duration-300 ease-in-out',
         isOpen ? 'translate-x-0' : '-translate-x-full',
-        // Desktop: static, always visible, part of flex layout
-        'lg:static lg:translate-x-0 lg:top-auto lg:bottom-auto lg:z-auto',
-        'lg:transition-none',
+        'lg:static lg:translate-x-0 lg:top-auto lg:bottom-auto lg:z-auto lg:transition-none',
       )}
     >
-      {/* Close button — mobile only */}
       <button
         onClick={onClose}
         className="lg:hidden absolute top-2 right-2 p-1.5 rounded-lg hover:bg-gray-800 text-gray-500"
@@ -56,7 +51,7 @@ export default function Sidebar({ isOpen, onClose }: Props) {
         <X className="w-4 h-4" />
       </button>
 
-      <nav className="flex-1 space-y-0.5 mt-6 lg:mt-0">
+      <nav className="flex-1 space-y-0.5 mt-6 lg:mt-0 overflow-y-auto">
         {navItems.map(({ to, icon: Icon, label }) => (
           <NavLink
             key={to}
@@ -70,7 +65,7 @@ export default function Sidebar({ isOpen, onClose }: Props) {
         ))}
       </nav>
 
-      <div className="mt-3 pt-3 border-t border-gray-700 space-y-0.5">
+      <div className="mt-3 pt-3 border-t border-gray-700/50 space-y-0.5">
         <NavLink
           to="/settings"
           onClick={onClose}
@@ -81,7 +76,7 @@ export default function Sidebar({ isOpen, onClose }: Props) {
         </NavLink>
         <button
           onClick={() => { logout(); navigate('/login') }}
-          className="sidebar-link w-full text-left text-red-500 hover:text-red-400 hover:bg-red-900/10"
+          className="sidebar-link w-full text-left text-red-400/80 hover:text-red-400 hover:bg-red-900/10"
         >
           <LogOut className="w-4 h-4" />
           Logout
@@ -89,14 +84,14 @@ export default function Sidebar({ isOpen, onClose }: Props) {
       </div>
 
       {user && (
-        <div className="mt-3 pt-3 border-t border-gray-700 px-1 flex items-center gap-2">
+        <div className="mt-3 pt-3 border-t border-gray-700/50 px-1 flex items-center gap-2">
           <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-600 to-primary-800
                           flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
             {user.username?.[0]?.toUpperCase()}
           </div>
           <div className="min-w-0">
-            <p className="text-xs font-medium text-gray-200 truncate">{user.username}</p>
-            {user.is_admin && <p className="text-xs text-primary-500">Admin</p>}
+            <p className="text-xs font-semibold text-gray-200 truncate">{user.username}</p>
+            {user.is_admin && <p className="text-[10px] text-primary-500 font-medium">Admin</p>}
           </div>
         </div>
       )}
