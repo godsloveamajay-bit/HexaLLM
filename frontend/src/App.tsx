@@ -14,6 +14,7 @@ import ApiKeysPage from './pages/ApiKeys'
 import SettingsPage from './pages/Settings'
 import KnowledgePage from './pages/Knowledge'
 import PrivacyPolicyPage from './pages/PrivacyPolicy'
+import ImageGenPage from './pages/ImageGen'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth()
@@ -41,6 +42,7 @@ export default function App() {
         <Route path="/" element={<Navigate to="/chat" replace />} />
         <Route path="/dashboard" element={<AdminRoute><DashboardPage /></AdminRoute>} />
         <Route path="/chat" element={<ChatPage />} />
+        <Route path="/image" element={<ImageGenPage />} />
         <Route path="/agents" element={<AgentsPage />} />
         <Route path="/models" element={<ModelsPage />} />
         <Route path="/train" element={<TrainPage />} />

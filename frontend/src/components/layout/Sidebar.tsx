@@ -1,7 +1,7 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Bot, Cpu, Wand2,
-  BarChart3, FileText, Key, LogOut, Settings, BookOpen, X,
+  BarChart3, FileText, Key, LogOut, Settings, BookOpen, X, ImageIcon,
 } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { clsx } from 'clsx'
@@ -13,6 +13,7 @@ interface Props {
 
 const BASE_NAV = [
   { to: '/chat', icon: MessageSquare, label: 'Chat' },
+  { to: '/image', icon: ImageIcon, label: 'Image Gen' },
   { to: '/agents', icon: Bot, label: 'Agents' },
   { to: '/models', icon: Cpu, label: 'Model Hub' },
   { to: '/knowledge', icon: BookOpen, label: 'Knowledge' },

@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from .core.config import settings
 from .core.database import Base, engine
 from .models import user, model, chat, knowledge  # ensure all models are imported for create_all
-from .api import auth, models, chat as chat_api, agents, analytics, knowledge as knowledge_api
+from .api import auth, models, chat as chat_api, agents, analytics, knowledge as knowledge_api, image as image_api
 
 
 @asynccontextmanager
@@ -38,6 +38,7 @@ app.include_router(chat_api.router, prefix="/api/v1")
 app.include_router(agents.router, prefix="/api/v1")
 app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(knowledge_api.router, prefix="/api/v1")
+app.include_router(image_api.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health")
