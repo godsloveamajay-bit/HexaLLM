@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { User, Save, Loader2, Shield } from 'lucide-react'
+import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
@@ -12,6 +12,31 @@ export default function SettingsPage() {
     avatar_url: user?.avatar_url || '',
   })
   const [saving, setSaving] = useState(false)
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'found' | 'none' | 'error'>('idle')
+  const [updateVersion, setUpdateVersion] = useState<string | null>(null)
+
+  const checkForUpdate = async () => {
+    if (!(window as any).__TAURI__) {
+      toast('Updates are managed by your browser for the web version.', { icon: 'ℹ️' })
+      return
+    }
+    setUpdateStatus('checking')
+    try {
+      const { check } = await import('@tauri-apps/plugin-updater')
+      const { relaunch } = await import('@tauri-apps/plugin-process')
+      const update = await check()
+      if (!update) { setUpdateStatus('none'); return }
+      setUpdateStatus('found')
+      setUpdateVersion(update.version)
+      toast.loading(`Downloading ${update.version}…`, { id: 'manual-update', duration: Infinity })
+      await update.downloadAndInstall()
+      toast.success('Update ready — restarting in 3 s', { id: 'manual-update', duration: 3000 })
+      setTimeout(() => relaunch(), 3000)
+    } catch {
+      setUpdateStatus('error')
+      toast.error('Could not check for updates')
+    }
+  }
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -72,6 +97,53 @@ export default function SettingsPage() {
             Save Changes
           </button>
         </form>
+      </div>
+
+      {/* Updates */}
+      <div className="card mb-6">
+        <div className="flex items-center gap-3 mb-4">
+          <RefreshCw className="w-5 h-5 text-primary-400" />
+          <h2 className="font-semibold text-gray-100">Updates</h2>
+        </div>
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            {updateStatus === 'none' && (
+              <div className="flex items-center gap-2 text-sm text-green-400">
+                <CheckCircle2 className="w-4 h-4" />
+                You're on the latest version
+              </div>
+            )}
+            {updateStatus === 'found' && updateVersion && (
+              <div className="flex items-center gap-2 text-sm text-primary-400">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                Installing {updateVersion}…
+              </div>
+            )}
+            {updateStatus === 'error' && (
+              <div className="flex items-center gap-2 text-sm text-red-400">
+                <AlertCircle className="w-4 h-4" />
+                Update check failed
+              </div>
+            )}
+            {updateStatus === 'idle' && (
+              <p className="text-sm text-gray-500">Check if a newer version is available</p>
+            )}
+            {updateStatus === 'checking' && (
+              <div className="flex items-center gap-2 text-sm text-gray-400">
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Checking…
+              </div>
+            )}
+          </div>
+          <button
+            onClick={checkForUpdate}
+            disabled={updateStatus === 'checking' || updateStatus === 'found'}
+            className="btn-secondary flex-shrink-0"
+          >
+            <RefreshCw className={`w-4 h-4 ${updateStatus === 'checking' ? 'animate-spin' : ''}`} />
+            Check for Updates
+          </button>
+        </div>
       </div>
 
       {/* Account info */}
