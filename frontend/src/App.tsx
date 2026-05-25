@@ -13,6 +13,7 @@ import LogsPage from './pages/Logs'
 import ApiKeysPage from './pages/ApiKeys'
 import SettingsPage from './pages/Settings'
 import KnowledgePage from './pages/Knowledge'
+import PrivacyPolicyPage from './pages/PrivacyPolicy'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth()
@@ -29,6 +30,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
+      <Route path="/privacy" element={<PrivacyPolicyPage />} />
       <Route
         element={
           <PrivateRoute>
