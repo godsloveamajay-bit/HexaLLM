@@ -109,25 +109,31 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           REPO="${{ github.repository }}"
+          set +e  # missing dirs/files are expected on other-platform runners
+
           upload() {
             local f="$1"
+            [ -f "$f" ] || return 0
             local name
             name=$(basename "$f" | tr ' ' '.')
             cp "$f" "/tmp/$name"
-            gh release upload "$TAG" "/tmp/$name" --clobber --repo "$REPO" && echo "Uploaded: $name" || echo "Skip: $name"
+            gh release upload "$TAG" "/tmp/$name" --clobber --repo "$REPO" \
+              && echo "Uploaded: $name" || echo "Skip (already exists): $name"
           }
-          # Linux: AppImage updater bundle
-          find frontend/src-tauri/target/release/bundle/appimage \
-               -name "*.AppImage.tar.gz" -o -name "*.AppImage.tar.gz.sig" 2>/dev/null | while read f; do upload "$f"; done
-          # macOS: .app.tar.gz updater bundle
-          find frontend/src-tauri/target \
-               -name "*.app.tar.gz" -o -name "*.app.tar.gz.sig" 2>/dev/null | while read f; do upload "$f"; done
-          # Windows: NSIS zip updater bundle
-          find frontend/src-tauri/target/release/bundle/nsis \
-               -name "*.nsis.zip" -o -name "*.nsis.zip.sig" 2>/dev/null | while read f; do upload "$f"; done
-          # Windows: MSI zip updater bundle (fallback)
-          find frontend/src-tauri/target/release/bundle/msi \
-               -name "*.msi.zip" -o -name "*.msi.zip.sig" 2>/dev/null | while read f; do upload "$f"; done
+
+          # Find all updater artifacts in one pass; -o requires grouping parens
+          while IFS= read -r -d '' f; do
+            upload "$f"
+          done < <(find frontend/src-tauri/target \
+            \( -name "*.AppImage.tar.gz"     \
+            -o -name "*.AppImage.tar.gz.sig" \
+            -o -name "*.app.tar.gz"          \
+            -o -name "*.app.tar.gz.sig"      \
+            -o -name "*.nsis.zip"            \
+            -o -name "*.nsis.zip.sig"        \
+            -o -name "*.msi.zip"             \
+            -o -name "*.msi.zip.sig"         \
+            \) -not -path "*/deps/*" -print0 2>/dev/null || true)
 
   publish-updater-json:
     needs: build-tauri
