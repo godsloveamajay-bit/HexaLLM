@@ -4,7 +4,7 @@ import toast from 'react-hot-toast'
 export function useAutoUpdate() {
   useEffect(() => {
     // Only runs inside the Tauri desktop app
-    if (!(window as any).__TAURI__) return
+    if (!('__TAURI_INTERNALS__' in window)) return
 
     let cancelled = false
     ;(async () => {

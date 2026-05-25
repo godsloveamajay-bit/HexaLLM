@@ -16,7 +16,7 @@ export default function SettingsPage() {
   const [updateVersion, setUpdateVersion] = useState<string | null>(null)
 
   const checkForUpdate = async () => {
-    if (!(window as any).__TAURI__) {
+    if (!('__TAURI_INTERNALS__' in window)) {
       toast('Updates are managed by your browser for the web version.', { icon: 'ℹ️' })
       return
     }
