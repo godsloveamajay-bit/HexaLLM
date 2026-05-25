@@ -2,6 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Bot, Cpu, Wand2,
   BarChart3, FileText, Key, LogOut, Settings, BookOpen, X, ImageIcon,
+  Brain, Zap, Server, Users,
 } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { clsx } from 'clsx'
@@ -12,14 +13,18 @@ interface Props {
 }
 
 const BASE_NAV = [
-  { to: '/chat',     icon: MessageSquare, label: 'Chat'       },
-  { to: '/image',    icon: ImageIcon,     label: 'Image Gen'  },
-  { to: '/agents',   icon: Bot,           label: 'Agents'     },
-  { to: '/models',   icon: Cpu,           label: 'Model Hub'  },
-  { to: '/knowledge',icon: BookOpen,      label: 'Knowledge'  },
-  { to: '/train',    icon: Wand2,         label: 'Training'   },
-  { to: '/analytics',icon: BarChart3,     label: 'Analytics'  },
-  { to: '/api-keys', icon: Key,           label: 'API Keys'   },
+  { to: '/chat',      icon: MessageSquare, label: 'Chat'       },
+  { to: '/image',     icon: ImageIcon,     label: 'Image Gen'  },
+  { to: '/agents',    icon: Bot,           label: 'Agents'     },
+  { to: '/personas',  icon: Users,         label: 'Personas'   },
+  { to: '/workflows', icon: Zap,           label: 'Workflows'  },
+  { to: '/memory',    icon: Brain,         label: 'Memory'     },
+  { to: '/mcp',       icon: Server,        label: 'MCP Servers'},
+  { to: '/models',    icon: Cpu,           label: 'Model Hub'  },
+  { to: '/knowledge', icon: BookOpen,      label: 'Knowledge'  },
+  { to: '/train',     icon: Wand2,         label: 'Training'   },
+  { to: '/analytics', icon: BarChart3,     label: 'Analytics'  },
+  { to: '/api-keys',  icon: Key,           label: 'API Keys'   },
 ]
 
 const ADMIN_EXTRA = [

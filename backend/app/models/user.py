@@ -27,6 +27,10 @@ class User(Base):
     request_logs = relationship("RequestLog", back_populates="user", cascade="all, delete-orphan")
     knowledge_bases = relationship("KnowledgeBase", back_populates="user", cascade="all, delete-orphan")
     prompt_templates = relationship("PromptTemplate", back_populates="user", cascade="all, delete-orphan")
+    memories = relationship("UserMemory", back_populates="user", cascade="all, delete-orphan")
+    personas = relationship("SavedPersona", back_populates="user", cascade="all, delete-orphan")
+    workflows = relationship("Workflow", back_populates="user", cascade="all, delete-orphan")
+    mcp_servers = relationship("MCPServer", back_populates="user", cascade="all, delete-orphan")
 
 
 class APIKey(Base):

@@ -6,8 +6,8 @@ from fastapi.staticfiles import StaticFiles
 from sqlalchemy import inspect, text
 from .core.config import settings
 from .core.database import Base, engine
-from .models import user, model, chat, knowledge, template  # ensure all models are imported for create_all
-from .api import auth, models, chat as chat_api, agents, analytics, knowledge as knowledge_api, image as image_api, templates as templates_api
+from .models import user, model, chat, knowledge, template, memory, persona, workflow, mcp_server  # ensure all models are imported for create_all
+from .api import auth, models, chat as chat_api, agents, analytics, knowledge as knowledge_api, image as image_api, templates as templates_api, memory as memory_api, personas as personas_api, workflows as workflows_api, openai_compat, mcp as mcp_api
 
 
 def _migrate_db():
@@ -55,6 +55,11 @@ app.include_router(analytics.router, prefix="/api/v1")
 app.include_router(knowledge_api.router, prefix="/api/v1")
 app.include_router(image_api.router, prefix="/api/v1")
 app.include_router(templates_api.router, prefix="/api/v1")
+app.include_router(memory_api.router, prefix="/api/v1")
+app.include_router(personas_api.router, prefix="/api/v1")
+app.include_router(workflows_api.router, prefix="/api/v1")
+app.include_router(mcp_api.router, prefix="/api/v1")
+app.include_router(openai_compat.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health")

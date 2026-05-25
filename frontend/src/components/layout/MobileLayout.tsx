@@ -1,15 +1,15 @@
 import { Outlet, NavLink, useNavigate } from 'react-router-dom'
-import { MessageSquare, Cpu, Bot, BookOpen, Settings, MoreHorizontal, Menu } from 'lucide-react'
+import { MessageSquare, Cpu, Bot, BookOpen, Settings, Brain, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { clsx } from 'clsx'
 import { useAuth } from '../../store/auth'
 
 const PRIMARY_TABS = [
-  { to: '/chat',     icon: MessageSquare, label: 'Chat'     },
-  { to: '/models',   icon: Cpu,           label: 'Models'   },
-  { to: '/agents',   icon: Bot,           label: 'Agents'   },
-  { to: '/knowledge',icon: BookOpen,      label: 'Library'  },
-  { to: '/settings', icon: Settings,      label: 'Settings' },
+  { to: '/chat',      icon: MessageSquare, label: 'Chat'      },
+  { to: '/agents',    icon: Bot,           label: 'Agents'    },
+  { to: '/memory',    icon: Brain,         label: 'Memory'    },
+  { to: '/workflows', icon: Zap,           label: 'Workflows' },
+  { to: '/settings',  icon: Settings,      label: 'Settings'  },
 ]
 
 export default function MobileLayout() {

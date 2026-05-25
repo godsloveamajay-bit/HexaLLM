@@ -1,9 +1,11 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders } from 'lucide-react'
+import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server } from 'lucide-react'
 import api, { baseURL } from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
+
+interface MCPServer { id: number; name: string; tools_cache: any[] | null }
 
 interface Step {
   step: number
@@ -134,6 +136,8 @@ export default function AgentsPage() {
   const [currentRun, setCurrentRun] = useState<AgentRun | null>(null)
   const [history, setHistory] = useState<AgentRun[]>([])
   const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3.2:3b'])
+  const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
+  const [selectedMcp, setSelectedMcp] = useState<number[]>([])
   const stepsRef = useRef<HTMLDivElement>(null)
 
   const activePersona = PERSONAS.find((p) => p.id === persona) ?? PERSONAS[0]
@@ -149,6 +153,7 @@ export default function AgentsPage() {
       const names = data.models?.map((m: any) => m.name) || []
       if (names.length) { setOllamaModels(names); setModel(names[0]) }
     }).catch(() => {})
+    api.get('/mcp').then(({ data }) => setMcpServers(data.filter((s: any) => s.tools_cache?.length))).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -177,6 +182,7 @@ export default function AgentsPage() {
           tools: selectedTools,
           max_steps: maxSteps,
           system_prompt: persona === 'custom' ? (customPrompt || undefined) : activePersona.systemPrompt,
+          mcp_server_ids: selectedMcp,
         }),
       })
 
@@ -325,6 +331,24 @@ export default function AgentsPage() {
                 <label className="label">Max Steps: {maxSteps}</label>
                 <input type="range" min={3} max={20} value={maxSteps} onChange={(e) => setMaxSteps(+e.target.value)} className="w-full accent-primary-500" />
               </div>
+
+              {mcpServers.length > 0 && (
+                <div>
+                  <label className="label flex items-center gap-1.5"><Server className="w-3.5 h-3.5" /> MCP Servers</label>
+                  <div className="flex flex-wrap gap-2">
+                    {mcpServers.map((s) => (
+                      <button key={s.id} type="button"
+                        onClick={() => setSelectedMcp((prev) => prev.includes(s.id) ? prev.filter((x) => x !== s.id) : [...prev, s.id])}
+                        className={clsx('badge cursor-pointer transition-all',
+                          selectedMcp.includes(s.id) ? 'bg-green-900/60 text-green-300 border-green-700' : 'bg-gray-800 text-gray-500 border-gray-700'
+                        )}>
+                        {selectedMcp.includes(s.id) && <Check className="w-3 h-3 mr-1" />}
+                        {s.name} ({s.tools_cache?.length ?? 0})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <button onClick={runAgent} disabled={running || !task.trim()} className="btn-primary w-full justify-center py-2.5">
                 {running ? <><Loader2 className="w-4 h-4 animate-spin" /> Running...</> : <><Play className="w-4 h-4" /> Run Agent</>}

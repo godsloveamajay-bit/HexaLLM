@@ -59,6 +59,7 @@ class AgentTaskCreate(BaseModel):
     tools: List[str] = ["web_search", "code_exec", "read_file"]
     max_steps: int = 10
     system_prompt: Optional[str] = None
+    mcp_server_ids: List[int] = []
 
 
 class AgentStepOut(BaseModel):

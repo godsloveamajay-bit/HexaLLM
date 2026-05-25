@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Plus, X, Loader2, BookOpen, FileText, Upload, Trash2, Search,
-  CheckCircle2, AlertCircle, Clock,
+  CheckCircle2, AlertCircle, Clock, Globe,
 } from 'lucide-react'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
@@ -149,6 +149,9 @@ function KBDetail({ kb, onChanged, onDelete }: {
   const [docs, setDocs] = useState<KBDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
+  const [crawlUrl, setCrawlUrl] = useState('')
+  const [crawling, setCrawling] = useState(false)
+  const [showCrawl, setShowCrawl] = useState(false)
   const fileRef = useRef<HTMLInputElement>(null)
 
   const [query, setQuery] = useState('')
@@ -198,6 +201,21 @@ function KBDetail({ kb, onChanged, onDelete }: {
     }
   }
 
+  const crawlWebsite = async () => {
+    if (!crawlUrl.trim()) return
+    setCrawling(true)
+    try {
+      await api.post(`/knowledge/${kb.id}/crawl`, { url: crawlUrl.trim() })
+      toast.success('URL added — processing in background')
+      setCrawlUrl('')
+      setShowCrawl(false)
+      setTimeout(loadDocs, 1500)
+      onChanged()
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Crawl failed')
+    } finally { setCrawling(false) }
+  }
+
   const deleteDoc = async (docId: number) => {
     if (!confirm('Delete this document and its chunks?')) return
     await api.delete(`/knowledge/${kb.id}/documents/${docId}`)
@@ -245,7 +263,10 @@ function KBDetail({ kb, onChanged, onDelete }: {
       <div className="card">
         <div className="flex items-center justify-between mb-3">
           <h3 className="text-base font-semibold text-gray-100">Documents</h3>
-          <div>
+          <div className="flex gap-2">
+            <button onClick={() => setShowCrawl((v) => !v)} className="btn-secondary gap-1.5">
+              <Globe className="w-4 h-4" /> Add URL
+            </button>
             <input
               ref={fileRef}
               type="file"
@@ -265,6 +286,22 @@ function KBDetail({ kb, onChanged, onDelete }: {
             </button>
           </div>
         </div>
+
+        {showCrawl && (
+          <div className="mb-4 flex gap-2">
+            <input
+              className="input flex-1"
+              value={crawlUrl}
+              onChange={(e) => setCrawlUrl(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && crawlWebsite()}
+              placeholder="https://docs.example.com/page"
+            />
+            <button onClick={crawlWebsite} disabled={crawling || !crawlUrl.trim()} className="btn-primary flex-shrink-0">
+              {crawling ? <Loader2 className="w-4 h-4 animate-spin" /> : <Globe className="w-4 h-4" />}
+              Crawl
+            </button>
+          </div>
+        )}
 
         {loading ? (
           <div className="py-10 flex justify-center text-gray-500">

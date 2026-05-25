@@ -165,8 +165,32 @@ async def run_agent(
     max_steps: int = 10,
     on_step=None,
     persona_prompt: Optional[str] = None,
+    mcp_clients: Optional[List] = None,   # list of (server_name, MCPClient) tuples
 ) -> Dict[str, Any]:
     available = {k: TOOL_DESCRIPTIONS[k] for k in tools if k in TOOL_DESCRIPTIONS}
+
+    # Inject MCP tools
+    mcp_tool_map: Dict[str, Any] = {}  # "mcp__<server>__<tool>" -> callable
+    if mcp_clients:
+        from .mcp_service import MCPClient as _MCPClient
+        for server_name, client in mcp_clients:
+            if client.tools_cache:
+                for t in client.tools_cache:
+                    tname = t.get("name", "")
+                    key = f"mcp__{server_name}__{tname}"
+                    desc = t.get("description", tname)
+                    available[key] = f"[MCP:{server_name}] {desc}"
+                    async def _make_mcp_caller(c=client, n=tname):
+                        async def _call(input_str):
+                            import json as _json
+                            try:
+                                args = _json.loads(input_str)
+                            except Exception:
+                                args = {"input": input_str}
+                            return await c.call_tool(n, args)
+                        return _call
+                    mcp_tool_map[key] = await _make_mcp_caller()
+
     tool_list = "\n".join(f"- {k}: {v}" for k, v in available.items())
     system = AGENT_SYSTEM_PROMPT.format(tools=tool_list)
     if persona_prompt:
@@ -257,6 +281,16 @@ async def run_agent(
                 )
             except asyncio.TimeoutError:
                 output = f"Tool '{tool_name}' timed out after 60 s"
+        elif tool_name in mcp_tool_map:
+            try:
+                output = await asyncio.wait_for(
+                    mcp_tool_map[tool_name](tool_input),
+                    timeout=60,
+                )
+            except asyncio.TimeoutError:
+                output = f"MCP tool '{tool_name}' timed out after 60 s"
+            except Exception as e:
+                output = f"MCP tool error: {e}"
         else:
             known = ", ".join(available.keys()) or "none"
             output = f"Unknown tool '{tool_name}'. Available: {known}"

@@ -1,9 +1,11 @@
 import os
 import shutil
+import tempfile
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -249,3 +251,84 @@ async def query_knowledge_base(
         for chunk, score in matches
     ]
     return KBQueryResponse(query=body.query, hits=hits)
+
+
+# ── URL/Website Crawl ────────────────────────────────────────────────────────
+
+
+class CrawlRequest(BaseModel):
+    url: str
+    max_pages: int = 3
+
+
+async def _process_crawl(document_id: int, kb_id: int) -> None:
+    from ..services.retrieval_service import ingest_document
+    db = SessionLocal()
+    try:
+        document = db.query(KBDocument).filter(KBDocument.id == document_id).first()
+        if not document:
+            return
+        kb = db.query(KnowledgeBase).filter(KnowledgeBase.id == kb_id).first()
+        if not kb:
+            return
+        try:
+            with open(document.source_path) as f:
+                raw = f.read()
+            await ingest_document(db, kb, document, raw)
+        except Exception as e:
+            document.status = "failed"
+            document.error = str(e)
+            db.commit()
+    finally:
+        db.close()
+
+
+@router.post("/{kb_id}/crawl", response_model=KBDocumentOut, status_code=201)
+async def crawl_url(
+    kb_id: int,
+    body: CrawlRequest,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    kb = _kb_or_404(db, kb_id, current_user)
+
+    try:
+        import httpx
+        from bs4 import BeautifulSoup
+
+        async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
+            resp = await client.get(body.url, headers={"User-Agent": "Mozilla/5.0"})
+            resp.raise_for_status()
+
+        soup = BeautifulSoup(resp.text, "html.parser")
+        for tag in soup(["script", "style", "nav", "footer", "header", "aside"]):
+            tag.decompose()
+        text = soup.get_text(separator="\n", strip=True)
+        title = soup.title.string.strip() if soup.title else body.url
+
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {e}")
+
+    kb_dir = Path(settings.UPLOADS_DIR) / f"kb_{kb.id}"
+    kb_dir.mkdir(parents=True, exist_ok=True)
+
+    document = KBDocument(
+        kb_id=kb.id,
+        filename=f"{title[:80]}.txt",
+        mime_type="text/plain",
+        status="pending",
+        source_path="",
+    )
+    db.add(document)
+    db.commit()
+    db.refresh(document)
+
+    dest = kb_dir / f"{document.id}_crawl.txt"
+    dest.write_text(text, encoding="utf-8")
+    document.source_path = str(dest)
+    document.size_bytes = dest.stat().st_size
+    db.commit()
+
+    background_tasks.add_task(_process_crawl, document.id, kb.id)
+    return KBDocumentOut.model_validate(document)

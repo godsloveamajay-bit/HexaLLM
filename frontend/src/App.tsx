@@ -18,6 +18,10 @@ import KnowledgePage from './pages/Knowledge'
 import PrivacyPolicyPage from './pages/PrivacyPolicy'
 import ImageGenPage from './pages/ImageGen'
 import SharePage from './pages/Share'
+import MemoryPage from './pages/Memory'
+import PersonasPage from './pages/Personas'
+import WorkflowsPage from './pages/Workflows'
+import MCPServersPage from './pages/MCPServers'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth()
@@ -54,6 +58,10 @@ export default function App() {
         <Route path="/models" element={<ModelsPage />} />
         <Route path="/train" element={<TrainPage />} />
         <Route path="/knowledge" element={<KnowledgePage />} />
+        <Route path="/memory" element={<MemoryPage />} />
+        <Route path="/personas" element={<PersonasPage />} />
+        <Route path="/workflows" element={<WorkflowsPage />} />
+        <Route path="/mcp" element={<MCPServersPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/logs" element={<LogsPage />} />
         <Route path="/api-keys" element={<ApiKeysPage />} />

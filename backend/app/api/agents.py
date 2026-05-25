@@ -9,8 +9,26 @@ from ..core.database import get_db
 from ..core.security import get_current_user
 from ..models.user import User
 from ..models.chat import AgentRun
+from ..models.mcp_server import MCPServer
 from ..schemas.chat import AgentTaskCreate, AgentRunOut
 from ..services.agent_service import run_agent
+from ..services.mcp_service import MCPClient
+
+
+def _resolve_mcp_clients(db: Session, server_ids: List[int], user_id: int):
+    if not server_ids:
+        return []
+    servers = db.query(MCPServer).filter(
+        MCPServer.id.in_(server_ids),
+        MCPServer.user_id == user_id,
+        MCPServer.is_active == True,
+    ).all()
+    clients = []
+    for s in servers:
+        client = MCPClient(s.url)
+        client.tools_cache = s.tools_cache or []
+        clients.append((s.name, client))
+    return clients
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -37,6 +55,7 @@ async def run_agent_task(
         db.commit()
 
     try:
+        mcp_clients = _resolve_mcp_clients(db, data.mcp_server_ids, current_user.id)
         result = await run_agent(
             task=data.task,
             model=data.model,
@@ -44,6 +63,7 @@ async def run_agent_task(
             max_steps=data.max_steps,
             on_step=on_step,
             persona_prompt=data.system_prompt,
+            mcp_clients=mcp_clients,
         )
         agent_run.status = "completed"
         agent_run.result = result.get("result")
@@ -92,6 +112,8 @@ async def run_agent_stream(
             steps.append(step)
             await queue.put(step)
 
+        mcp_clients = _resolve_mcp_clients(db, data.mcp_server_ids, current_user.id)
+
         async def agent_task():
             try:
                 result = await run_agent(
@@ -101,6 +123,7 @@ async def run_agent_stream(
                     max_steps=data.max_steps,
                     on_step=on_step_q,
                     persona_prompt=data.system_prompt,
+                    mcp_clients=mcp_clients,
                 )
                 await queue.put({"__done__": True, **result})
             except Exception as e:

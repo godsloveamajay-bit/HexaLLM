@@ -184,6 +184,16 @@ async def chat_completions(
         user_supplied_prompt = None
 
     base_system_prompt = model_router.merge_system_prompt(variant_prompt, user_supplied_prompt)
+    # Inject user memories if the session has memory enabled (or always for now)
+    from ..models.memory import UserMemory
+    user_memories = db.query(UserMemory).filter(
+        UserMemory.user_id == current_user.id
+    ).order_by(UserMemory.created_at.desc()).limit(20).all()
+    if user_memories:
+        mem_block = "\n".join(f"- {m.content}" for m in user_memories)
+        memory_section = f"\n\n[User Memory — things you know about this user]\n{mem_block}"
+        base_system_prompt = (base_system_prompt or "") + memory_section
+
     # Build a derived request so _retrieve_kb_context sees the merged prompt.
     req_for_kb = req.model_copy(update={"system_prompt": base_system_prompt})
     system_prompt, citations = await _retrieve_kb_context(db, current_user, req_for_kb)
