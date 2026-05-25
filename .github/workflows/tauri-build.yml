@@ -195,7 +195,10 @@ jobs:
           echo "Version: $VERSION ($VERSION_CODE)"
 
       - name: Decode keystore
-        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > /tmp/nebulax.keystore
+        run: |
+          echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" \
+            | tr -d '[:space:]' \
+            | base64 -d > /tmp/nebulax.keystore
 
       - name: Build release APK
         working-directory: frontend/android
