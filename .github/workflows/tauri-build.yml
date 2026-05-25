@@ -141,6 +141,7 @@ jobs:
             \) -not -path "*/deps/*" -print0 2>/dev/null || true)
 
   build-android:
+    needs: build-tauri
     runs-on: ubuntu-22.04
     if: startsWith(github.ref, 'refs/tags/v')
 
