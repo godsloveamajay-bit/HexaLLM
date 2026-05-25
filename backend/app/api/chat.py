@@ -279,6 +279,8 @@ def update_session(
         raise HTTPException(status_code=404, detail="Session not found")
     if "title" in data:
         session.title = str(data["title"])[:80]
+    if "model_name" in data:
+        session.model_name = str(data["model_name"])[:200]
     db.commit()
     db.refresh(session)
     return session

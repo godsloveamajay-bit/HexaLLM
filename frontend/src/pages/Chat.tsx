@@ -127,6 +127,13 @@ export default function ChatPage() {
     try {
       const { data } = await api.get('/chat/sessions')
       setSessions(data)
+      if (data.length > 0) {
+        const first: Session = data[0]
+        setActiveSession(first)
+        setModel(first.model_name)
+        const { data: msgs } = await api.get(`/chat/sessions/${first.id}/messages`)
+        setMessages(msgs.map((m: any) => ({ role: m.role as Message['role'], content: m.content })))
+      }
     } catch {}
   }
 
@@ -202,6 +209,7 @@ export default function ChatPage() {
   const selectSession = async (session: Session) => {
     cancelTypewriter()
     setActiveSession(session)
+    setModel(session.model_name)
     setSessionPanelOpen(false)
 
     // Re-attach to a live stream if the user navigated away mid-generation
@@ -441,8 +449,11 @@ export default function ChatPage() {
               )}
             >
               <Bot className="w-3.5 h-3.5 flex-shrink-0" />
-              <span className="flex-1 truncate">{s.title}</span>
-              <button onClick={(e) => deleteSession(s.id, e)} className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all">
+              <div className="flex-1 min-w-0">
+                <p className="truncate">{s.title}</p>
+                <p className="text-xs text-gray-600 truncate">{s.model_name.replace('nebulax:', '')}</p>
+              </div>
+              <button onClick={(e) => deleteSession(s.id, e)} className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-all flex-shrink-0">
                 <Trash2 className="w-3 h-3" />
               </button>
             </div>
@@ -467,7 +478,15 @@ export default function ChatPage() {
 
             <select
               value={model}
-              onChange={(e) => setModel(e.target.value)}
+              onChange={(e) => {
+                const m = e.target.value
+                setModel(m)
+                if (activeSession) {
+                  api.patch(`/chat/sessions/${activeSession.id}`, { model_name: m }).catch(() => {})
+                  setSessions(s => s.map(x => x.id === activeSession.id ? { ...x, model_name: m } : x))
+                  setActiveSession(a => a ? { ...a, model_name: m } : a)
+                }
+              }}
               className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-500"
             >
               {variants.length > 0 && (
