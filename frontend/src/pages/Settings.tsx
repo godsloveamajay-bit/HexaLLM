@@ -32,9 +32,15 @@ export default function SettingsPage() {
       await update.downloadAndInstall()
       toast.success('Update ready — restarting in 3 s', { id: 'manual-update', duration: 3000 })
       setTimeout(() => relaunch(), 3000)
-    } catch {
-      setUpdateStatus('error')
-      toast.error('Could not check for updates')
+    } catch (err: any) {
+      const msg = String(err?.message || err || '')
+      // 404 / no latest.json means no signed release yet — not a real error
+      if (msg.includes('404') || msg.includes('Not Found') || msg.includes('failed to get')) {
+        setUpdateStatus('none')
+      } else {
+        setUpdateStatus('error')
+        toast.error('Could not reach update server')
+      }
     }
   }
 
