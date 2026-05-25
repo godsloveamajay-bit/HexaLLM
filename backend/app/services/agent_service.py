@@ -1,34 +1,92 @@
+import re
 import json
 import asyncio
 import subprocess
 import tempfile
 import os
 from typing import List, Dict, Any, Optional
-from datetime import datetime, timezone
 from .ollama_service import ollama
 
 
 TOOL_DESCRIPTIONS = {
     "web_search": "Search the web for current information. Input: search query string.",
-    "code_exec": "Execute Python code and return output. Input: Python code string.",
-    "read_file": "Read contents of a file. Input: file path string.",
-    "write_file": "Write content to a file. Input: JSON with 'path' and 'content' keys.",
+    "code_exec": "Execute Python code and return stdout. Input: Python code string.",
+    "read_file": "Read a file's contents. Input: absolute file path.",
+    "write_file": 'Write to a file. Input: JSON {"path": "...", "content": "..."}',
 }
 
-AGENT_SYSTEM_PROMPT = """You are an autonomous AI agent. You have access to these tools:
+AGENT_SYSTEM_PROMPT = """\
+You are an autonomous AI agent. Complete tasks step by step using the tools below.
 
 {tools}
 
-To use a tool, respond in this exact JSON format:
-{{"thought": "your reasoning", "tool": "tool_name", "input": "tool input"}}
+STRICT OUTPUT FORMAT — every reply must be ONLY a JSON object, nothing else:
+  To use a tool:  {{"thought": "<why>", "tool": "<name>", "input": "<input>"}}
+  When finished:  {{"thought": "<why>", "tool": "done",   "input": "<final answer>"}}
 
-When you have the final answer, respond:
-{{"thought": "final reasoning", "tool": "done", "input": "final answer to the user"}}
+No markdown. No explanation. No text outside the JSON object.
+"""
 
-Always respond with valid JSON only. No other text."""
+FIX_PROMPT = (
+    'Your last response was not valid JSON. '
+    'Reply with ONLY a JSON object in this exact format:\n'
+    '{"thought": "...", "tool": "<tool_name or done>", "input": "..."}'
+)
 
 
-async def web_search(query: str) -> str:
+# ── JSON extraction ────────────────────────────────────────────────────────
+
+def _extract_json(text: str) -> Optional[dict]:
+    """Try several strategies to pull a JSON object out of model output."""
+    text = text.strip()
+
+    # 1. Direct parse
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Strip code fences
+    stripped = re.sub(r'```(?:json)?\s*|\s*```', '', text).strip()
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        pass
+
+    # 3. Balanced-brace scan — finds the first complete {...} in the text
+    start = text.find('{')
+    if start != -1:
+        depth = 0
+        in_string = False
+        escape = False
+        for i, ch in enumerate(text[start:], start):
+            if escape:
+                escape = False
+                continue
+            if ch == '\\' and in_string:
+                escape = True
+                continue
+            if ch == '"':
+                in_string = not in_string
+                continue
+            if in_string:
+                continue
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start:i + 1])
+                    except json.JSONDecodeError:
+                        break
+
+    return None
+
+
+# ── Tools ──────────────────────────────────────────────────────────────────
+
+async def _web_search(query: str) -> str:
     try:
         from duckduckgo_search import DDGS
         with DDGS() as ddgs:
@@ -42,52 +100,62 @@ async def web_search(query: str) -> str:
         return f"Search error: {e}"
 
 
-async def code_exec(code: str) -> str:
+async def _code_exec(code: str) -> str:
     try:
         with tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False) as f:
             f.write(code)
-            tmp_path = f.name
-        result = subprocess.run(
-            ["python3", tmp_path],
-            capture_output=True,
-            text=True,
-            timeout=30,
+            tmp = f.name
+        proc = subprocess.run(
+            ["python3", tmp],
+            capture_output=True, text=True, timeout=30,
         )
-        os.unlink(tmp_path)
-        output = result.stdout or ""
-        if result.stderr:
-            output += f"\nSTDERR: {result.stderr}"
-        return output or "(no output)"
+        os.unlink(tmp)
+        out = proc.stdout or ""
+        if proc.stderr:
+            out += f"\nSTDERR:\n{proc.stderr}"
+        return out or "(no output)"
     except subprocess.TimeoutExpired:
-        return "Execution timed out (30s limit)"
+        return "Execution timed out (30 s limit)"
     except Exception as e:
         return f"Execution error: {e}"
 
 
-async def read_file(path: str) -> str:
+async def _read_file(path: str) -> str:
     try:
-        with open(path, "r") as f:
+        with open(path.strip()) as f:
             return f.read()[:4000]
     except Exception as e:
         return f"File read error: {e}"
 
 
-async def write_file(input_str: str) -> str:
+async def _write_file(input_str: str) -> str:
     try:
         data = json.loads(input_str)
-        with open(data["path"], "w") as f:
+        path = data["path"]
+        os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)
+        with open(path, "w") as f:
             f.write(data["content"])
-        return f"File written to {data['path']}"
+        return f"Written to {path}"
     except Exception as e:
         return f"File write error: {e}"
 
 
-TOOL_FUNCS = {
-    "web_search": web_search,
-    "code_exec": code_exec,
-    "read_file": read_file,
-    "write_file": write_file,
+_TOOL_FUNCS = {
+    "web_search": _web_search,
+    "code_exec": _code_exec,
+    "read_file": _read_file,
+    "write_file": _write_file,
 }
+
+
+# ── Agent loop ─────────────────────────────────────────────────────────────
+
+async def _llm_call(model: str, messages: list, system: str) -> str:
+    """Collect a full response from the streaming LLM."""
+    text = ""
+    async for chunk in ollama.chat_stream(model, messages, system_prompt=system, temperature=0.1):
+        text += chunk
+    return text
 
 
 async def run_agent(
@@ -98,42 +166,81 @@ async def run_agent(
     on_step=None,
     persona_prompt: Optional[str] = None,
 ) -> Dict[str, Any]:
-    available_tools = {k: v for k, v in TOOL_DESCRIPTIONS.items() if k in tools}
-    tool_list = "\n".join(f"- {k}: {v}" for k, v in available_tools.items())
-    base = AGENT_SYSTEM_PROMPT.format(tools=tool_list)
-    system_prompt = f"{persona_prompt}\n\n{base}" if persona_prompt else base
+    available = {k: TOOL_DESCRIPTIONS[k] for k in tools if k in TOOL_DESCRIPTIONS}
+    tool_list = "\n".join(f"- {k}: {v}" for k, v in available.items())
+    system = AGENT_SYSTEM_PROMPT.format(tools=tool_list)
+    if persona_prompt:
+        system = f"{persona_prompt}\n\n{system}"
 
-    messages = [{"role": "user", "content": f"Complete this task: {task}"}]
-    steps = []
+    messages: List[Dict[str, str]] = [
+        {"role": "user", "content": f"Complete this task: {task}"}
+    ]
+    steps: List[Dict] = []
 
     for step_num in range(1, max_steps + 1):
-        response_text = ""
-        async for chunk in ollama.chat_stream(model, messages, system_prompt=system_prompt, temperature=0.1):
-            response_text += chunk
+        # ── Get LLM response, retry up to 3× on bad JSON ──────────────────
+        parsed: Optional[dict] = None
+        last_response = ""
 
-        messages.append({"role": "assistant", "content": response_text})
+        for attempt in range(3):
+            try:
+                last_response = await asyncio.wait_for(
+                    _llm_call(model, messages, system),
+                    timeout=120,
+                )
+            except asyncio.TimeoutError:
+                last_response = ""
 
-        try:
-            # Extract JSON from response
-            text = response_text.strip()
-            if "```" in text:
-                text = text.split("```")[1]
-                if text.startswith("json"):
-                    text = text[4:]
-            parsed = json.loads(text)
-        except json.JSONDecodeError:
-            step = {"step": step_num, "thought": response_text, "tool": None, "input": None, "output": None}
+            parsed = _extract_json(last_response)
+            if parsed:
+                break
+
+            # Ask the model to fix its output (don't add to permanent history)
+            fix_messages = messages + [
+                {"role": "assistant", "content": last_response or "(no response)"},
+                {"role": "user", "content": FIX_PROMPT},
+            ]
+            try:
+                last_response = await asyncio.wait_for(
+                    _llm_call(model, fix_messages, system),
+                    timeout=60,
+                )
+            except asyncio.TimeoutError:
+                last_response = ""
+            parsed = _extract_json(last_response)
+            if parsed:
+                break
+
+        if not parsed:
+            # Give up on this step — record it and stop
+            step = {
+                "step": step_num,
+                "thought": f"Model did not return valid JSON after retries. Raw: {last_response[:300]}",
+                "tool": None,
+                "input": None,
+                "output": None,
+            }
             steps.append(step)
             if on_step:
                 await on_step(step)
             break
 
-        tool_name = parsed.get("tool")
-        tool_input = parsed.get("input", "")
-        thought = parsed.get("thought", "")
+        # Add the valid assistant response to history
+        messages.append({"role": "assistant", "content": last_response})
 
-        step = {"step": step_num, "thought": thought, "tool": tool_name, "input": tool_input, "output": None}
+        tool_name: str = parsed.get("tool", "")
+        tool_input: str = str(parsed.get("input", ""))
+        thought: str = parsed.get("thought", "")
 
+        step: Dict[str, Any] = {
+            "step": step_num,
+            "thought": thought,
+            "tool": tool_name,
+            "input": tool_input,
+            "output": None,
+        }
+
+        # ── Done ───────────────────────────────────────────────────────────
         if tool_name == "done":
             step["output"] = tool_input
             steps.append(step)
@@ -141,16 +248,28 @@ async def run_agent(
                 await on_step(step)
             return {"steps": steps, "result": tool_input, "error": None}
 
-        if tool_name in TOOL_FUNCS and tool_name in available_tools:
-            output = await TOOL_FUNCS[tool_name](tool_input)
+        # ── Execute tool ───────────────────────────────────────────────────
+        if tool_name in _TOOL_FUNCS and tool_name in available:
+            try:
+                output = await asyncio.wait_for(
+                    _TOOL_FUNCS[tool_name](tool_input),
+                    timeout=60,
+                )
+            except asyncio.TimeoutError:
+                output = f"Tool '{tool_name}' timed out after 60 s"
         else:
-            output = f"Unknown tool: {tool_name}"
+            known = ", ".join(available.keys()) or "none"
+            output = f"Unknown tool '{tool_name}'. Available: {known}"
 
         step["output"] = output
         steps.append(step)
         if on_step:
             await on_step(step)
 
-        messages.append({"role": "user", "content": f"Tool result: {output}"})
+        messages.append({"role": "user", "content": f"Tool result:\n{output}"})
 
-    return {"steps": steps, "result": None, "error": "Max steps reached without completing task"}
+    return {
+        "steps": steps,
+        "result": None,
+        "error": "Reached max steps without completing the task.",
+    }
