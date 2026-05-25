@@ -3,7 +3,7 @@ import axios from 'axios'
 // In Tauri production builds set VITE_API_URL to your hosted backend, e.g.:
 //   VITE_API_URL=https://api.yourserver.com/api/v1
 // In web dev the Vite proxy rewrites /api → localhost:8000, so no env var is needed.
-const baseURL = import.meta.env.VITE_API_URL || '/api/v1'
+export const baseURL = import.meta.env.VITE_API_URL || '/api/v1'
 
 export const api = axios.create({
   baseURL,

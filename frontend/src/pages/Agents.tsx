@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders } from 'lucide-react'
-import api from '../lib/api'
+import api, { baseURL } from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
@@ -165,7 +165,7 @@ export default function AgentsPage() {
     setCurrentRun({ id: 0, task, status: 'running', steps: [], created_at: new Date().toISOString() })
 
     try {
-      const resp = await fetch('/api/v1/agents/run/stream', {
+      const resp = await fetch(`${baseURL}/agents/run/stream`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

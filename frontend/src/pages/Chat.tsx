@@ -3,7 +3,7 @@ import { Send, Plus, Trash2, Bot, User, Loader2, ChevronDown, BookOpen, FileText
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import api from '../lib/api'
+import api, { baseURL } from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 
@@ -286,7 +286,7 @@ export default function ChatPage() {
     }
 
     try {
-      const resp = await fetch('/api/v1/chat/completions', {
+      const resp = await fetch(`${baseURL}/chat/completions`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
