@@ -155,7 +155,7 @@ export default function ApiKeysPage() {
 
       <div className="mt-6 card bg-gray-900/30">
         <h3 className="text-sm font-medium text-gray-100 mb-2">Usage Example</h3>
-        <pre className="text-xs text-gray-400 font-mono overflow-x-auto">{`curl -X POST http://localhost:8000/api/v1/chat/completions \\
+        <pre className="text-xs text-gray-400 font-mono overflow-x-auto">{`curl -X POST ${import.meta.env.VITE_API_URL || '/api/v1'}/chat/completions \\
   -H "Authorization: Bearer nai_your_api_key_here" \\
   -H "Content-Type: application/json" \\
   -d '{"model": "llama3.2:3b", "messages": [{"role": "user", "content": "Hello!"}]}'`}</pre>
