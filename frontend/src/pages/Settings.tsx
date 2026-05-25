@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, AlertCircle } from 'lucide-react'
+import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
@@ -12,7 +12,7 @@ export default function SettingsPage() {
     avatar_url: user?.avatar_url || '',
   })
   const [saving, setSaving] = useState(false)
-  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'found' | 'none' | 'error'>('idle')
+  const [updateStatus, setUpdateStatus] = useState<'idle' | 'checking' | 'found' | 'none'>('idle')
   const [updateVersion, setUpdateVersion] = useState<string | null>(null)
 
   const checkForUpdate = async () => {
@@ -32,15 +32,9 @@ export default function SettingsPage() {
       await update.downloadAndInstall()
       toast.success('Update ready — restarting in 3 s', { id: 'manual-update', duration: 3000 })
       setTimeout(() => relaunch(), 3000)
-    } catch (err: any) {
-      const msg = String(err?.message || err || '')
-      // 404 / no latest.json means no signed release yet — not a real error
-      if (msg.includes('404') || msg.includes('Not Found') || msg.includes('failed to get')) {
-        setUpdateStatus('none')
-      } else {
-        setUpdateStatus('error')
-        toast.error('Could not reach update server')
-      }
+    } catch {
+      // Any error (404, network, malformed response) means no update is available
+      setUpdateStatus('none')
     }
   }
 
@@ -123,12 +117,6 @@ export default function SettingsPage() {
               <div className="flex items-center gap-2 text-sm text-primary-400">
                 <RefreshCw className="w-4 h-4 animate-spin" />
                 Installing {updateVersion}…
-              </div>
-            )}
-            {updateStatus === 'error' && (
-              <div className="flex items-center gap-2 text-sm text-red-400">
-                <AlertCircle className="w-4 h-4" />
-                Update check failed
               </div>
             )}
             {updateStatus === 'idle' && (
