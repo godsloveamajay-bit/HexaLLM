@@ -1,7 +1,9 @@
 import secrets
 from datetime import datetime, timedelta, timezone
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
 
 from ..core.config import settings
@@ -15,12 +17,14 @@ from ..schemas.auth import UserRegister, UserLogin, UserOut, UserUpdate, Passwor
 from ..services.email_service import send_password_reset
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+limiter = Limiter(key_func=get_remote_address)
 
 _RESET_TOKEN_EXPIRE_HOURS = 1
 
 
 @router.post("/register", response_model=TokenResponse, status_code=201)
-def register(data: UserRegister, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def register(request: Request, data: UserRegister, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     if db.query(User).filter(User.username == data.username).first():
@@ -45,7 +49,8 @@ def register(data: UserRegister, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(data: UserLogin, db: Session = Depends(get_db)):
+@limiter.limit("20/minute")
+def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
     if not user or not verify_password(data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail="Invalid credentials")
@@ -81,7 +86,8 @@ def update_me(data: UserUpdate, db: Session = Depends(get_db), current_user: Use
 
 
 @router.post("/forgot-password", status_code=202)
-def forgot_password(data: dict, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+@limiter.limit("5/minute")
+def forgot_password(request: Request, data: dict, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     """Always returns 202 so we don't leak which emails are registered."""
     email = (data.get("email") or "").strip().lower()
     if not email:

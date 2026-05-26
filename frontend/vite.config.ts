@@ -33,7 +33,6 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,svg,png,woff2}'],
         runtimeCaching: [
           {
-            // Cache API responses for 5 minutes
             urlPattern: /^https?:\/\/.*\/api\/v1\/(models|analytics)/,
             handler: 'NetworkFirst',
             options: {
@@ -45,6 +44,28 @@ export default defineConfig({
       },
     }),
   ],
+  build: {
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          // Core React runtime — always needed
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          // State + HTTP — always needed
+          'vendor-core': ['zustand', 'axios'],
+          // Heavy visualisation libs — only on Analytics/Dashboard pages
+          'vendor-charts': ['recharts'],
+          // Markdown + code highlighting — only on Chat/Share pages
+          'vendor-markdown': ['react-markdown', 'react-syntax-highlighter'],
+          // Icons — split off so it can be cached independently
+          'vendor-icons': ['lucide-react'],
+        },
+      },
+    },
+    // Better source-map free minification
+    minify: 'esbuild',
+    // Raise the inline-asset threshold so tiny SVGs go inline
+    assetsInlineLimit: 4096,
+  },
   server: {
     port: 3000,
     proxy: {

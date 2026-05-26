@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Outlet, Link } from 'react-router-dom'
 import Sidebar from './Sidebar'
-import { Menu } from 'lucide-react'
+import { Menu, Search } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { useAutoUpdate } from '../../hooks/useAutoUpdate'
 
@@ -36,8 +36,21 @@ export default function Layout() {
         </div>
 
         {user && (
-          <div className="flex items-center gap-2.5">
-            <span className="text-xs text-gray-500 hidden sm:block">{user.email}</span>
+          <div className="flex items-center gap-2">
+            {/* Ctrl+K hint — click also opens palette */}
+            <button
+              onClick={() => window.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true, bubbles: true }))}
+              className="hidden md:flex items-center gap-2 px-2.5 py-1 rounded-lg bg-gray-800/60 border border-gray-700/50
+                         text-gray-500 hover:text-gray-300 hover:bg-gray-800 transition-colors text-xs"
+              title="Open command palette"
+            >
+              <Search className="w-3 h-3" />
+              <span>Search</span>
+              <kbd className="flex items-center gap-0.5 text-[10px] text-gray-600 ml-1">
+                <span>⌘</span><span>K</span>
+              </kbd>
+            </button>
+
             <Link to="/settings">
               <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-600 to-primary-800
                               flex items-center justify-center text-xs font-bold text-white shadow

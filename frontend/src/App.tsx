@@ -1,31 +1,45 @@
+import { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
+import { isCapacitor } from './lib/platform'
 import Layout from './components/layout/Layout'
 import MobileLayout from './components/layout/MobileLayout'
-import { isCapacitor } from './lib/platform'
-import LoginPage from './pages/Login'
-import RegisterPage from './pages/Register'
-import DashboardPage from './pages/Dashboard'
-import ChatPage from './pages/Chat'
-import AgentsPage from './pages/Agents'
-import ModelsPage from './pages/Models'
-import TrainPage from './pages/Train'
-import AnalyticsPage from './pages/Analytics'
-import LogsPage from './pages/Logs'
-import ApiKeysPage from './pages/ApiKeys'
-import SettingsPage from './pages/Settings'
-import KnowledgePage from './pages/Knowledge'
-import PrivacyPolicyPage from './pages/PrivacyPolicy'
-import ImageGenPage from './pages/ImageGen'
-import SharePage from './pages/Share'
-import MemoryPage from './pages/Memory'
-import PersonasPage from './pages/Personas'
-import WorkflowsPage from './pages/Workflows'
-import MCPServersPage from './pages/MCPServers'
-import RemoteCLIPage from './pages/RemoteCLI'
-import DownloadsPage from './pages/Downloads'
-import ForgotPasswordPage from './pages/ForgotPassword'
-import ResetPasswordPage from './pages/ResetPassword'
+import CommandPalette from './components/ui/CommandPalette'
+
+function PageSpinner() {
+  return (
+    <div className="flex items-center justify-center h-full min-h-[60vh]">
+      <div className="w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+    </div>
+  )
+}
+
+// Public pages
+const LoginPage    = lazy(() => import('./pages/Login'))
+const RegisterPage = lazy(() => import('./pages/Register'))
+const PrivacyPage  = lazy(() => import('./pages/PrivacyPolicy'))
+const ForgotPage   = lazy(() => import('./pages/ForgotPassword'))
+const ResetPage    = lazy(() => import('./pages/ResetPassword'))
+const SharePage    = lazy(() => import('./pages/Share'))
+
+// Authenticated pages — all lazy-loaded so the initial bundle stays tiny
+const ChatPage       = lazy(() => import('./pages/Chat'))
+const DashboardPage  = lazy(() => import('./pages/Dashboard'))
+const AgentsPage     = lazy(() => import('./pages/Agents'))
+const ModelsPage     = lazy(() => import('./pages/Models'))
+const TrainPage      = lazy(() => import('./pages/Train'))
+const AnalyticsPage  = lazy(() => import('./pages/Analytics'))
+const LogsPage       = lazy(() => import('./pages/Logs'))
+const ApiKeysPage    = lazy(() => import('./pages/ApiKeys'))
+const SettingsPage   = lazy(() => import('./pages/Settings'))
+const KnowledgePage  = lazy(() => import('./pages/Knowledge'))
+const ImageGenPage   = lazy(() => import('./pages/ImageGen'))
+const MemoryPage     = lazy(() => import('./pages/Memory'))
+const PersonasPage   = lazy(() => import('./pages/Personas'))
+const WorkflowsPage  = lazy(() => import('./pages/Workflows'))
+const MCPServersPage = lazy(() => import('./pages/MCPServers'))
+const RemoteCLIPage  = lazy(() => import('./pages/RemoteCLI'))
+const DownloadsPage  = lazy(() => import('./pages/Downloads'))
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth()
@@ -37,44 +51,43 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
   return user?.is_admin ? <>{children}</> : <Navigate to="/chat" replace />
 }
 
-// Use mobile bottom-nav layout on Capacitor native apps
 const AppLayout = isCapacitor() ? MobileLayout : Layout
 
 export default function App() {
   return (
-    <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
-      <Route path="/privacy" element={<PrivacyPolicyPage />} />
-      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
-      <Route path="/reset-password" element={<ResetPasswordPage />} />
-      <Route path="/share/:token" element={<SharePage />} />
-      <Route
-        element={
-          <PrivateRoute>
-            <AppLayout />
-          </PrivateRoute>
-        }
-      >
-        <Route path="/" element={<Navigate to="/chat" replace />} />
-        <Route path="/dashboard" element={<AdminRoute><DashboardPage /></AdminRoute>} />
-        <Route path="/chat" element={<ChatPage />} />
-        <Route path="/image" element={<ImageGenPage />} />
-        <Route path="/agents" element={<AgentsPage />} />
-        <Route path="/models" element={<ModelsPage />} />
-        <Route path="/train" element={<TrainPage />} />
-        <Route path="/knowledge" element={<KnowledgePage />} />
-        <Route path="/memory" element={<MemoryPage />} />
-        <Route path="/personas" element={<PersonasPage />} />
-        <Route path="/workflows" element={<WorkflowsPage />} />
-        <Route path="/mcp" element={<MCPServersPage />} />
-        <Route path="/remote-cli" element={<RemoteCLIPage />} />
-        <Route path="/downloads" element={<DownloadsPage />} />
-        <Route path="/analytics" element={<AnalyticsPage />} />
-        <Route path="/logs" element={<LogsPage />} />
-        <Route path="/api-keys" element={<ApiKeysPage />} />
-        <Route path="/settings" element={<SettingsPage />} />
-      </Route>
-    </Routes>
+    <>
+      <CommandPalette />
+      <Suspense fallback={<PageSpinner />}>
+        <Routes>
+          <Route path="/login"           element={<LoginPage />} />
+          <Route path="/register"        element={<RegisterPage />} />
+          <Route path="/privacy"         element={<PrivacyPage />} />
+          <Route path="/forgot-password" element={<ForgotPage />} />
+          <Route path="/reset-password"  element={<ResetPage />} />
+          <Route path="/share/:token"    element={<SharePage />} />
+
+          <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
+            <Route path="/"           element={<Navigate to="/chat" replace />} />
+            <Route path="/dashboard"  element={<AdminRoute><DashboardPage /></AdminRoute>} />
+            <Route path="/chat"       element={<ChatPage />} />
+            <Route path="/image"      element={<ImageGenPage />} />
+            <Route path="/agents"     element={<AgentsPage />} />
+            <Route path="/models"     element={<ModelsPage />} />
+            <Route path="/train"      element={<TrainPage />} />
+            <Route path="/knowledge"  element={<KnowledgePage />} />
+            <Route path="/memory"     element={<MemoryPage />} />
+            <Route path="/personas"   element={<PersonasPage />} />
+            <Route path="/workflows"  element={<WorkflowsPage />} />
+            <Route path="/mcp"        element={<MCPServersPage />} />
+            <Route path="/remote-cli" element={<RemoteCLIPage />} />
+            <Route path="/downloads"  element={<DownloadsPage />} />
+            <Route path="/analytics"  element={<AnalyticsPage />} />
+            <Route path="/logs"       element={<LogsPage />} />
+            <Route path="/api-keys"   element={<ApiKeysPage />} />
+            <Route path="/settings"   element={<SettingsPage />} />
+          </Route>
+        </Routes>
+      </Suspense>
+    </>
   )
 }
