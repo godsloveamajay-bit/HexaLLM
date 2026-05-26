@@ -1,13 +1,27 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Brain, Loader2 } from 'lucide-react'
+import { Brain, Loader2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
+
+function parseApiError(err: any, fallback: string): string {
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string') return detail
+  if (Array.isArray(detail)) return detail[0]?.msg ?? fallback
+  const error = err?.response?.data?.error
+  if (typeof error === 'string') {
+    if (error.toLowerCase().includes('rate limit')) return 'Too many attempts — wait a minute and try again.'
+    return error
+  }
+  if (err?.message === 'Network Error') return 'Cannot reach server — check your connection.'
+  return fallback
+}
 
 export default function RegisterPage() {
   const navigate = useNavigate()
   const { register } = useAuth()
   const [form, setForm] = useState({ email: '', username: '', password: '', full_name: '' })
+  const [showPassword, setShowPassword] = useState(false)
   const [loading, setLoading] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -15,10 +29,11 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       await register(form)
-      navigate('/dashboard')
       toast.success('Welcome to NebulaX AI!')
+      const { user } = useAuth.getState()
+      navigate(user?.is_admin ? '/dashboard' : '/chat', { replace: true })
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Registration failed')
+      toast.error(parseApiError(err, 'Registration failed — please try again.'))
     } finally {
       setLoading(false)
     }
@@ -42,22 +57,41 @@ export default function RegisterPage() {
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
               <label className="label">Full Name</label>
-              <input className="input" placeholder="John Doe" value={form.full_name} onChange={(e) => update('full_name', e.target.value)} />
+              <input className="input" placeholder="John Doe" value={form.full_name} onChange={(e) => update('full_name', e.target.value)} autoComplete="name" />
             </div>
             <div>
               <label className="label">Username</label>
-              <input className="input" placeholder="johndoe" value={form.username} onChange={(e) => update('username', e.target.value)} required />
+              <input className="input" placeholder="johndoe" value={form.username} onChange={(e) => update('username', e.target.value)} autoComplete="username" required />
             </div>
             <div>
               <label className="label">Email</label>
-              <input type="email" className="input" placeholder="you@example.com" value={form.email} onChange={(e) => update('email', e.target.value)} required />
+              <input type="email" className="input" placeholder="you@example.com" value={form.email} onChange={(e) => update('email', e.target.value)} autoComplete="email" required />
             </div>
             <div>
               <label className="label">Password</label>
-              <input type="password" className="input" placeholder="••••••••" value={form.password} onChange={(e) => update('password', e.target.value)} required minLength={8} />
+              <div className="relative">
+                <input
+                  type={showPassword ? 'text' : 'password'}
+                  className="input pr-10"
+                  placeholder="Min. 8 characters"
+                  value={form.password}
+                  onChange={(e) => update('password', e.target.value)}
+                  autoComplete="new-password"
+                  required
+                  minLength={8}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(p => !p)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 transition-colors"
+                  tabIndex={-1}
+                >
+                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                </button>
+              </div>
             </div>
             <button type="submit" disabled={loading} className="btn-primary w-full justify-center py-2.5">
-              {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {loading ? <Loader2 className="w-4 h-4 animate-spin mr-2" /> : null}
               Create Account
             </button>
           </form>
