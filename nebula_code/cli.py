@@ -318,7 +318,21 @@ def cmd_login(url: str, email: str, password: str):
             console.print(f"\n[green]Logged in as[/] [cyan]{name}[/] [dim]on {url}[/]")
             console.print("[dim]Token saved to ~/.nebula/config.json[/]\n")
         except Exception as e:
-            console.print(f"[red]Login failed:[/] {e}")
+            import httpx as _httpx
+            if isinstance(e, _httpx.HTTPStatusError):
+                status = e.response.status_code
+                if status == 401:
+                    console.print("[red]Login failed:[/] Invalid email or password.")
+                elif status == 422:
+                    console.print("[red]Login failed:[/] Invalid email format.")
+                elif status == 429:
+                    console.print("[red]Login failed:[/] Too many attempts — wait a minute and try again.")
+                else:
+                    console.print(f"[red]Login failed:[/] Server returned {status}.")
+            elif isinstance(e, _httpx.ConnectError):
+                console.print(f"[red]Login failed:[/] Cannot connect to {url} — check the URL.")
+            else:
+                console.print(f"[red]Login failed:[/] {e}")
             raise SystemExit(1)
 
     asyncio.run(_do())
