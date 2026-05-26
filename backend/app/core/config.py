@@ -4,7 +4,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     APP_NAME: str = "NebulaX AI Platform"
-    VERSION: str = "0.5.0"
+    VERSION: str = "0.6.0"
     DEBUG: bool = False
 
     DATABASE_URL: str = "sqlite:///./nebulaxai.db"
@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     UPLOADS_DIR: str = "./uploads"
 
     MAX_UPLOAD_SIZE_MB: int = 500
+
+    # SMTP — leave blank to disable email sending (reset links logged to console instead)
+    SMTP_HOST: str = ""
+    SMTP_PORT: int = 587
+    SMTP_USER: str = ""
+    SMTP_PASSWORD: str = ""
+    SMTP_FROM: str = "noreply@nebulaxai.local"
+    APP_URL: str = "https://ai.nebualax.co.uk"
 
     class Config:
         env_file = ".env"

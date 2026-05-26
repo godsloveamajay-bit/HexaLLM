@@ -13,6 +13,7 @@ from ..models.mcp_server import MCPServer
 from ..schemas.chat import AgentTaskCreate, AgentRunOut
 from ..services.agent_service import run_agent
 from ..services.mcp_service import MCPClient
+from ..services.sandbox_service import Sandbox, DOCKER_AVAILABLE, DOCKER_IMAGE
 
 
 def _resolve_mcp_clients(db: Session, server_ids: List[int], user_id: int):
@@ -31,6 +32,21 @@ def _resolve_mcp_clients(db: Session, server_ids: List[int], user_id: int):
     return clients
 
 router = APIRouter(prefix="/agents", tags=["agents"])
+
+
+@router.get("/sandbox/status")
+def sandbox_status():
+    return {
+        "docker_available": DOCKER_AVAILABLE,
+        "mode": "docker" if DOCKER_AVAILABLE else "subprocess",
+        "image": DOCKER_IMAGE if DOCKER_AVAILABLE else None,
+        "limits": {
+            "memory": "256m",
+            "cpus": "0.5",
+            "pids": 64,
+            "network": "none",
+        } if DOCKER_AVAILABLE else None,
+    }
 
 
 @router.post("/run", response_model=AgentRunOut, status_code=201)
@@ -54,6 +70,7 @@ async def run_agent_task(
         agent_run.steps = list(agent_run.steps or []) + [step]
         db.commit()
 
+    sandbox = Sandbox()
     try:
         mcp_clients = _resolve_mcp_clients(db, data.mcp_server_ids, current_user.id)
         result = await run_agent(
@@ -64,6 +81,7 @@ async def run_agent_task(
             on_step=on_step,
             persona_prompt=data.system_prompt,
             mcp_clients=mcp_clients,
+            sandbox=sandbox,
         )
         agent_run.status = "completed"
         agent_run.result = result.get("result")
@@ -72,6 +90,8 @@ async def run_agent_task(
     except Exception as e:
         agent_run.status = "failed"
         agent_run.error = str(e)
+    finally:
+        sandbox.cleanup()
 
     agent_run.completed_at = datetime.now(timezone.utc)
     db.commit()
@@ -100,19 +120,14 @@ async def run_agent_stream(
 
     async def event_stream():
         steps = []
-
-        async def on_step(step):
-            steps.append(step)
-            yield f"data: {json.dumps({'type': 'step', 'step': step})}\n\n"
-
-        # Need a queue-based approach for proper SSE streaming
-        queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue()
 
         async def on_step_q(step):
             steps.append(step)
             await queue.put(step)
 
         mcp_clients = _resolve_mcp_clients(db, data.mcp_server_ids, current_user.id)
+        sandbox = Sandbox()
 
         async def agent_task():
             try:
@@ -124,10 +139,13 @@ async def run_agent_stream(
                     on_step=on_step_q,
                     persona_prompt=data.system_prompt,
                     mcp_clients=mcp_clients,
+                    sandbox=sandbox,
                 )
                 await queue.put({"__done__": True, **result})
             except Exception as e:
                 await queue.put({"__error__": str(e)})
+            finally:
+                sandbox.cleanup()
 
         task = asyncio.create_task(agent_task())
 

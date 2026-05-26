@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, ExternalLink } from 'lucide-react'
+import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, ExternalLink, Lock } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
@@ -15,6 +15,8 @@ export default function SettingsPage() {
     avatar_url: user?.avatar_url || '',
   })
   const [saving, setSaving] = useState(false)
+  const [pwForm, setPwForm] = useState({ current: '', next: '', confirm: '' })
+  const [pwSaving, setPwSaving] = useState(false)
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>('idle')
   const [updateVersion, setUpdateVersion] = useState<string | null>(null)
 
@@ -52,6 +54,20 @@ export default function SettingsPage() {
       // just means we can't determine update status — show "up to date"
       setUpdateStatus('none')
     }
+  }
+
+  const changePassword = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (pwForm.next !== pwForm.confirm) { toast.error('New passwords do not match'); return }
+    if (pwForm.next.length < 8) { toast.error('Password must be at least 8 characters'); return }
+    setPwSaving(true)
+    try {
+      await api.post('/auth/me/password', { current_password: pwForm.current, new_password: pwForm.next })
+      toast.success('Password changed!')
+      setPwForm({ current: '', next: '', confirm: '' })
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to change password')
+    } finally { setPwSaving(false) }
   }
 
   const save = async (e: React.FormEvent) => {
@@ -120,6 +136,37 @@ export default function SettingsPage() {
           <button type="submit" disabled={saving} className="btn-primary">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
             Save Changes
+          </button>
+        </form>
+      </div>
+
+      {/* Password */}
+      <div className="card mb-5">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-lg bg-primary-600/20 flex items-center justify-center">
+            <Lock className="w-4 h-4 text-primary-400" />
+          </div>
+          <h2 className="font-semibold text-gray-100">Change Password</h2>
+        </div>
+        <form onSubmit={changePassword} className="space-y-4">
+          <div>
+            <label className="label">Current Password</label>
+            <input type="password" className="input" placeholder="••••••••"
+              value={pwForm.current} onChange={e => setPwForm(f => ({ ...f, current: e.target.value }))} required />
+          </div>
+          <div>
+            <label className="label">New Password</label>
+            <input type="password" className="input" placeholder="Min. 8 characters"
+              value={pwForm.next} onChange={e => setPwForm(f => ({ ...f, next: e.target.value }))} required minLength={8} />
+          </div>
+          <div>
+            <label className="label">Confirm New Password</label>
+            <input type="password" className="input" placeholder="••••••••"
+              value={pwForm.confirm} onChange={e => setPwForm(f => ({ ...f, confirm: e.target.value }))} required />
+          </div>
+          <button type="submit" disabled={pwSaving} className="btn-primary">
+            {pwSaving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
+            Update Password
           </button>
         </form>
       </div>

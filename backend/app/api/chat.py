@@ -1,13 +1,15 @@
+import asyncio
 import base64
 import io
 import json
+import re
 import time
 import uuid
 from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import Dict, List, Tuple
+from typing import AsyncIterator, Dict, List, Optional, Tuple
 from ..core.database import get_db
 from ..core.security import get_current_user
 from ..models.user import User
@@ -21,6 +23,189 @@ from ..services.retrieval_service import search as kb_search, format_context
 from ..services import model_router
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+
+# ── CLI-backed tool descriptions ───────────────────────────────────────────────
+
+_CLI_TOOLS = {
+    "run_command":  "Run a shell command and return stdout+stderr. Input: command string.",
+    "bash_exec":    "Run a bash command. Input: bash command string.",
+    "read_file":    "Read a file's contents. Input: file path.",
+    "write_file":   'Create or overwrite a file. Input: JSON {"path": "...", "content": "..."}',
+    "patch_file":   'Replace text in a file. Input: JSON {"path": "...", "old": "...", "new": "..."}',
+    "list_files":   'List a directory. Input: path (default ".").',
+    "search_files": 'Search for text in files. Input: JSON {"pattern": "...", "path": "."}',
+}
+
+_CLI_TOOLS_PROMPT = """\
+
+---
+You have live terminal access to the user's machine via nebula-cli.
+Use these tools when the user asks you to run commands, read/write files, or interact with their system.
+Only use tools when genuinely needed — answer simple questions directly.
+
+Available tools:
+{tools}
+
+STRICT FORMAT — every reply must be ONLY a valid JSON object, no markdown fences:
+  Use a tool: {{"thought": "<brief reasoning>", "tool": "<name>", "input": "<input>"}}
+  Final reply:{{"thought": "<brief reasoning>", "tool": "done",   "input": "<your response>"}}
+---"""
+
+
+def _extract_json_chat(text: str) -> Optional[dict]:
+    """Pull a JSON object out of model output using 3 fallback strategies."""
+    text = text.strip()
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+    stripped = re.sub(r"```(?:json)?\s*|\s*```", "", text).strip()
+    try:
+        return json.loads(stripped)
+    except json.JSONDecodeError:
+        pass
+    start = text.find("{")
+    if start != -1:
+        depth, in_str, esc = 0, False, False
+        for i, ch in enumerate(text[start:], start):
+            if esc:
+                esc = False
+                continue
+            if ch == "\\" and in_str:
+                esc = True
+                continue
+            if ch == '"':
+                in_str = not in_str
+                continue
+            if in_str:
+                continue
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    try:
+                        return json.loads(text[start: i + 1])
+                    except json.JSONDecodeError:
+                        break
+    return None
+
+
+async def _dispatch_cli_tool(
+    session,
+    tool_name: str,
+    tool_input: str,
+    timeout: float = 60.0,
+) -> str:
+    """Send a single tool call to the CLI daemon and await its result."""
+    task_id = str(uuid.uuid4())
+    q: asyncio.Queue = asyncio.Queue()
+    session.task_queues[task_id] = q
+    try:
+        await session.ws.send_json({
+            "type":    "run_tool",
+            "task_id": task_id,
+            "tool":    tool_name,
+            "input":   tool_input,
+        })
+        msg = await asyncio.wait_for(q.get(), timeout=timeout)
+        return msg.get("output", "(no output)")
+    except asyncio.TimeoutError:
+        return f"Tool '{tool_name}' timed out after {timeout:.0f}s"
+    except Exception as exc:
+        return f"Tool dispatch error: {exc}"
+    finally:
+        session.task_queues.pop(task_id, None)
+
+
+async def _cli_agent_stream(
+    messages: List[Dict],
+    system_prompt: str,
+    model: str,
+    cli_session_id: str,
+    user_id: int,
+    collected: Dict,
+    max_steps: int = 15,
+) -> AsyncIterator[str]:
+    """
+    ReAct loop that runs LLM reasoning locally but dispatches every tool call
+    to the connected CLI daemon.  Yields SSE-formatted strings:
+      event: step  (tool call + output)
+      data: token  (final answer streamed char-by-char style)
+    """
+    from .cli_tunnel import _registry
+
+    user_sessions = _registry.get(user_id, {})
+    cli_session = user_sessions.get(cli_session_id)
+    if not cli_session:
+        collected["text"] = "(CLI session not found or disconnected)"
+        yield f"data: {collected['text']}\n\n"
+        return
+
+    tool_list = "\n".join(f"  {k}: {v}" for k, v in _CLI_TOOLS.items())
+    augmented_system = (system_prompt or "") + _CLI_TOOLS_PROMPT.format(tools=tool_list)
+
+    agent_messages = list(messages)
+    final_text = ""
+    fix_prompt = (
+        "Your reply was not valid JSON. Reply with ONLY a JSON object:\n"
+        '{"thought": "...", "tool": "<tool or done>", "input": "..."}'
+    )
+
+    for _ in range(max_steps):
+        raw = ""
+        async for chunk in ollama.chat_stream(model, agent_messages, augmented_system, temperature=0.1):
+            raw += chunk
+
+        parsed = _extract_json_chat(raw)
+        if not parsed:
+            fix_msgs = agent_messages + [
+                {"role": "assistant", "content": raw or "(empty)"},
+                {"role": "user",      "content": fix_prompt},
+            ]
+            raw2 = ""
+            async for chunk in ollama.chat_stream(model, fix_msgs, augmented_system, temperature=0.1):
+                raw2 += chunk
+            parsed = _extract_json_chat(raw2)
+            if not parsed:
+                final_text = f"(Model returned malformed response: {raw[:200]})"
+                yield f"data: {final_text}\n\n"
+                collected["text"] = final_text
+                return
+
+        agent_messages.append({"role": "assistant", "content": raw})
+        tool_name  = parsed.get("tool", "")
+        tool_input = str(parsed.get("input", ""))
+        thought    = parsed.get("thought", "")
+
+        if tool_name == "done":
+            final_text = tool_input
+            # stream the answer in reasonable chunks
+            chunk_size = max(4, len(final_text) // 80)
+            for i in range(0, len(final_text), chunk_size):
+                yield f"data: {final_text[i:i + chunk_size]}\n\n"
+            collected["text"] = final_text
+            return
+
+        if tool_name not in _CLI_TOOLS:
+            output = f"Unknown tool '{tool_name}'. Available: {', '.join(_CLI_TOOLS)}"
+        else:
+            output = await _dispatch_cli_tool(cli_session, tool_name, tool_input)
+
+        step_payload = json.dumps({
+            "name":    tool_name,
+            "input":   tool_input,
+            "output":  output,
+            "thought": thought,
+        })
+        yield f"event: step\ndata: {step_payload}\n\n"
+
+        agent_messages.append({"role": "user", "content": f"Tool result:\n{output}"})
+
+    final_text = "Reached maximum steps without completing the task."
+    yield f"data: {final_text}\n\n"
+    collected["text"] = final_text
 
 
 def log_request(db: Session, user_id: int, endpoint: str, method: str, status_code: int,
@@ -207,12 +392,26 @@ async def chat_completions(
                     yield f"event: route\ndata: {json.dumps(route_meta)}\n\n"
                 if citations:
                     yield f"event: citations\ndata: {json.dumps(citations)}\n\n"
-                async for chunk in ollama.chat_stream(
-                    eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx,
-                    images=images, usage=usage_info,
-                ):
-                    full_response += chunk
-                    yield f"data: {chunk}\n\n"
+
+                if req.cli_session_id:
+                    collected: Dict = {}
+                    async for sse_chunk in _cli_agent_stream(
+                        messages=messages,
+                        system_prompt=system_prompt,
+                        model=eff_model,
+                        cli_session_id=req.cli_session_id,
+                        user_id=current_user.id,
+                        collected=collected,
+                    ):
+                        yield sse_chunk
+                    full_response = collected.get("text", "")
+                else:
+                    async for chunk in ollama.chat_stream(
+                        eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx,
+                        images=images, usage=usage_info,
+                    ):
+                        full_response += chunk
+                        yield f"data: {chunk}\n\n"
             finally:
                 latency = int((time.time() - start) * 1000)
                 prompt_tok = usage_info.get("prompt_tokens", 0)

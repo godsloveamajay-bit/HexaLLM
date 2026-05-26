@@ -21,5 +21,11 @@ frontend/android/capacitor-cordova-android-plugins/build/
 frontend/ios/App/Pods/
 frontend/ios/App/build/
 
+# Database (production data — don't commit)
+backend/data/nebulaxai.db
+
+# CLI build output
+dist/
+
 # Misc
 *.DS_Store

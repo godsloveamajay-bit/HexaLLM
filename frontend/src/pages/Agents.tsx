@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server } from 'lucide-react'
+import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server, Brain, Terminal, ShieldCheck, ShieldAlert } from 'lucide-react'
 import api, { baseURL } from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -28,11 +28,12 @@ interface AgentRun {
 const TOOL_ICONS: Record<string, any> = {
   web_search: Globe,
   code_exec: Code2,
+  bash_exec: Terminal,
   read_file: FileText,
   write_file: FileText,
 }
 
-const AVAILABLE_TOOLS = ['web_search', 'code_exec', 'read_file', 'write_file']
+const AVAILABLE_TOOLS = ['web_search', 'code_exec', 'bash_exec', 'read_file', 'write_file']
 
 interface Persona {
   id: string
@@ -57,7 +58,7 @@ const PERSONAS: Persona[] = [
     label: 'Code Engineer',
     description: 'Writes, runs, and debugs code',
     icon: Code2,
-    tools: ['code_exec', 'read_file', 'write_file'],
+    tools: ['code_exec', 'bash_exec', 'read_file', 'write_file'],
     systemPrompt: 'You are an expert software engineer. Write clean, efficient code. Always test your code by executing it. When writing files, prefer well-structured, readable code with clear variable names.',
   },
   {
@@ -65,7 +66,7 @@ const PERSONAS: Persona[] = [
     label: 'Data Analyst',
     description: 'Analyses data and produces insights',
     icon: BarChart2,
-    tools: ['code_exec', 'read_file'],
+    tools: ['code_exec', 'bash_exec', 'read_file'],
     systemPrompt: 'You are a skilled data analyst. Use Python with pandas, numpy, or other libraries to analyse data. Produce clear summaries with key statistics and actionable insights.',
   },
   {
@@ -78,45 +79,109 @@ const PERSONAS: Persona[] = [
   },
 ]
 
+interface SandboxStatus {
+  docker_available: boolean
+  mode: 'docker' | 'subprocess'
+  image: string | null
+}
+
 function StepCard({ step }: { step: Step }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
   const Icon = step.tool ? TOOL_ICONS[step.tool] || Bot : Bot
 
   return (
-    <div className="border border-gray-800 rounded-lg overflow-hidden">
+    <div className="border border-gray-700/50 rounded-lg overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-3 px-4 py-2.5 bg-gray-800/50 hover:bg-gray-800 transition-colors text-left"
+        className="w-full flex items-center gap-3 px-3 py-2 bg-gray-800/40 hover:bg-gray-800/70 transition-colors text-left"
       >
-        <div className={clsx('w-6 h-6 rounded flex items-center justify-center flex-shrink-0',
+        <div className={clsx('w-5 h-5 rounded flex items-center justify-center flex-shrink-0',
           step.tool === 'done' ? 'bg-green-900/60' : 'bg-primary-900/60'
         )}>
-          <Icon className="w-3.5 h-3.5 text-primary-300" />
+          <Icon className="w-3 h-3 text-primary-300" />
         </div>
-        <span className="text-xs text-gray-400">Step {step.step}</span>
-        <span className="text-sm font-medium text-gray-200 flex-1">
-          {step.tool === 'done' ? 'Completed' : step.tool || 'Thinking...'}
+        <span className="text-xs text-gray-500">Step {step.step}</span>
+        <span className="text-xs font-medium text-gray-300 flex-1 truncate">
+          {step.tool === 'done' ? 'Finished' : step.tool || 'thinking'}
+          {step.thought ? ` — ${step.thought.slice(0, 60)}${step.thought.length > 60 ? '…' : ''}` : ''}
         </span>
-        {open ? <ChevronDown className="w-4 h-4 text-gray-500" /> : <ChevronRight className="w-4 h-4 text-gray-500" />}
+        {open ? <ChevronDown className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" />}
       </button>
       {open && (
-        <div className="p-4 space-y-3 text-sm">
+        <div className="px-3 pb-3 pt-2 space-y-2 text-xs">
           {step.thought && (
             <div>
-              <p className="text-xs text-gray-500 mb-1">Thought</p>
-              <p className="text-gray-300 italic">{step.thought}</p>
+              <p className="text-gray-600 mb-0.5 uppercase tracking-wide" style={{ fontSize: '10px' }}>Thought</p>
+              <p className="text-gray-300 italic leading-relaxed">{step.thought}</p>
             </div>
           )}
           {step.input && step.tool !== 'done' && (
             <div>
-              <p className="text-xs text-gray-500 mb-1">Input</p>
-              <pre className="bg-gray-900 rounded p-2 text-gray-300 text-xs overflow-x-auto whitespace-pre-wrap">{step.input}</pre>
+              <p className="text-gray-600 mb-0.5 uppercase tracking-wide" style={{ fontSize: '10px' }}>Input</p>
+              <pre className="bg-gray-900/80 rounded p-2 text-gray-300 overflow-x-auto whitespace-pre-wrap">{step.input}</pre>
             </div>
           )}
           {step.output && (
             <div>
-              <p className="text-xs text-gray-500 mb-1">Output</p>
-              <pre className="bg-gray-900 rounded p-2 text-gray-300 text-xs overflow-x-auto whitespace-pre-wrap max-h-48">{step.output}</pre>
+              <p className="text-gray-600 mb-0.5 uppercase tracking-wide" style={{ fontSize: '10px' }}>Output</p>
+              <pre className="bg-gray-900/80 rounded p-2 text-gray-300 overflow-x-auto whitespace-pre-wrap max-h-40">{step.output}</pre>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ThoughtDrawer({ steps, running }: { steps: Step[]; running: boolean }) {
+  const [open, setOpen] = useState(false)
+  const prevRunning = useRef(false)
+
+  useEffect(() => {
+    if (running && !prevRunning.current) setOpen(true)
+    if (!running && prevRunning.current && steps.length > 0) setOpen(false)
+    prevRunning.current = running
+  }, [running, steps.length])
+
+  if (steps.length === 0 && !running) return null
+
+  const toolSteps = steps.filter(s => s.tool !== 'done')
+
+  return (
+    <div className="border border-gray-700/60 rounded-xl overflow-hidden">
+      <button
+        onClick={() => setOpen(!open)}
+        className="w-full flex items-center gap-2.5 px-4 py-3 bg-gray-800/30 hover:bg-gray-800/50 transition-colors text-left"
+      >
+        <Brain className={clsx('w-4 h-4 flex-shrink-0 transition-colors', running ? 'text-primary-400' : 'text-gray-500')} />
+        <span className={clsx('text-sm font-medium flex-1 flex items-center gap-1.5', running ? 'text-primary-300' : 'text-gray-400')}>
+          {running ? (
+            <>
+              Thinking
+              {[0, 0.15, 0.3].map((delay, i) => (
+                <span key={i} className="w-1.5 h-1.5 rounded-full bg-primary-400 animate-bounce flex-shrink-0" style={{ animationDelay: `${delay}s` }} />
+              ))}
+            </>
+          ) : (
+            `Thought for ${toolSteps.length} step${toolSteps.length !== 1 ? 's' : ''}`
+          )}
+        </span>
+        {steps.length > 0 && (
+          open
+            ? <ChevronDown className="w-4 h-4 text-gray-500 flex-shrink-0" />
+            : <ChevronRight className="w-4 h-4 text-gray-500 flex-shrink-0" />
+        )}
+      </button>
+
+      {open && (
+        <div className="p-2.5 space-y-1.5 bg-gray-950/30 border-t border-gray-700/40">
+          {steps.map((step, i) => (
+            <StepCard key={i} step={step} />
+          ))}
+          {running && (
+            <div className="flex items-center gap-2 text-gray-500 text-xs px-2 py-1">
+              <Loader2 className="w-3.5 h-3.5 animate-spin flex-shrink-0" />
+              Running next step…
             </div>
           )}
         </div>
@@ -138,6 +203,7 @@ export default function AgentsPage() {
   const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3.2:3b'])
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
   const [selectedMcp, setSelectedMcp] = useState<number[]>([])
+  const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus | null>(null)
   const stepsRef = useRef<HTMLDivElement>(null)
 
   const activePersona = PERSONAS.find((p) => p.id === persona) ?? PERSONAS[0]
@@ -154,6 +220,7 @@ export default function AgentsPage() {
       if (names.length) { setOllamaModels(names); setModel(names[0]) }
     }).catch(() => {})
     api.get('/mcp').then(({ data }) => setMcpServers(data.filter((s: any) => s.tools_cache?.length))).catch(() => {})
+    api.get('/agents/sandbox/status').then(({ data }) => setSandboxStatus(data)).catch(() => {})
   }, [])
 
   useEffect(() => {
@@ -218,9 +285,24 @@ export default function AgentsPage() {
 
   return (
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-100">AI Agents</h1>
-        <p className="text-gray-400 mt-1">Run autonomous agents that can search the web, write and execute code, and more.</p>
+      <div className="mb-6 flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-100">AI Agents</h1>
+          <p className="text-gray-400 mt-1">Run autonomous agents that can search the web, write and execute code, and more.</p>
+        </div>
+        {sandboxStatus && (
+          <div className={clsx(
+            'flex items-center gap-1.5 px-3 py-1.5 rounded-lg border text-xs font-medium flex-shrink-0',
+            sandboxStatus.docker_available
+              ? 'bg-green-900/20 border-green-800/50 text-green-400'
+              : 'bg-yellow-900/20 border-yellow-800/50 text-yellow-500'
+          )}>
+            {sandboxStatus.docker_available
+              ? <ShieldCheck className="w-3.5 h-3.5" />
+              : <ShieldAlert className="w-3.5 h-3.5" />}
+            {sandboxStatus.docker_available ? 'Docker sandbox' : 'No Docker (subprocess)'}
+          </div>
+        )}
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -405,16 +487,7 @@ export default function AgentsPage() {
                 <span className="text-gray-500">Task: </span>{currentRun.task}
               </div>
 
-              {currentRun.steps.map((step, i) => (
-                <StepCard key={i} step={step} />
-              ))}
-
-              {running && (
-                <div className="flex items-center gap-2 text-gray-500 text-sm">
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  Thinking...
-                </div>
-              )}
+              <ThoughtDrawer steps={currentRun.steps} running={running} />
 
               {currentRun.result && (
                 <div className="border border-green-800 rounded-lg p-4 bg-green-900/10">

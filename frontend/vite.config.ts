@@ -30,7 +30,7 @@ export default defineConfig({
         ],
       },
       workbox: {
-        globPatterns: ['**/*.{js,css,html,svg,png,woff2}'],
+        globPatterns: ['**/*.{js,css,svg,png,woff2}'],
         runtimeCaching: [
           {
             // Cache API responses for 5 minutes

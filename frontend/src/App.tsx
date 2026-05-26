@@ -22,6 +22,10 @@ import MemoryPage from './pages/Memory'
 import PersonasPage from './pages/Personas'
 import WorkflowsPage from './pages/Workflows'
 import MCPServersPage from './pages/MCPServers'
+import RemoteCLIPage from './pages/RemoteCLI'
+import DownloadsPage from './pages/Downloads'
+import ForgotPasswordPage from './pages/ForgotPassword'
+import ResetPasswordPage from './pages/ResetPassword'
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth()
@@ -42,6 +46,8 @@ export default function App() {
       <Route path="/login" element={<LoginPage />} />
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/privacy" element={<PrivacyPolicyPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/reset-password" element={<ResetPasswordPage />} />
       <Route path="/share/:token" element={<SharePage />} />
       <Route
         element={
@@ -62,6 +68,8 @@ export default function App() {
         <Route path="/personas" element={<PersonasPage />} />
         <Route path="/workflows" element={<WorkflowsPage />} />
         <Route path="/mcp" element={<MCPServersPage />} />
+        <Route path="/remote-cli" element={<RemoteCLIPage />} />
+        <Route path="/downloads" element={<DownloadsPage />} />
         <Route path="/analytics" element={<AnalyticsPage />} />
         <Route path="/logs" element={<LogsPage />} />
         <Route path="/api-keys" element={<ApiKeysPage />} />

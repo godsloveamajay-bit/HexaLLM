@@ -3,7 +3,8 @@ import {
   Send, Plus, Trash2, Bot, User, Loader2, ChevronDown, BookOpen,
   FileText, Sparkles, Sparkle, Zap, Scale, Brain, Settings2, Menu,
   X, Paperclip, Share2, BookMarked, Clipboard, ClipboardCheck,
-  Mic, MicOff, Square, Download, RotateCcw, Search,
+  Mic, MicOff, Square, Download, RotateCcw, Search, Terminal,
+  ChevronRight, Wrench,
 } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { Prism as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -24,11 +25,14 @@ interface Message {
   route?: RouteInfo
   usage?: { prompt_tokens: number; completion_tokens: number }
   latency_ms?: number
+  steps?: StepEvent[]
 }
+interface StepEvent { name: string; input: string; output: string; thought: string }
 interface Template { id: number; name: string; content: string }
 interface Attachment { type: 'image' | 'pdf' | 'text'; name: string; base64: string; preview?: string }
 interface Session { id: number; title: string; model_name: string; updated_at: string }
 interface KB { id: number; name: string; document_count: number; chunk_count: number }
+interface CliSession { session_id: string; hostname: string; cwd: string; platform: string }
 interface NebulaVariant {
   id: string; label: string; description: string; ready: boolean
   available_bases: string[]; missing_bases: string[]
@@ -81,13 +85,68 @@ function CodeBlock({ language, children }: { language?: string; children: string
   )
 }
 
+// ── CLI Thought Drawer ────────────────────────────────────────────────────
+function ChatThoughtDrawer({ steps, running }: { steps: StepEvent[]; running: boolean }) {
+  const [open, setOpen] = useState(false)
+  const prevRunning = useRef(false)
+
+  useEffect(() => {
+    if (running && !prevRunning.current) setOpen(true)
+    if (!running && prevRunning.current && steps.length > 0) setOpen(false)
+    prevRunning.current = running
+  }, [running, steps.length])
+
+  if (steps.length === 0 && !running) return null
+
+  return (
+    <div className="mb-2 rounded-lg border border-gray-700/60 bg-gray-950/50 overflow-hidden text-xs">
+      <button
+        onClick={() => setOpen(o => !o)}
+        className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 transition-colors"
+      >
+        <Terminal className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+        <span className="flex-1 text-left font-medium">
+          {running ? 'Running…' : `${steps.length} terminal step${steps.length !== 1 ? 's' : ''}`}
+        </span>
+        {running && (
+          <span className="flex gap-0.5">
+            {[0, 0.15, 0.3].map((d, i) => (
+              <span key={i} className="w-1 h-1 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: `${d}s` }} />
+            ))}
+          </span>
+        )}
+        {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
+      </button>
+
+      {open && steps.length > 0 && (
+        <div className="border-t border-gray-700/60 divide-y divide-gray-800/60">
+          {steps.map((s, i) => (
+            <details key={i} className="group/step">
+              <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-800/30 list-none">
+                <Wrench className="w-3 h-3 text-emerald-500/70 flex-shrink-0" />
+                <code className="text-emerald-400 font-mono">{s.name}</code>
+                <span className="text-gray-600 truncate flex-1">{s.input.slice(0, 60)}{s.input.length > 60 ? '…' : ''}</span>
+                <ChevronRight className="w-3 h-3 group-open/step:rotate-90 transition-transform flex-shrink-0" />
+              </summary>
+              <div className="px-3 pb-2 space-y-1">
+                {s.thought && <p className="text-gray-500 italic">{s.thought}</p>}
+                <pre className="bg-gray-900 rounded p-2 text-gray-300 overflow-x-auto whitespace-pre-wrap break-all font-mono">{s.output.slice(0, 800)}{s.output.length > 800 ? '\n…(truncated)' : ''}</pre>
+              </div>
+            </details>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
 // ── Message bubble with copy/actions ────────────────────────────────────
 function MessageBubble({
-  msg, index, isLast, isActive, streamPhase, sending, onRegenerate,
+  msg, index, isLast, isActive, streamPhase, sending, onRegenerate, isCliActive,
 }: {
   msg: Message; index: number; isLast: boolean
   isActive: boolean; streamPhase: string; sending: boolean
-  onRegenerate: () => void
+  onRegenerate: () => void; isCliActive: boolean
 }) {
   const [copied, setCopied] = useState(false)
   const isThinking  = streamPhase === 'thinking' && isLast && msg.role === 'assistant'
@@ -117,6 +176,9 @@ function MessageBubble({
       {/* Content */}
       {msg.role === 'assistant' ? (
         <div className="max-w-2xl flex-1">
+          {(msg.steps && msg.steps.length > 0 || isCliActive) && (
+            <ChatThoughtDrawer steps={msg.steps || []} running={isCliActive} />
+          )}
           {isThinking ? (
             <div className="flex items-center gap-1.5 py-2">
               {[0, 0.2, 0.4].map((d, i) => (
@@ -234,6 +296,8 @@ export default function ChatPage() {
   const [showTemplates, setShowTemplates] = useState(false)
   const [newTemplateName, setNewTemplateName] = useState('')
   const [listening, setListening] = useState(false)
+  const [cliSessions, setCliSessions] = useState<CliSession[]>([])
+  const [activeCli, setActiveCli] = useState<string>('')
 
   const bottomRef    = useRef<HTMLDivElement>(null)
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
@@ -263,7 +327,12 @@ export default function ChatPage() {
   }, [showTemplates])
 
   useEffect(() => {
-    loadSessions(); loadKbs(); loadVariants(); loadOllamaModels(); loadTemplates()
+    loadSessions(); loadKbs(); loadVariants(); loadOllamaModels(); loadTemplates(); loadCliSessions()
+  }, [])
+
+  useEffect(() => {
+    const id = setInterval(loadCliSessions, 8000)
+    return () => clearInterval(id)
   }, [])
 
   useEffect(() => {
@@ -273,6 +342,9 @@ export default function ChatPage() {
     }
   }, [variants, sessions])
 
+  const loadCliSessions = async () => {
+    try { const { data } = await api.get('/cli/sessions'); setCliSessions(data || []) } catch {}
+  }
   const loadVariants = async () => {
     try { const { data } = await api.get('/models/nebulax/variants'); setVariants(data.variants || []) } catch {}
   }
@@ -324,11 +396,11 @@ export default function ChatPage() {
       setMessages(prev => {
         const updated = [...prev]; const last = updated[updated.length - 1]
         if (last?.role === 'assistant') {
-          updated[updated.length - 1] = { ...last, content: slice, ...(done ? { citations: citations.length ? citations : undefined, route, usage, latency_ms } : {}) }
+          updated[updated.length - 1] = { ...last, content: slice, ...(done ? { citations: citations.length ? citations : undefined, route, usage, latency_ms, steps: last.steps } : {}) }
         }
         return updated
       })
-      if (done) { clearInterval(typeTimerRef.current!); typeTimerRef.current = null; setStreamPhase('idle') }
+      if (done) { clearInterval(typeTimerRef.current!); typeTimerRef.current = null; setSending(false); setStreamPhase('idle') }
     }, 16)
   }
 
@@ -383,7 +455,7 @@ export default function ChatPage() {
 
   // ── Send / regenerate ────────────────────────────────────────────────
   const doStream = useCallback(async (userMessages: Message[], session: { id: number }, isFirst: boolean) => {
-    const useTypewriter = model !== 'nebulax:fast'
+    const useTypewriter = model !== 'nebulax:fast' && !activeCli
     const entry: StreamEntry = { content: '', citations: [], route: undefined, usage: undefined, latency_ms: 0, done: false, onComplete: [] }
     liveStreams.set(session.id, entry)
 
@@ -395,7 +467,7 @@ export default function ChatPage() {
       const resp = await fetch(`${baseURL}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
-        body: JSON.stringify({ model, messages: userMessages, session_id: session.id, system_prompt: systemPrompt || null, stream: true, knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null }),
+        body: JSON.stringify({ model, messages: userMessages, session_id: session.id, system_prompt: systemPrompt || null, stream: true, knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null }),
         signal: abortRef.current.signal,
       })
 
@@ -420,10 +492,22 @@ export default function ChatPage() {
           if (event === 'route') { try { entry.route = JSON.parse(data) } catch {} }
           else if (event === 'citations') { try { entry.citations = JSON.parse(data) } catch {} }
           else if (event === 'usage') { try { const p = JSON.parse(data); entry.usage = { prompt_tokens: p.prompt_tokens || 0, completion_tokens: p.completion_tokens || 0 }; entry.latency_ms = p.latency_ms || 0 } catch {} }
+          else if (event === 'step') {
+            try {
+              const step: StepEvent = JSON.parse(data)
+              if (mountedRef.current) {
+                setMessages(m => {
+                  const u = [...m]; const l = u[u.length - 1]
+                  if (l?.role === 'assistant') u[u.length - 1] = { ...l, steps: [...(l.steps || []), step] }
+                  return u
+                })
+              }
+            } catch {}
+          }
           else if (data !== '[DONE]' && data) {
             entry.content += data
             if (!useTypewriter && mountedRef.current) {
-              setMessages(m => { const u = [...m]; u[u.length - 1] = { role: 'assistant', content: entry.content, citations: entry.citations.length ? entry.citations : undefined, route: entry.route }; return u })
+              setMessages(m => { const u = [...m]; u[u.length - 1] = { role: 'assistant', content: entry.content, citations: entry.citations.length ? entry.citations : undefined, route: entry.route, steps: u[u.length-1]?.steps }; return u })
             }
           }
         }
@@ -458,7 +542,7 @@ export default function ChatPage() {
         }).catch(() => {})
       }
     }
-  }, [model, systemPrompt, kbId, attachment])
+  }, [model, systemPrompt, kbId, attachment, activeCli])
 
   const sendMessage = async () => {
     if (!input.trim() || streamPhase !== 'idle' || sending) return
@@ -678,6 +762,19 @@ export default function ChatPage() {
               {activeKb && <span className="badge bg-primary-900/30 text-primary-400 text-xs flex-shrink-0">RAG</span>}
             </div>
           )}
+
+          <div className="flex items-center gap-2 px-3 pb-2">
+            <Terminal className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
+            <select value={activeCli} onChange={e => setActiveCli(e.target.value)}
+              className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-200 focus:outline-none focus:ring-1 focus:ring-emerald-500">
+              <option value="">No terminal (chat only)</option>
+              {cliSessions.map((s) => (
+                <option key={s.session_id} value={s.session_id}>{s.hostname} — {s.cwd}</option>
+              ))}
+            </select>
+            {activeCli && <span className="badge bg-emerald-900/30 text-emerald-400 text-xs flex-shrink-0">CLI</span>}
+            {cliSessions.length === 0 && <span className="text-xs text-gray-600">Run <code className="font-mono">nebula daemon</code> to connect</span>}
+          </div>
         </div>
 
         {model === CUSTOM_VARIANT_ID && showSystem && (
@@ -720,6 +817,7 @@ export default function ChatPage() {
               isActive={(streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
               streamPhase={streamPhase} sending={sending}
               onRegenerate={regenerate}
+              isCliActive={!!activeCli && (streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
             />
           ))}
 

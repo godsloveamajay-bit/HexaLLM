@@ -11,7 +11,8 @@ from .ollama_service import ollama
 TOOL_DESCRIPTIONS = {
     "web_search": "Search the web for current information. Input: search query string.",
     "code_exec": "Execute Python code and return stdout. Input: Python code string.",
-    "read_file": "Read a file's contents. Input: absolute file path.",
+    "bash_exec": "Run a bash shell command and return output. Input: bash command string.",
+    "read_file": "Read a file's contents. Input: file path (workspace-relative or absolute).",
     "write_file": 'Write to a file. Input: JSON {"path": "...", "content": "..."}',
 }
 
@@ -140,9 +141,26 @@ async def _write_file(input_str: str) -> str:
         return f"File write error: {e}"
 
 
+async def _bash_exec(cmd: str) -> str:
+    try:
+        proc = subprocess.run(
+            ["bash", "-c", cmd],
+            capture_output=True, text=True, timeout=30,
+        )
+        out = proc.stdout or ""
+        if proc.stderr:
+            out += f"\nSTDERR:\n{proc.stderr}"
+        return out or "(no output)"
+    except subprocess.TimeoutExpired:
+        return "Bash command timed out (30 s limit)"
+    except Exception as e:
+        return f"Bash execution error: {e}"
+
+
 _TOOL_FUNCS = {
     "web_search": _web_search,
     "code_exec": _code_exec,
+    "bash_exec": _bash_exec,
     "read_file": _read_file,
     "write_file": _write_file,
 }
@@ -166,8 +184,17 @@ async def run_agent(
     on_step=None,
     persona_prompt: Optional[str] = None,
     mcp_clients: Optional[List] = None,   # list of (server_name, MCPClient) tuples
+    sandbox=None,                          # Optional[Sandbox] from sandbox_service
 ) -> Dict[str, Any]:
     available = {k: TOOL_DESCRIPTIONS[k] for k in tools if k in TOOL_DESCRIPTIONS}
+
+    # Build sandbox-aware tool dispatch table
+    tool_funcs = dict(_TOOL_FUNCS)
+    if sandbox is not None:
+        tool_funcs["code_exec"] = sandbox.execute_code
+        tool_funcs["bash_exec"] = sandbox.execute_bash
+        tool_funcs["write_file"] = sandbox.write_file
+        tool_funcs["read_file"] = sandbox.read_file
 
     # Inject MCP tools
     mcp_tool_map: Dict[str, Any] = {}  # "mcp__<server>__<tool>" -> callable
@@ -273,10 +300,10 @@ async def run_agent(
             return {"steps": steps, "result": tool_input, "error": None}
 
         # ── Execute tool ───────────────────────────────────────────────────
-        if tool_name in _TOOL_FUNCS and tool_name in available:
+        if tool_name in tool_funcs and tool_name in available:
             try:
                 output = await asyncio.wait_for(
-                    _TOOL_FUNCS[tool_name](tool_input),
+                    tool_funcs[tool_name](tool_input),
                     timeout=60,
                 )
             except asyncio.TimeoutError:

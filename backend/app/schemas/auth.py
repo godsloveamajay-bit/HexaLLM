@@ -35,6 +35,11 @@ class UserUpdate(BaseModel):
     avatar_url: Optional[str] = None
 
 
+class PasswordChange(BaseModel):
+    current_password: str
+    new_password: str
+
+
 class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"

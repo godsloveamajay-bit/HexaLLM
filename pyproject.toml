@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "nebulacode"
+version = "0.6.0"
+summary = "Nebula Code — AI coding assistant for the terminal"
+description = "Nebula Code — AI coding assistant for the terminal"
+readme = "README_CLI.md"
+license = { text = "MIT" }
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+    "httpx>=0.25",
+    "prompt-toolkit>=3.0",
+    "rich>=13.0",
+    "websockets>=12.0",
+]
+
+[project.scripts]
+nebula = "nebula_code.cli:cli"
+
+[tool.hatch.build.targets.wheel]
+packages = ["nebula_code"]

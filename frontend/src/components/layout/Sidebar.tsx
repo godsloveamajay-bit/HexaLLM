@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Bot, Cpu, Wand2,
   BarChart3, FileText, Key, LogOut, Settings, BookOpen, X, ImageIcon,
-  Brain, Zap, Server, Users,
+  Brain, Zap, Server, Users, Terminal, Download,
 } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { clsx } from 'clsx'
@@ -19,7 +19,9 @@ const BASE_NAV = [
   { to: '/personas',  icon: Users,         label: 'Personas'   },
   { to: '/workflows', icon: Zap,           label: 'Workflows'  },
   { to: '/memory',    icon: Brain,         label: 'Memory'     },
-  { to: '/mcp',       icon: Server,        label: 'MCP Servers'},
+  { to: '/mcp',        icon: Server,        label: 'MCP Servers' },
+  { to: '/remote-cli', icon: Terminal,      label: 'Remote CLI'  },
+  { to: '/downloads', icon: Download,      label: 'Downloads'   },
   { to: '/models',    icon: Cpu,           label: 'Model Hub'  },
   { to: '/knowledge', icon: BookOpen,      label: 'Knowledge'  },
   { to: '/train',     icon: Wand2,         label: 'Training'   },
