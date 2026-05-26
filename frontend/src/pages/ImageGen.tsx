@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { ImageIcon, Sparkles, Download, RefreshCw, Loader2, X } from 'lucide-react'
+import { ImageIcon, Sparkles, Download, RefreshCw, Loader2, X, Wand2, Zap } from 'lucide-react'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -7,6 +7,7 @@ import { clsx } from 'clsx'
 interface GeneratedImage {
   url: string
   prompt: string
+  enhancedPrompt?: string
   seed: number
 }
 
@@ -18,59 +19,86 @@ const SIZES = [
 ]
 
 const MODELS = [
-  { id: 'flux', label: 'FLUX (default)' },
-  { id: 'turbo', label: 'Turbo (faster)' },
+  { id: 'flux-realism', label: 'FLUX Realism', desc: 'Best for realistic photos' },
+  { id: 'flux-anime', label: 'FLUX Anime', desc: 'Anime & manga style' },
+  { id: 'flux-3d', label: 'FLUX 3D', desc: '3D renders & CGI' },
+  { id: 'flux', label: 'FLUX', desc: 'Balanced general use' },
+  { id: 'turbo', label: 'Turbo', desc: 'Fastest generation' },
+]
+
+const STYLE_PRESETS = [
+  { label: 'Cinematic', prefix: 'cinematic shot, dramatic lighting, 35mm film, depth of field, ' },
+  { label: 'Photorealistic', prefix: 'photorealistic, 8k, DSLR, sharp focus, professional photography, ' },
+  { label: 'Anime', prefix: 'anime style, vibrant colors, detailed illustration, Studio Ghibli inspired, ' },
+  { label: 'Oil Painting', prefix: 'oil painting, classical realism, impasto texture, rich tones, ' },
+  { label: 'Watercolor', prefix: 'watercolor painting, soft washes, artistic, delicate colors, ' },
+  { label: 'Sketch', prefix: 'pencil sketch, fine line art, cross-hatching, black and white, ' },
+  { label: 'Neon', prefix: 'neon lights, cyberpunk, glowing, dark background, futuristic, ' },
+  { label: 'Fantasy', prefix: 'fantasy art, epic, magical, highly detailed, concept art, ' },
 ]
 
 export default function ImageGenPage() {
   const [prompt, setPrompt] = useState('')
   const [negativePrompt, setNegativePrompt] = useState('')
   const [size, setSize] = useState(SIZES[0])
-  const [model, setModel] = useState('flux')
+  const [model, setModel] = useState('flux-realism')
+  const [enhancePrompt, setEnhancePrompt] = useState(false)
+  const [pollinationsEnhance, setPollinationsEnhance] = useState(true)
   const [generating, setGenerating] = useState(false)
+  const [enhancing, setEnhancing] = useState(false)
   const [current, setCurrent] = useState<GeneratedImage | null>(null)
   const [history, setHistory] = useState<GeneratedImage[]>([])
 
-  const generate = async (e?: React.FormEvent) => {
-    e?.preventDefault()
-    if (!prompt.trim()) return
+  const applyPreset = (prefix: string) => {
+    setPrompt((p) => {
+      const stripped = p.replace(/^(cinematic shot.*?|photorealistic.*?|anime style.*?|oil painting.*?|watercolor.*?|pencil sketch.*?|neon lights.*?|fantasy art.*?),\s*/i, '')
+      return prefix + stripped
+    })
+  }
+
+  const doGenerate = async (opts: {
+    prompt: string
+    negativePrompt?: string
+    enhance?: boolean
+  }) => {
     setGenerating(true)
+    if (opts.enhance) setEnhancing(true)
     try {
       const { data } = await api.post('/image/generate', {
-        prompt: prompt.trim(),
-        negative_prompt: negativePrompt.trim(),
+        prompt: opts.prompt.trim(),
+        negative_prompt: (opts.negativePrompt ?? '').trim(),
         width: size.w,
         height: size.h,
         model,
+        enhance_prompt: enhancePrompt,
+        pollinations_enhance: pollinationsEnhance,
       })
-      const img: GeneratedImage = { url: data.url, prompt: data.prompt, seed: data.seed }
+      setEnhancing(false)
+      const img: GeneratedImage = {
+        url: data.url,
+        prompt: data.prompt,
+        enhancedPrompt: data.enhanced_prompt ?? undefined,
+        seed: data.seed,
+      }
       setCurrent(img)
       setHistory((h) => [img, ...h].slice(0, 12))
     } catch {
       toast.error('Image generation failed')
     } finally {
       setGenerating(false)
+      setEnhancing(false)
     }
   }
 
-  const regenerate = async (img: GeneratedImage) => {
+  const generate = (e?: React.FormEvent) => {
+    e?.preventDefault()
+    if (!prompt.trim()) return
+    doGenerate({ prompt, negativePrompt, enhance: enhancePrompt })
+  }
+
+  const regenerate = (img: GeneratedImage) => {
     setPrompt(img.prompt)
-    setGenerating(true)
-    try {
-      const { data } = await api.post('/image/generate', {
-        prompt: img.prompt,
-        width: size.w,
-        height: size.h,
-        model,
-      })
-      const next: GeneratedImage = { url: data.url, prompt: data.prompt, seed: data.seed }
-      setCurrent(next)
-      setHistory((h) => [next, ...h].slice(0, 12))
-    } catch {
-      toast.error('Image generation failed')
-    } finally {
-      setGenerating(false)
-    }
+    doGenerate({ prompt: img.prompt, enhance: enhancePrompt })
   }
 
   const download = async (url: string, prompt: string) => {
@@ -96,26 +124,48 @@ export default function ImageGenPage() {
       {/* Prompt form */}
       <div className="card mb-6">
         <form onSubmit={generate} className="space-y-4">
+
+          {/* Style presets */}
+          <div>
+            <label className="label mb-1">Style Preset</label>
+            <div className="flex flex-wrap gap-2">
+              {STYLE_PRESETS.map((s) => (
+                <button
+                  key={s.label}
+                  type="button"
+                  onClick={() => applyPreset(s.prefix)}
+                  className="px-3 py-1 rounded-full text-xs font-medium bg-gray-800 hover:bg-primary-700 text-gray-300 hover:text-white border border-gray-700 hover:border-primary-600 transition-colors"
+                >
+                  {s.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <div>
             <label className="label">Prompt</label>
             <textarea
               className="input resize-none"
               rows={3}
-              placeholder="A serene mountain lake at sunset, photorealistic, 8k..."
+              placeholder="A serene mountain lake at sunset, misty atmosphere…"
               value={prompt}
               onChange={(e) => setPrompt(e.target.value)}
               required
             />
           </div>
+
           <div>
-            <label className="label">Negative Prompt <span className="text-gray-600 font-normal">(optional)</span></label>
+            <label className="label">
+              Negative Prompt <span className="text-gray-600 font-normal">(optional)</span>
+            </label>
             <input
               className="input"
-              placeholder="blurry, watermark, low quality..."
+              placeholder="blurry, watermark, low quality, deformed…"
               value={negativePrompt}
               onChange={(e) => setNegativePrompt(e.target.value)}
             />
           </div>
+
           <div className="flex flex-wrap gap-4">
             <div className="flex-1 min-w-[180px]">
               <label className="label">Size</label>
@@ -132,22 +182,68 @@ export default function ImageGenPage() {
                 ))}
               </select>
             </div>
-            <div className="flex-1 min-w-[160px]">
+
+            <div className="flex-1 min-w-[180px]">
               <label className="label">Model</label>
               <select className="input" value={model} onChange={(e) => setModel(e.target.value)}>
                 {MODELS.map((m) => (
-                  <option key={m.id} value={m.id}>{m.label}</option>
+                  <option key={m.id} value={m.id}>{m.label} — {m.desc}</option>
                 ))}
               </select>
             </div>
-            <div className="flex items-end">
+          </div>
+
+          {/* Enhancement toggles */}
+          <div className="flex flex-wrap gap-4 pt-1">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <div
+                onClick={() => setEnhancePrompt((v) => !v)}
+                className={clsx(
+                  'relative w-10 h-5 rounded-full transition-colors',
+                  enhancePrompt ? 'bg-primary-600' : 'bg-gray-700'
+                )}
+              >
+                <span className={clsx(
+                  'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
+                  enhancePrompt && 'translate-x-5'
+                )} />
+              </div>
+              <Wand2 className="w-4 h-4 text-gray-400" />
+              <span className="text-sm text-gray-300">
+                AI Prompt Enhance
+                <span className="ml-1.5 text-xs text-gray-500">(rewrites with more detail)</span>
+              </span>
+            </label>
+
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <div
+                onClick={() => setPollinationsEnhance((v) => !v)}
+                className={clsx(
+                  'relative w-10 h-5 rounded-full transition-colors',
+                  pollinationsEnhance ? 'bg-primary-600' : 'bg-gray-700'
+                )}
+              >
+                <span className={clsx(
+                  'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
+                  pollinationsEnhance && 'translate-x-5'
+                )} />
+              </div>
+              <Zap className="w-4 h-4 text-gray-400" />
+              <span className="text-sm text-gray-300">
+                Quality Boost
+                <span className="ml-1.5 text-xs text-gray-500">(recommended)</span>
+              </span>
+            </label>
+
+            <div className="flex items-center ml-auto">
               <button type="submit" disabled={generating || !prompt.trim()} className="btn-primary">
                 {generating
-                  ? <><Loader2 className="w-4 h-4 animate-spin" /> Generating…</>
+                  ? <><Loader2 className="w-4 h-4 animate-spin" />{enhancing ? 'Enhancing…' : 'Generating…'}</>
                   : <><Sparkles className="w-4 h-4" /> Generate</>}
               </button>
             </div>
           </div>
+
         </form>
       </div>
 
@@ -157,7 +253,7 @@ export default function ImageGenPage() {
           {generating && !current ? (
             <div className="flex flex-col items-center justify-center py-24 gap-4 text-gray-500">
               <Loader2 className="w-10 h-10 animate-spin text-primary-500" />
-              <p className="text-sm">Generating your image…</p>
+              <p className="text-sm">{enhancing ? 'Rewriting prompt with AI…' : 'Generating your image…'}</p>
             </div>
           ) : current ? (
             <div>
@@ -173,9 +269,20 @@ export default function ImageGenPage() {
                   className="w-full rounded-lg object-cover max-h-[600px]"
                 />
               </div>
-              <div className="mt-4 flex items-start justify-between gap-3">
+
+              {/* Enhanced prompt reveal */}
+              {current.enhancedPrompt && (
+                <div className="mt-3 px-3 py-2 rounded-md bg-primary-950/50 border border-primary-800/40">
+                  <p className="text-xs font-medium text-primary-400 mb-0.5 flex items-center gap-1">
+                    <Wand2 className="w-3 h-3" /> AI enhanced prompt
+                  </p>
+                  <p className="text-xs text-gray-400 leading-relaxed">{current.enhancedPrompt}</p>
+                </div>
+              )}
+
+              <div className="mt-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <p className="text-sm text-gray-300 truncate">{current.prompt}</p>
+                  <p className="text-sm text-gray-300 line-clamp-2">{current.prompt}</p>
                   <p className="text-xs text-gray-600 mt-0.5">Seed: {current.seed}</p>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
@@ -212,7 +319,7 @@ export default function ImageGenPage() {
             {history.slice(1).map((img, i) => (
               <div
                 key={i}
-                className={clsx('group relative rounded-lg overflow-hidden cursor-pointer border border-gray-800 hover:border-primary-600 transition-colors')}
+                className="group relative rounded-lg overflow-hidden cursor-pointer border border-gray-800 hover:border-primary-600 transition-colors"
                 onClick={() => setCurrent(img)}
               >
                 <img src={img.url} alt={img.prompt} className="w-full aspect-square object-cover" />
