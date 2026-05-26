@@ -65,9 +65,10 @@ interface NebulaVariant {
 }
 
 const VARIANT_ICONS: Record<string, any> = {
-  'nebulax:fast': Zap,
-  'nebulax:balanced': Scale,
-  'nebulax:thinking': Brain,
+  'nebulax:code':   Zap,
+  'nebulax:chat':   Scale,
+  'nebulax:write':  Brain,
+  'nebulax:think':  Sparkles,
   'nebulax:custom': Settings2,
 }
 
@@ -306,7 +307,7 @@ export default function ChatPage() {
   const [activeSession, setActiveSession] = useState<Session | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [model, setModel] = useState('nebulax:balanced')
+  const [model, setModel] = useState('nebulax:chat')
   const [sending, setSending] = useState(false)
   const [streamPhase, setStreamPhase] = useState<'idle' | 'thinking' | 'typing'>('idle')
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false)

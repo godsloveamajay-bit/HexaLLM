@@ -87,69 +87,95 @@ class Variant:
 
 
 VARIANTS: Dict[str, Variant] = {
-    "nebulax:fast": Variant(
-        id="nebulax:fast",
-        label="NebulaX Fast",
-        description="Quick, direct answers. Best for short questions and snappy chat.",
-        default_model="phi3:mini",
-        routes=[],  # fast = always the same model, no routing overhead
-        system_prompt=(
-            "You are NebulaX Fast, a concise assistant. "
-            "Answer directly and briefly in plain language. "
-            "Do not invent context, exercises, or tutorials the user did not ask for. "
-            "If asked a simple question, give a simple answer."
-        ),
-        temperature=0.3,
-        num_ctx=4096,
-        num_predict=512,
-        fallbacks=["llama3.1:8b"],
-    ),
-    "nebulax:balanced": Variant(
-        id="nebulax:balanced",
-        label="NebulaX Balanced",
-        description="General-purpose chat. Picks a code model when the prompt looks like code.",
-        default_model="llama3.1:8b",
+    # ── 1. Code & Maths ──────────────────────────────────────────────────────
+    "nebulax:code": Variant(
+        id="nebulax:code",
+        label="NebulaX Code",
+        description="Coding and maths. Routes to DeepSeek-R1 for pure reasoning/proofs, DeepSeek-Coder for everything else.",
+        default_model="deepseek-coder:6.7b",
         routes=[
-            RoutedModel("deepseek-coder:6.7b", "code"),
+            RoutedModel("deepseek-r1:8b", "reasoning"),   # proofs, equations, step-by-step maths
+            RoutedModel("deepseek-coder:6.7b", "code"),   # code generation, debugging, refactoring
         ],
         system_prompt=(
-            "You are NebulaX Balanced, a helpful general-purpose assistant. "
-            "Be clear, accurate, and well-organized. "
-            "Use markdown for structure when it helps; keep answers focused on what was asked."
+            "You are NebulaX Code, an expert software engineer and mathematician. "
+            "Write clean, correct, well-commented code. For maths and proofs, show each step clearly. "
+            "Always specify the language in code blocks. Prefer concise, idiomatic solutions. "
+            "Point out edge cases, bugs, and complexity trade-offs where relevant."
+        ),
+        temperature=0.2,
+        num_ctx=16384,
+        num_predict=4096,
+        fallbacks=["phi3:mini"],
+    ),
+
+    # ── 2. Chat & Everyday tasks ─────────────────────────────────────────────
+    "nebulax:chat": Variant(
+        id="nebulax:chat",
+        label="NebulaX Chat",
+        description="Friendly conversation and everyday tasks. Fast, warm, and to the point.",
+        default_model="llama3.2:3b",
+        routes=[],
+        system_prompt=(
+            "You are NebulaX Chat, a friendly and helpful assistant. "
+            "Keep answers conversational, clear, and concise. "
+            "Match the user's tone — casual if they're casual, detailed if they want depth. "
+            "Don't pad responses with unnecessary disclaimers or filler."
         ),
         temperature=0.7,
+        num_ctx=8192,
+        num_predict=1024,
+        fallbacks=["phi3:mini"],
+    ),
+
+    # ── 3. Writing & Literature ──────────────────────────────────────────────
+    "nebulax:write": Variant(
+        id="nebulax:write",
+        label="NebulaX Write",
+        description="Creative writing, editing, storytelling, and literary analysis.",
+        default_model="llama3.2:3b",
+        routes=[],
+        system_prompt=(
+            "You are NebulaX Write, a skilled writer and literary assistant. "
+            "Help with creative writing, storytelling, poetry, essays, editing, and literary analysis. "
+            "Adapt your voice to the genre and style the user asks for — literary, commercial, academic, or playful. "
+            "For editing tasks, explain changes and preserve the author's voice. "
+            "Be imaginative, specific, and avoid clichés."
+        ),
+        temperature=0.9,
         num_ctx=8192,
         num_predict=2048,
         fallbacks=["phi3:mini"],
     ),
-    "nebulax:thinking": Variant(
-        id="nebulax:thinking",
-        label="NebulaX Thinking",
-        description="Deeper reasoning. Routes between r1 (reasoning), deepseek-coder (code), and llama (general).",
+
+    # ── 4. Deep reasoning & Analysis ────────────────────────────────────────
+    "nebulax:think": Variant(
+        id="nebulax:think",
+        label="NebulaX Think",
+        description="Deep analysis, research, strategy, and complex problem solving.",
         default_model="deepseek-r1:8b",
-        routes=[
-            RoutedModel("deepseek-coder:6.7b", "code"),
-            RoutedModel("deepseek-r1:8b", "reasoning"),
-            RoutedModel("llama3.1:8b", "default"),
-        ],
+        routes=[],
         system_prompt=(
-            "You are NebulaX Thinking, an assistant that reasons carefully before answering. "
-            "Break problems into steps when useful. State assumptions, weigh trade-offs, "
-            "and prefer correctness over speed. Show your reasoning succinctly when relevant; "
-            "always end with a clear final answer."
+            "You are NebulaX Think, an analytical assistant built for deep reasoning. "
+            "Break complex problems into steps. State your assumptions explicitly. "
+            "Weigh trade-offs, consider multiple perspectives, and flag uncertainty. "
+            "Prefer correctness and thoroughness over speed. "
+            "End every response with a clear, actionable conclusion."
         ),
-        temperature=0.5,
+        temperature=0.4,
         num_ctx=16384,
         num_predict=4096,
-        fallbacks=["llama3.1:8b", "phi3:mini"],
+        fallbacks=["llama3.2:3b", "phi3:mini"],
     ),
+
+    # ── 5. Custom ────────────────────────────────────────────────────────────
     "nebulax:custom": Variant(
         id="nebulax:custom",
         label="NebulaX Custom",
-        description="Bring-your-own system prompt. The only variant where you control the assistant's voice and behavior.",
-        default_model="llama3.1:8b",
-        routes=[],   # no routing — predictable behavior for prompt experiments
-        system_prompt="",  # empty; user-supplied prompt is used directly
+        description="Bring-your-own system prompt. Full control over the assistant's voice and behavior.",
+        default_model="llama3.2:3b",
+        routes=[],
+        system_prompt="",  # user-supplied prompt used directly
         temperature=0.7,
         num_ctx=8192,
         num_predict=2048,
