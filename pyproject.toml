@@ -5,8 +5,8 @@ build-backend = "hatchling.build"
 [project]
 name = "nebulacode"
 version = "0.6.0"
-summary = "Nebula Code — AI coding assistant for the terminal"
-description = "Nebula Code — AI coding assistant for the terminal"
+summary = "NebulaCode — AI coding assistant for the terminal"
+description = "NebulaCode — AI coding assistant for the terminal"
 readme = "README_CLI.md"
 license = { text = "MIT" }
 requires-python = ">=3.10"

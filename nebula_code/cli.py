@@ -34,8 +34,20 @@ HELP_TEXT = """
   [cyan]/help[/]            Show this message
   [cyan]/exit[/]            Quit
 
+[bold]Built-in tools[/]
+  [dim]read_file / write_file / patch_file / list_files[/]   File operations
+  [dim]run_command[/]      Run any shell command locally
+  [dim]search_files[/]     Grep across a directory tree
+  [dim]web_search[/]       Search the web via DuckDuckGo
+  [dim]fetch_url[/]        Download and read any URL as plain text
+  [dim]git_run[/]          Run git commands (status, diff, log, commit…)
+  [dim]ssh_run[/]          Run a command on a remote host over SSH
+
 [bold]Tips[/]
-  • Ask Nebula to [italic]read, edit, create, debug, explain[/] any file.
+  • Ask NebulaCode to [italic]read, edit, create, debug, explain[/] any file.
+  • "Search the web for…" or "fetch https://…" triggers web tools.
+  • "git diff HEAD" or "commit my changes with message X" uses git_run.
+  • "ssh into root@10.0.0.1 and run df -h" uses ssh_run.
   • With a KB attached, it can search your NebulaX documents too.
   • [cyan]/clear[/] starts a fresh task with no prior context.
 """
@@ -286,7 +298,7 @@ async def _interactive(cfg) -> None:
 @click.option("--ollama-url", default=None, help="Ollama base URL (overrides config).")
 @click.pass_context
 def main(ctx, model, ollama_url):
-    """Nebula Code — AI coding assistant for the terminal."""
+    """NebulaCode — AI coding assistant for the terminal."""
     if ctx.invoked_subcommand is not None:
         return
     cfg = load_config()
@@ -447,7 +459,7 @@ def cmd_daemon(no_reconnect: bool):
 
         console.print()
         console.print(
-            f"[bold white]Nebula Daemon[/]  [dim]connected to[/] [cyan]{cfg.nebulax_url}[/]\n"
+            f"[bold white]NebulaCode Daemon[/]  [dim]connected to[/] [cyan]{cfg.nebulax_url}[/]\n"
             f"[dim]user:[/] [cyan]{user.get('email', '?')}[/]   "
             f"[dim]model:[/] [cyan]{cfg.model}[/]\n\n"
             "[dim]Waiting for tasks from the NebulaX web UI…  Ctrl-C to stop.[/]\n"

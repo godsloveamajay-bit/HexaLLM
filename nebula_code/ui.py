@@ -7,13 +7,17 @@ from rich.text import Text
 console = Console(highlight=False)
 
 TOOL_STYLE: dict = {
-    "read_file":    ("blue",    "📖"),
-    "write_file":   ("green",   "✏️ "),
-    "patch_file":   ("green",   "🩹"),
-    "list_files":   ("cyan",    "📁"),
-    "run_command":  ("yellow",  "⚡"),
-    "search_files": ("magenta", "🔍"),
+    "read_file":    ("blue",         "📖"),
+    "write_file":   ("green",        "✏️ "),
+    "patch_file":   ("green",        "🩹"),
+    "list_files":   ("cyan",         "📁"),
+    "run_command":  ("yellow",       "⚡"),
+    "search_files": ("magenta",      "🔍"),
     "search_kb":    ("bright_green", "🌐"),
+    "web_search":   ("bright_cyan",  "🌍"),
+    "fetch_url":    ("cyan",         "🔗"),
+    "git_run":      ("yellow",       "🌿"),
+    "ssh_run":      ("bright_yellow","🖥️ "),
 }
 
 
@@ -24,8 +28,8 @@ def print_welcome(model: str, backend_label: str) -> None:
     console.print(
         Panel(
             Text.assemble(
-                ("Nebula Code", "bold white"),
-                ("  v0.1.0\n", "dim"),
+                ("NebulaCode", "bold white"),
+                ("  v0.6.0\n", "dim"),
                 ("model    ", "dim"),
                 (model, "cyan"),
                 ("\nbackend  ", "dim"),
