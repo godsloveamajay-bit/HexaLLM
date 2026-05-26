@@ -118,6 +118,7 @@ jobs:
           projectPath: frontend
           releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
+          uploadPlainBinary: true
 
       # Upload the updater archives + signatures that tauri-action skips
       - name: Upload updater artifacts
@@ -232,7 +233,8 @@ jobs:
         run: |
           APK=$(find frontend/android/app/build/outputs/apk/release -name "*.apk" | head -1)
           [ -f "$APK" ] || (echo "APK not found" && exit 1)
-          NAME="NebulaX-AI-${GITHUB_REF_NAME}-android.apk"
+          VERSION="${GITHUB_REF_NAME#v}"
+          NAME="nebulax-ai-${VERSION}-android.apk"
           cp "$APK" "/tmp/$NAME"
           gh release upload "$GITHUB_REF_NAME" "/tmp/$NAME" --clobber --repo "${{ github.repository }}"
           echo "Uploaded: $NAME"
