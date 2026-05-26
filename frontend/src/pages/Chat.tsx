@@ -328,8 +328,6 @@ export default function ChatPage() {
   const bottomRef    = useRef<HTMLDivElement>(null)
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const typeTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-  const typeIndexRef = useRef(0)
   const mountedRef   = useRef(true)
   const abortRef     = useRef<AbortController | null>(null)
   const recognitionRef = useRef<any>(null)
@@ -338,7 +336,6 @@ export default function ChatPage() {
     mountedRef.current = true
     return () => {
       mountedRef.current = false
-      if (typeTimerRef.current) clearInterval(typeTimerRef.current)
       recognitionRef.current?.stop()
     }
   }, [])
@@ -405,41 +402,11 @@ export default function ChatPage() {
     try { const { data } = await api.get('/knowledge'); setKbs(data) } catch {}
   }
 
-  // ── Typewriter ────────────────────────────────────────────────────────
-  function startTypewriter(content: string, citations: Citation[], route: RouteInfo | undefined, usage?: StreamEntry['usage'], latency_ms?: number) {
-    if (!mountedRef.current) return
-    const total = content.length
-    if (!total) { setStreamPhase('idle'); return }
-    const charsPerTick = Math.max(4, Math.ceil(total / 150))
-    typeIndexRef.current = 0
-    setStreamPhase('typing')
-    if (typeTimerRef.current) clearInterval(typeTimerRef.current)
-    typeTimerRef.current = setInterval(() => {
-      if (!mountedRef.current) { clearInterval(typeTimerRef.current!); typeTimerRef.current = null; return }
-      typeIndexRef.current = Math.min(typeIndexRef.current + charsPerTick, total)
-      const slice = content.slice(0, typeIndexRef.current)
-      const done = typeIndexRef.current >= total
-      setMessages(prev => {
-        const updated = [...prev]; const last = updated[updated.length - 1]
-        if (last?.role === 'assistant') {
-          updated[updated.length - 1] = { ...last, content: slice, ...(done ? { citations: citations.length ? citations : undefined, route, usage, latency_ms, steps: last.steps } : {}) }
-        }
-        return updated
-      })
-      if (done) { clearInterval(typeTimerRef.current!); typeTimerRef.current = null; setSending(false); setStreamPhase('idle') }
-    }, 16)
-  }
-
-  function cancelTypewriter() {
-    if (typeTimerRef.current) { clearInterval(typeTimerRef.current); typeTimerRef.current = null }
-    setStreamPhase('idle')
-  }
-
   // ── Stop generation ───────────────────────────────────────────────────
   const stopGeneration = () => {
     abortRef.current?.abort()
-    cancelTypewriter()
     setSending(false)
+    setStreamPhase('idle')
   }
 
   // ── Session management ────────────────────────────────────────────────
@@ -450,7 +417,8 @@ export default function ChatPage() {
   }
 
   const selectSession = async (session: Session) => {
-    cancelTypewriter(); setActiveSession(session); setModel(session.model_name)
+    setSending(false); setStreamPhase('idle')
+    setActiveSession(session); setModel(session.model_name)
     setAttachment(null); setSessionPanelOpen(false)
     const live = liveStreams.get(session.id)
     if (live) {
@@ -458,13 +426,13 @@ export default function ChatPage() {
         try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages(data.map((m: any) => ({ role: m.role as Message['role'], content: m.content }))) } catch {}
         liveStreams.delete(session.id)
       } else {
-        try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages([...data.map((m: any) => ({ role: m.role as Message['role'], content: m.content })), { role: 'assistant' as const, content: '' }]) } catch { setMessages([{ role: 'assistant' as const, content: '' }]) }
-        setStreamPhase('thinking')
+        try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages([...data.map((m: any) => ({ role: m.role as Message['role'], content: m.content })), { role: 'assistant' as const, content: live.content }]) } catch { setMessages([{ role: 'assistant' as const, content: live.content }]) }
+        setSending(true); setStreamPhase(live.content ? 'typing' : 'thinking')
         live.onComplete.push((content, citations, route, usage, latency_ms) => {
           if (!mountedRef.current) return
           liveStreams.delete(session.id)
-          setMessages(prev => { const u = [...prev]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, content }; return u })
-          startTypewriter(content, citations, route, usage, latency_ms)
+          setMessages(prev => { const u = [...prev]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, content, citations: citations.length ? citations : undefined, route, usage, latency_ms }; return u })
+          setSending(false); setStreamPhase('idle')
         })
       }
       return
@@ -481,13 +449,30 @@ export default function ChatPage() {
 
   // ── Send / regenerate ────────────────────────────────────────────────
   const doStream = useCallback(async (userMessages: Message[], session: { id: number }, isFirst: boolean) => {
-    const useTypewriter = model !== 'nebulax:fast' && !activeCli
     const entry: StreamEntry = { content: '', citations: [], route: undefined, usage: undefined, latency_ms: 0, done: false, onComplete: [] }
     liveStreams.set(session.id, entry)
 
     abortRef.current = new AbortController()
+    setSending(true)
+    setStreamPhase('thinking')
 
-    if (useTypewriter) setStreamPhase('thinking'); else setSending(true)
+    // rAF-batched flush — coalesces rapid token updates to one DOM write per frame
+    let rafId: number | null = null
+    const scheduleFlush = () => {
+      if (rafId !== null) return
+      rafId = requestAnimationFrame(() => {
+        rafId = null
+        if (!mountedRef.current) return
+        setMessages(m => {
+          const u = [...m]; const l = u[u.length - 1]
+          if (l?.role === 'assistant') u[u.length - 1] = { ...l, content: entry.content, citations: entry.citations.length ? entry.citations : undefined, route: entry.route, steps: l.steps }
+          return u
+        })
+      })
+    }
+
+    let firstToken = true
+    let errored = false
 
     try {
       const resp = await fetch(`${baseURL}/chat/completions`, {
@@ -531,14 +516,15 @@ export default function ChatPage() {
             } catch {}
           }
           else if (data !== '[DONE]' && data) {
+            if (firstToken) { firstToken = false; setStreamPhase('typing') }
             entry.content += data
-            if (!useTypewriter && mountedRef.current) {
-              setMessages(m => { const u = [...m]; u[u.length - 1] = { role: 'assistant', content: entry.content, citations: entry.citations.length ? entry.citations : undefined, route: entry.route, steps: u[u.length-1]?.steps }; return u })
-            }
+            if (mountedRef.current) scheduleFlush()
           }
         }
       }
     } catch (e: any) {
+      errored = true
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
       if (e?.name !== 'AbortError') {
         toast.error('Failed to send message')
         if (mountedRef.current) setMessages((m) => m.slice(0, -1))
@@ -548,19 +534,22 @@ export default function ChatPage() {
       if (mountedRef.current) { setSending(false); setStreamPhase('idle') }
       return
     } finally {
+      if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
       entry.done = true
       entry.onComplete.forEach(fn => fn(entry.content, entry.citations, entry.route, entry.usage, entry.latency_ms))
       setTimeout(() => liveStreams.delete(session.id), 10_000)
-      if (model !== 'nebulax:fast') {
-        startTypewriter(entry.content, entry.citations, entry.route, entry.usage, entry.latency_ms)
-      } else {
-        if (mountedRef.current) {
-          setSending(false)
-          if (entry.usage) setMessages(m => { const u = [...m]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, usage: entry.usage, latency_ms: entry.latency_ms }; return u })
-        }
+      if (!errored && mountedRef.current) {
+        // Final flush: include usage/latency now that stream is complete
+        setMessages(m => {
+          const u = [...m]; const l = u[u.length - 1]
+          if (l?.role === 'assistant') u[u.length - 1] = { ...l, content: entry.content, citations: entry.citations.length ? entry.citations : undefined, route: entry.route, usage: entry.usage, latency_ms: entry.latency_ms, steps: l.steps }
+          return u
+        })
+        setSending(false)
+        setStreamPhase('idle')
       }
       setAttachment(null)
-      if (isFirst && session) {
+      if (!errored && isFirst && session) {
         api.post(`/chat/sessions/${session.id}/rename`).then(({ data }) => {
           const { title } = data; const sid = session.id
           setSessions((s) => s.map((x) => x.id === sid ? { ...x, title } : x))
