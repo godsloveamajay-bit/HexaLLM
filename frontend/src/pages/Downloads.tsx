@@ -171,21 +171,21 @@ function DesktopCard({ assets, version }: { assets: GHAsset[]; version: string }
       badge: '.deb',
       icon: <Monitor className="w-4 h-4 text-orange-400" />,
       installHint: 'Debian / Ubuntu x86_64. Run: sudo dpkg -i *.deb',
-      assetPattern: /\.deb$/i,
+      assetPattern: /amd64\.deb$/i,
     },
     {
       label: 'Windows',
       badge: '.exe',
       icon: <Monitor className="w-4 h-4 text-blue-400" />,
-      installHint: 'Windows 10 / 11 x64 installer.',
+      installHint: 'Windows 10 / 11 x64 NSIS installer.',
       assetPattern: /x64-setup\.exe$/i,
     },
     {
       label: 'macOS',
       badge: '.dmg',
       icon: <Apple className="w-4 h-4 text-gray-300" />,
-      installHint: 'macOS 11+ universal. Drag to Applications.',
-      assetPattern: /\.(dmg)$/i,
+      installHint: 'macOS 11+ universal (Intel + Apple Silicon). Drag to Applications.',
+      assetPattern: /universal\.dmg$/i,
     },
   ]
 
