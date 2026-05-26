@@ -96,7 +96,7 @@ async def cli_websocket(
                 q = session.task_queues.get(task_id)
                 if q:
                     await q.put(msg)
-                    if msg_type in ("done", "error", "tool_result"):
+                    if msg_type in ("done", "error"):
                         session.task_queues.pop(task_id, None)
 
             elif msg_type == "pong":
