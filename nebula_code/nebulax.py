@@ -1,5 +1,5 @@
 """
-NebulaX platform client.
+NebulaX platform client + Pollinations free cloud backend.
 
 Provides LLM completions (via the OpenAI-compat endpoint),
 knowledge base search, and agent-run syncing so CLI runs
@@ -145,3 +145,55 @@ class NebulaXClient:
         except Exception:
             pass
         return None
+
+
+class PollinationsClient:
+    """
+    Free cloud LLM backend via Pollinations.ai — no API key required.
+
+    Exposes the same list_models / full_response interface as OllamaClient
+    so the Agent can use it as a drop-in replacement.
+    """
+
+    BASE = "https://text.pollinations.ai"
+    DEFAULT_MODEL = "openai"
+    MODELS = [
+        "openai",        # GPT-4o — best for ReAct JSON format
+        "openai-large",  # GPT-4o turbo
+        "mistral",       # Mistral Large
+        "llama",         # Llama 3
+        "qwen-coder",    # Qwen Coder — strong at code tasks
+    ]
+
+    async def list_models(self) -> List[str]:
+        return list(self.MODELS)
+
+    async def full_response(
+        self,
+        model: str,
+        messages: List[Dict],
+        system: str,
+        temperature: float = 0.1,
+    ) -> str:
+        msgs: List[Dict] = []
+        if system:
+            msgs.append({"role": "system", "content": system})
+        msgs.extend(messages)
+
+        payload = {
+            "model": model,
+            "messages": msgs,
+            "temperature": temperature,
+            "stream": False,
+        }
+        async with httpx.AsyncClient(timeout=120) as c:
+            r = await c.post(
+                f"{self.BASE}/",
+                json=payload,
+                headers={
+                    "Content-Type": "application/json",
+                    "User-Agent": "NebulaCode/0.6",
+                },
+            )
+            r.raise_for_status()
+            return r.json()["choices"][0]["message"]["content"]

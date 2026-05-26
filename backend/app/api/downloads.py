@@ -16,13 +16,13 @@ router = APIRouter(prefix="/downloads", tags=["downloads"])
 _DOWNLOADS_DIR = Path(__file__).resolve().parents[2] / "downloads"
 
 _METADATA: dict[str, dict] = {
-    "nebulacode-0.6.0-py3-none-any.whl": {
+    "nebulacode-0.7.0-py3-none-any.whl": {
         "name":        "NebulaCode CLI",
-        "version":     "0.6.0",
-        "description": "Terminal AI coding assistant — file ops, web search, git, SSH, and more",
+        "version":     "0.7.0",
+        "description": "Terminal AI coding assistant — works instantly, no Ollama required",
         "platform":    "all",
         "type":        "python-wheel",
-        "install_cmd": "pip install nebulacode-0.6.0-py3-none-any.whl",
+        "install_cmd": "pip install nebulacode-0.7.0-py3-none-any.whl",
         "run_cmd":     "nebula",
     },
     "NebulaX AI_0.6.0_amd64.deb": {

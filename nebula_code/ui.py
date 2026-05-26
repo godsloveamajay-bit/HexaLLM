@@ -23,13 +23,19 @@ TOOL_STYLE: dict = {
 
 def print_welcome(model: str, backend_label: str) -> None:
     is_nebulax = backend_label.startswith("NebulaX")
-    backend_style = "green" if is_nebulax else "dim"
+    is_pollinations = backend_label.startswith("Pollinations")
+    if is_nebulax:
+        backend_style, border = "green", "bright_green"
+    elif is_pollinations:
+        backend_style, border = "bright_cyan", "bright_cyan"
+    else:
+        backend_style, border = "yellow", "bright_blue"
     console.print()
     console.print(
         Panel(
             Text.assemble(
                 ("NebulaCode", "bold white"),
-                ("  v0.6.0\n", "dim"),
+                ("  v0.7.0\n", "dim"),
                 ("model    ", "dim"),
                 (model, "cyan"),
                 ("\nbackend  ", "dim"),
@@ -40,7 +46,7 @@ def print_welcome(model: str, backend_label: str) -> None:
                 ("Ctrl-C", "cyan"),
                 (" to exit.", "dim"),
             ),
-            border_style="bright_blue" if not is_nebulax else "bright_green",
+            border_style=border,
             padding=(0, 2),
         )
     )

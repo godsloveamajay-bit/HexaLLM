@@ -29,26 +29,30 @@ HELP_TEXT = """
   [cyan]/model NAME[/]      Switch model for this session
   [cyan]/kb[/]              List NebulaX knowledge bases (when connected)
   [cyan]/use-kb ID[/]       Attach a KB — adds search_kb tool to this session
-  [cyan]/set KEY VALUE[/]   Change max_steps or temperature
+  [cyan]/set KEY VALUE[/]   Change max_steps, temperature, or backend
   [cyan]/tools[/]           List active tools
   [cyan]/help[/]            Show this message
   [cyan]/exit[/]            Quit
 
+[bold]Backends[/]  (priority: NebulaX › Ollama › Pollinations)
+  [dim]auto[/]          NebulaX if logged in, then Ollama if running, then Pollinations
+  [dim]pollinations[/]  Free cloud — works out of the box, no install needed
+  [dim]ollama[/]        Local inference — run [cyan]ollama pull llama3.2[/] first
+  Switch with: [cyan]nebula set backend pollinations[/]  or  [cyan]nebula set backend ollama[/]
+
 [bold]Built-in tools[/]
   [dim]read_file / write_file / patch_file / list_files[/]   File operations
-  [dim]run_command[/]      Run any shell command locally
-  [dim]search_files[/]     Grep across a directory tree
-  [dim]web_search[/]       Search the web via DuckDuckGo
-  [dim]fetch_url[/]        Download and read any URL as plain text
-  [dim]git_run[/]          Run git commands (status, diff, log, commit…)
-  [dim]ssh_run[/]          Run a command on a remote host over SSH
+  [dim]run_command / search_files[/]   Shell and grep
+  [dim]web_search[/]     Search the web via DuckDuckGo
+  [dim]fetch_url[/]      Download and read any URL as plain text
+  [dim]git_run[/]        Run git commands (status, diff, log, commit…)
+  [dim]ssh_run[/]        Run a command on a remote host over SSH
 
 [bold]Tips[/]
+  • Works out of the box — Pollinations is used automatically if Ollama isn't installed.
   • Ask NebulaCode to [italic]read, edit, create, debug, explain[/] any file.
   • "Search the web for…" or "fetch https://…" triggers web tools.
-  • "git diff HEAD" or "commit my changes with message X" uses git_run.
-  • "ssh into root@10.0.0.1 and run df -h" uses ssh_run.
-  • With a KB attached, it can search your NebulaX documents too.
+  • "git diff HEAD" or "commit my changes" uses git_run.
   • [cyan]/clear[/] starts a fresh task with no prior context.
 """
 
@@ -71,27 +75,54 @@ def _build_kb_tool(nx_client, kb_id: int):
     return search_kb
 
 
+async def _pick_backend(cfg):
+    """
+    Return (backend, backend_label, nx_client_or_None) using priority:
+      1. NebulaX  — if token is saved and valid
+      2. Ollama   — if cfg.backend == "ollama" OR (auto AND Ollama is reachable)
+      3. Pollinations — free cloud fallback, no setup needed
+    """
+    from .nebulax import NebulaXClient, PollinationsClient
+
+    # 1. NebulaX
+    nx = _make_nebulax_client(cfg)
+    if nx:
+        nx_user = await NebulaXClient.verify(cfg.nebulax_url, cfg.nebulax_token)
+        if nx_user:
+            return nx, f"NebulaX  {cfg.nebulax_url}", nx, nx_user
+        console.print("[yellow]NebulaX token expired — run[/] [cyan]nebula login URL[/] [yellow]to reconnect.[/]")
+
+    # 2. Ollama
+    want_ollama = cfg.backend == "ollama"
+    if want_ollama or cfg.backend == "auto":
+        try:
+            ollama = OllamaClient(cfg.ollama_url)
+            models = await ollama.list_models()
+            if models:
+                return ollama, f"Ollama  {cfg.ollama_url}", None, None
+        except Exception:
+            if want_ollama:
+                console.print(f"[red]Ollama not reachable at {cfg.ollama_url}[/]")
+                sys.exit(1)
+
+    # 3. Pollinations (free cloud, no key)
+    cloud = PollinationsClient()
+    return cloud, "Pollinations  [dim](free cloud · no setup)[/]", None, None
+
+
 async def _interactive(cfg) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-    nx = _make_nebulax_client(cfg)
-    nx_user: Optional[dict] = None
+    backend, backend_label, nx, nx_user = await _pick_backend(cfg)
 
-    # verify NebulaX token if set
-    if nx:
-        from .nebulax import NebulaXClient
-        nx_user = await NebulaXClient.verify(cfg.nebulax_url, cfg.nebulax_token)
-        if not nx_user:
-            console.print("[yellow]NebulaX token is invalid or expired — run[/] [cyan]nebula login URL[/]")
-            nx = None
-
-    # pick backend
-    if nx:
-        backend = nx
-        backend_label = f"NebulaX  {cfg.nebulax_url}"
-    else:
-        backend = OllamaClient(cfg.ollama_url)
-        backend_label = f"Ollama  {cfg.ollama_url}"
+    # Auto-select a sensible default model for the chosen backend
+    from .nebulax import PollinationsClient
+    if isinstance(backend, PollinationsClient):
+        if cfg.model not in PollinationsClient.MODELS:
+            cfg.model = PollinationsClient.DEFAULT_MODEL
+    elif nx is None:  # Ollama
+        if cfg.model not in ("llama3.2:3b", "phi3:mini") and ":" not in cfg.model:
+            cfg.model = "llama3.2:3b"
 
     agent = Agent(
         model=cfg.model,
@@ -100,26 +131,27 @@ async def _interactive(cfg) -> None:
         backend=backend,
     )
 
-    # connectivity / model check
-    try:
-        models = await backend.list_models()
-        if not models:
-            console.print("[yellow]Warning:[/] No models found. Pull one with [cyan]ollama pull llama3.2[/]")
-        elif cfg.model not in models:
-            console.print(
-                f"[yellow]Note:[/] '{cfg.model}' not found. "
-                f"Available: {', '.join(models[:5])}. "
-                f"Switching to [cyan]{models[0]}[/]."
-            )
-            cfg.model = models[0]
-            agent.model = models[0]
-    except Exception as e:
-        src = "NebulaX" if nx else "Ollama"
-        console.print(f"[red]Cannot reach {src}:[/] {e}")
-        sys.exit(1)
+    # connectivity / model check (skip for Pollinations — no model list endpoint needed)
+    if not isinstance(backend, PollinationsClient):
+        try:
+            models = await backend.list_models()
+            if not models:
+                console.print("[yellow]Warning:[/] No models found.")
+            elif cfg.model not in models:
+                console.print(
+                    f"[yellow]Note:[/] '{cfg.model}' not found. "
+                    f"Available: {', '.join(models[:5])}. "
+                    f"Switching to [cyan]{models[0]}[/]."
+                )
+                cfg.model = models[0]
+                agent.model = models[0]
+        except Exception as e:
+            src = "NebulaX" if nx else "Ollama"
+            console.print(f"[red]Cannot reach {src}:[/] {e}")
+            sys.exit(1)
 
     print_welcome(cfg.model, backend_label)
-    if nx_user:
+    if nx and nx_user:
         console.print(
             f"  [dim]Connected as[/] [cyan]{nx_user.get('email', '?')}[/] "
             f"[dim]on[/] [cyan]{cfg.nebulax_url}[/]\n"
@@ -172,7 +204,7 @@ async def _interactive(cfg) -> None:
             agent.history.clear()
             console.clear()
             print_welcome(cfg.model, backend_label)
-            if nx_user:
+            if nx and nx_user:
                 console.print(f"  [dim]Connected as[/] [cyan]{nx_user.get('email', '?')}[/]\n")
             continue
 
@@ -293,7 +325,7 @@ async def _interactive(cfg) -> None:
 # ── Click entry points ─────────────────────────────────────────────────────
 
 @click.group(invoke_without_command=True, context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option("0.6.0", "-V", "--version")
+@click.version_option("0.7.0", "-V", "--version")
 @click.option("--model", "-m", default=None, help="Model to use (overrides config).")
 @click.option("--ollama-url", default=None, help="Ollama base URL (overrides config).")
 @click.pass_context

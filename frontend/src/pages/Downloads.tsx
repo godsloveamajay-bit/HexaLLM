@@ -178,7 +178,8 @@ function CliCard({ item }: { item: LocalItem }) {
                 <code key={t} className="text-emerald-400 font-mono mr-1">{t}</code>
               ))}
             </li>
-            <li>Uses your local Ollama or your NebulaX instance as the LLM backend</li>
+            <li>Works out of the box via <strong>Pollinations</strong> (free cloud) — no Ollama, no API key needed</li>
+            <li>Optionally use <strong>Ollama</strong> for fully local inference, or connect to your <strong>NebulaX</strong> instance</li>
             <li>Multi-turn memory — remembers context across your session</li>
             <li>Run <code className="text-emerald-400 font-mono">nebula daemon</code> to let the NebulaX web UI send tasks to your machine</li>
           </ul>
