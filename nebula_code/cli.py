@@ -281,7 +281,7 @@ async def _interactive(cfg) -> None:
 # ── Click entry points ─────────────────────────────────────────────────────
 
 @click.group(invoke_without_command=True, context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option("0.1.0", "-V", "--version")
+@click.version_option("0.6.0", "-V", "--version")
 @click.option("--model", "-m", default=None, help="Model to use (overrides config).")
 @click.option("--ollama-url", default=None, help="Ollama base URL (overrides config).")
 @click.pass_context

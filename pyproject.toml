@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.scripts]
-nebula = "nebula_code.cli:cli"
+nebula = "nebula_code.cli:main"
 
 [tool.hatch.build.targets.wheel]
 packages = ["nebula_code"]
