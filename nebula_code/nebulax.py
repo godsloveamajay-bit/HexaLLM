@@ -25,7 +25,7 @@ class NebulaXClient:
 
     async def list_models(self) -> List[str]:
         async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(f"{self.base_url}/api/models/ollama/list", headers=self._h)
+            r = await c.get(f"{self.base_url}/api/v1/models/ollama/list", headers=self._h)
             r.raise_for_status()
             return [m["name"] for m in r.json().get("models", [])]
 
@@ -61,14 +61,14 @@ class NebulaXClient:
 
     def list_kbs_sync(self) -> List[Dict]:
         with httpx.Client(timeout=10) as c:
-            r = c.get(f"{self.base_url}/api/knowledge", headers=self._h)
+            r = c.get(f"{self.base_url}/api/v1/knowledge", headers=self._h)
             r.raise_for_status()
             return r.json()
 
     def search_kb_sync(self, kb_id: int, query: str, top_k: int = 5) -> str:
         with httpx.Client(timeout=30) as c:
             r = c.post(
-                f"{self.base_url}/api/knowledge/{kb_id}/query",
+                f"{self.base_url}/api/v1/knowledge/{kb_id}/query",
                 json={"query": query, "top_k": top_k},
                 headers=self._h,
             )
@@ -108,7 +108,7 @@ class NebulaXClient:
         try:
             with httpx.Client(timeout=15) as c:
                 r = c.post(
-                    f"{self.base_url}/api/agents/run",
+                    f"{self.base_url}/api/v1/agents/run",
                     json=payload,
                     headers=self._h,
                 )
@@ -125,7 +125,7 @@ class NebulaXClient:
         payload = {"email": email, "password": password}
         async with httpx.AsyncClient(timeout=15) as c:
             r = await c.post(
-                f"{base_url.rstrip('/')}/api/auth/login",
+                f"{base_url.rstrip('/')}/api/v1/auth/login",
                 json=payload,
             )
             r.raise_for_status()
@@ -137,7 +137,7 @@ class NebulaXClient:
         try:
             async with httpx.AsyncClient(timeout=8) as c:
                 r = await c.get(
-                    f"{base_url.rstrip('/')}/api/auth/me",
+                    f"{base_url.rstrip('/')}/api/v1/auth/me",
                     headers={"Authorization": f"Bearer {token}"},
                 )
                 if r.status_code == 200:
