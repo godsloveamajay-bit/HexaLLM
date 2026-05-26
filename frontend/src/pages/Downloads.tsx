@@ -120,8 +120,10 @@ function CliCard({ item }: { item: LocalItem }) {
           <div className="space-y-2 bg-gray-900/50 rounded-xl p-3 border border-gray-800">
             <p className="text-xs font-medium text-gray-300 flex items-center gap-1.5">
               <Package className="w-3.5 h-3.5 text-primary-400" />From PyPI
+              <span className="ml-auto text-xs text-gray-500">v{item.version}</span>
             </p>
-            <CodeLine code="pip install nebulacode" />
+            <CodeLine code={`pip install nebulacode==${item.version}`} />
+            <p className="text-xs text-gray-600">Already installed? <span className="font-mono text-gray-500">pip install --upgrade nebulacode</span></p>
           </div>
           <div className="space-y-2 bg-gray-900/50 rounded-xl p-3 border border-gray-800">
             <p className="text-xs font-medium text-gray-300 flex items-center gap-1.5">
