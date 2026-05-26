@@ -130,6 +130,23 @@ function CliCard({ item }: { item: LocalItem }) {
             <CodeLine code={`pip install ${item.filename}`} />
           </div>
         </div>
+
+        {/* Windows PATH note */}
+        <details className="group">
+          <summary className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-300 transition-colors list-none select-none">
+            <ChevronRight className="w-3.5 h-3.5 group-open:rotate-90 transition-transform" />
+            Windows: <code className="font-mono ml-1">nebula</code> not found after install?
+          </summary>
+          <div className="mt-2 space-y-2 pl-5">
+            <p className="text-xs text-gray-400">
+              Python installs scripts to a folder that isn't on your PATH by default.
+              Run this once in PowerShell to fix it:
+            </p>
+            <CodeLine code={`$s = python -c "import sysconfig; print(sysconfig.get_path('scripts'))"\n[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$s", "User")\n$env:PATH += ";$s"`} />
+            <p className="text-xs text-gray-500">Then reopen PowerShell and run <code className="font-mono text-emerald-400">nebula</code>.</p>
+          </div>
+        </details>
+
         <div className="space-y-2">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-1">Quick start</p>
           <CodeLine code="nebula login https://your-nebulax-server" label="1. Connect to your NebulaX instance" />
