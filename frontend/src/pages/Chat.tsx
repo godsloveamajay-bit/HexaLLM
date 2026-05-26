@@ -65,11 +65,12 @@ interface NebulaVariant {
 }
 
 const VARIANT_ICONS: Record<string, any> = {
-  'nebulax:code':   Zap,
-  'nebulax:chat':   Scale,
-  'nebulax:write':  Brain,
-  'nebulax:think':  Sparkles,
-  'nebulax:custom': Settings2,
+  'nebulax:balanced': Scale,
+  'nebulax:code':     Zap,
+  'nebulax:chat':     Brain,
+  'nebulax:write':    Sparkles,
+  'nebulax:think':    Brain,
+  'nebulax:custom':   Settings2,
 }
 
 const CUSTOM_VARIANT_ID = 'nebulax:custom'
@@ -307,7 +308,7 @@ export default function ChatPage() {
   const [activeSession, setActiveSession] = useState<Session | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [model, setModel] = useState('nebulax:chat')
+  const [model, setModel] = useState('nebulax:balanced')
   const [sending, setSending] = useState(false)
   const [streamPhase, setStreamPhase] = useState<'idle' | 'thinking' | 'typing'>('idle')
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false)
@@ -719,12 +720,11 @@ export default function ChatPage() {
                 setActiveSession(a => a ? { ...a, model_name: m } : a)
               }
             }} className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-500">
-              {variants.length > 0 && <optgroup label="NebulaX (routed)">{variants.map((v) => <option key={v.id} value={v.id} disabled={!v.ready}>{v.label}{v.ready ? '' : ' (no base)'}</option>)}</optgroup>}
-              {ollamaModels.length > 0 && <optgroup label="Ollama (direct)">{ollamaModels.map((m) => <option key={m} value={m}>{m}</option>)}</optgroup>}
+              {variants.map((v) => <option key={v.id} value={v.id} disabled={!v.ready}>{v.label}{v.ready ? '' : ' (unavailable)'}</option>)}
             </select>
 
             <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary-900/20 text-primary-300 text-xs font-medium border border-primary-800/40 flex-shrink-0">
-              <Sparkles className="w-3 h-3" />{variants.find((v) => v.id === model)?.label || model}
+              <Sparkles className="w-3 h-3" />{variants.find((v) => v.id === model)?.label ?? model}
             </span>
 
             {/* Export */}

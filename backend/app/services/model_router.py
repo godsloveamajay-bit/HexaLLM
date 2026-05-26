@@ -168,7 +168,29 @@ VARIANTS: Dict[str, Variant] = {
         fallbacks=["llama3.2:3b", "phi3:mini"],
     ),
 
-    # ── 5. Custom ────────────────────────────────────────────────────────────
+    # ── 5. Balanced ──────────────────────────────────────────────────────────
+    "nebulax:balanced": Variant(
+        id="nebulax:balanced",
+        label="NebulaX Balanced",
+        description="Spreads work across all models. Routes each message to the best model for the job.",
+        default_model="llama3.2:3b",
+        routes=[
+            RoutedModel("deepseek-coder:6.7b", "code"),
+            RoutedModel("deepseek-r1:8b", "reasoning"),
+        ],
+        system_prompt=(
+            "You are NebulaX Balanced, a versatile assistant. "
+            "Match the depth and tone to what the user needs — concise for simple questions, "
+            "detailed for complex ones. Write clean code, reason through problems step by step, "
+            "and communicate clearly in plain language."
+        ),
+        temperature=0.6,
+        num_ctx=8192,
+        num_predict=2048,
+        fallbacks=["phi3:mini"],
+    ),
+
+    # ── 6. Custom ────────────────────────────────────────────────────────────
     "nebulax:custom": Variant(
         id="nebulax:custom",
         label="NebulaX Custom",
