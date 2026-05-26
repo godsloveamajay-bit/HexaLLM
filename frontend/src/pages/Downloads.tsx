@@ -142,8 +142,25 @@ function CliCard({ item }: { item: LocalItem }) {
             What can NebulaCode do?
           </summary>
           <ul className="mt-2 pl-5 space-y-1 text-xs text-gray-400 list-disc">
-            <li>ReAct agent loop — reasons and acts step-by-step to complete coding tasks</li>
-            <li>Tools: <code className="text-emerald-400 font-mono">read_file</code>, <code className="text-emerald-400 font-mono">write_file</code>, <code className="text-emerald-400 font-mono">patch_file</code>, <code className="text-emerald-400 font-mono">run_command</code>, <code className="text-emerald-400 font-mono">search_files</code>, <code className="text-emerald-400 font-mono">list_files</code></li>
+            <li>ReAct agent loop — reasons and acts step-by-step to complete tasks</li>
+            <li>
+              <span className="text-gray-300">File tools:</span>{' '}
+              {['read_file','write_file','patch_file','list_files','search_files'].map(t => (
+                <code key={t} className="text-emerald-400 font-mono mr-1">{t}</code>
+              ))}
+            </li>
+            <li>
+              <span className="text-gray-300">Shell &amp; git:</span>{' '}
+              {['run_command','git_run'].map(t => (
+                <code key={t} className="text-emerald-400 font-mono mr-1">{t}</code>
+              ))}
+            </li>
+            <li>
+              <span className="text-gray-300">Web &amp; network:</span>{' '}
+              {['web_search','fetch_url','ssh_run'].map(t => (
+                <code key={t} className="text-emerald-400 font-mono mr-1">{t}</code>
+              ))}
+            </li>
             <li>Uses your local Ollama or your NebulaX instance as the LLM backend</li>
             <li>Multi-turn memory — remembers context across your session</li>
             <li>Run <code className="text-emerald-400 font-mono">nebula daemon</code> to let the NebulaX web UI send tasks to your machine</li>

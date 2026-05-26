@@ -19,7 +19,7 @@ _METADATA: dict[str, dict] = {
     "nebulacode-0.6.0-py3-none-any.whl": {
         "name":        "NebulaCode CLI",
         "version":     "0.6.0",
-        "description": "Terminal AI coding assistant — runs locally, connects to NebulaX",
+        "description": "Terminal AI coding assistant — file ops, web search, git, SSH, and more",
         "platform":    "all",
         "type":        "python-wheel",
         "install_cmd": "pip install nebulacode-0.6.0-py3-none-any.whl",
