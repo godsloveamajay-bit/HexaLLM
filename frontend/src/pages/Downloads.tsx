@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import {
   Download, Terminal, Monitor, Smartphone, Package,
   Copy, Check, ChevronRight, Cpu, Apple, Globe, Tag,
+  ScrollText, Plus, Wrench, Bug,
 } from 'lucide-react'
 import { baseURL } from '../lib/api'
 
@@ -330,6 +331,117 @@ function MobileCard({ assets, version }: { assets: GHAsset[]; version: string })
   )
 }
 
+// ── Changelog ─────────────────────────────────────────────────────────────────
+
+type ChangeType = 'new' | 'improved' | 'fixed'
+
+interface ChangeEntry {
+  type: ChangeType
+  text: string
+}
+
+interface Release {
+  version: string
+  date: string
+  summary: string
+  changes: ChangeEntry[]
+}
+
+const CHANGELOG: Release[] = [
+  {
+    version: '0.7.0',
+    date: '2026-05-26',
+    summary: 'Works out of the box — no Ollama or API key required.',
+    changes: [
+      { type: 'new',      text: 'Pollinations free cloud backend — start chatting with zero setup' },
+      { type: 'new',      text: 'Smart backend priority: NebulaX › Ollama (if running) › Pollinations' },
+      { type: 'new',      text: 'web_search tool — search the web via DuckDuckGo, no API key' },
+      { type: 'new',      text: 'fetch_url tool — download and read any URL as plain text' },
+      { type: 'new',      text: 'git_run tool — run git commands (status, diff, log, commit…)' },
+      { type: 'new',      text: 'ssh_run tool — run commands on remote hosts over SSH' },
+      { type: 'improved', text: 'Welcome panel shows active backend in distinct colour' },
+      { type: 'improved', text: '/help updated with backend switching and tool summary' },
+      { type: 'improved', text: 'nebula set backend <pollinations|ollama|auto> to pin a backend' },
+    ],
+  },
+  {
+    version: '0.6.0',
+    date: '2026-05-24',
+    summary: 'First public release on PyPI.',
+    changes: [
+      { type: 'new',      text: 'Published to PyPI — pip install nebulacode' },
+      { type: 'new',      text: 'Renamed from "Nebula Code" to NebulaCode' },
+      { type: 'new',      text: 'ReAct agent loop with multi-turn conversation memory' },
+      { type: 'new',      text: 'File tools: read_file, write_file, patch_file, list_files, search_files' },
+      { type: 'new',      text: 'run_command — run any shell command locally' },
+      { type: 'new',      text: 'nebula daemon — accept tasks dispatched from the NebulaX web UI' },
+      { type: 'new',      text: 'nebula login / logout — connect to a NebulaX instance' },
+      { type: 'new',      text: 'Knowledge base search via /use-kb in interactive mode' },
+    ],
+  },
+]
+
+const CHANGE_META: Record<ChangeType, { label: string; color: string; icon: React.ReactNode }> = {
+  new:      { label: 'New',      color: 'text-emerald-400 bg-emerald-900/30 border-emerald-800/40', icon: <Plus className="w-3 h-3" /> },
+  improved: { label: 'Improved', color: 'text-primary-400 bg-primary-900/30 border-primary-800/40', icon: <Wrench className="w-3 h-3" /> },
+  fixed:    { label: 'Fixed',    color: 'text-yellow-400 bg-yellow-900/30 border-yellow-800/40',    icon: <Bug className="w-3 h-3" /> },
+}
+
+function ChangelogSection() {
+  const [open, setOpen] = useState<string | null>(CHANGELOG[0].version)
+
+  return (
+    <div className="card space-y-4">
+      <div className="flex items-center gap-2">
+        <ScrollText className="w-4 h-4 text-gray-400" />
+        <h2 className="text-sm font-semibold text-gray-200">Changelog</h2>
+        <span className="text-xs text-gray-600 ml-auto">NebulaCode CLI</span>
+      </div>
+
+      <div className="space-y-2">
+        {CHANGELOG.map((rel) => {
+          const isOpen = open === rel.version
+          return (
+            <div key={rel.version} className="border border-gray-800 rounded-xl overflow-hidden">
+              <button
+                onClick={() => setOpen(isOpen ? null : rel.version)}
+                className="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-800/40 transition-colors text-left"
+              >
+                <ChevronRight className={`w-3.5 h-3.5 text-gray-500 transition-transform flex-shrink-0 ${isOpen ? 'rotate-90' : ''}`} />
+                <span className="font-mono text-sm font-semibold text-gray-100">v{rel.version}</span>
+                <span className="text-xs text-gray-500">{rel.date}</span>
+                {rel.version === CHANGELOG[0].version && (
+                  <span className="ml-1 text-xs px-1.5 py-0.5 rounded-full bg-primary-900/40 text-primary-400 border border-primary-800/40">latest</span>
+                )}
+                <span className="ml-auto text-xs text-gray-500 hidden sm:block truncate max-w-xs">{rel.summary}</span>
+              </button>
+
+              {isOpen && (
+                <div className="px-4 pb-4 pt-1 space-y-2 border-t border-gray-800">
+                  <p className="text-xs text-gray-400 mb-3">{rel.summary}</p>
+                  <div className="space-y-1.5">
+                    {rel.changes.map((c, i) => {
+                      const meta = CHANGE_META[c.type]
+                      return (
+                        <div key={i} className="flex items-start gap-2.5">
+                          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded border text-xs font-medium flex-shrink-0 mt-0.5 ${meta.color}`}>
+                            {meta.icon}{meta.label}
+                          </span>
+                          <span className="text-xs text-gray-300">{c.text}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function DownloadsPage() {
@@ -419,6 +531,14 @@ export default function DownloadsPage() {
         ) : (
           <MobileCard assets={ghAssets} version={version} />
         )}
+      </section>
+
+      {/* Changelog */}
+      <section className="space-y-3">
+        <h2 className="text-xs font-semibold text-gray-500 uppercase tracking-wide flex items-center gap-2">
+          <ScrollText className="w-3.5 h-3.5" />Changelog
+        </h2>
+        <ChangelogSection />
       </section>
     </div>
   )
