@@ -99,74 +99,74 @@ jobs:
           args: ${{ matrix.args }}
           uploadPlainBinary: true
 
-      # Debug: list bundle directories to diagnose glob issues
-      - name: Debug bundle output
-        if: startsWith(github.ref, 'refs/tags/v')
-        shell: bash
-        run: |
-          echo "=== pwd ==="
-          pwd
-          echo "=== appimage dir ==="
-          ls -la frontend/src-tauri/target/release/bundle/appimage/ 2>/dev/null || echo "NOT FOUND"
-          echo "=== macos dir ==="
-          ls -la frontend/src-tauri/target/universal-apple-darwin/release/bundle/macos/ 2>/dev/null || echo "NOT FOUND"
-          echo "=== nsis dir ==="
-          ls -la frontend/src-tauri/target/release/bundle/nsis/ 2>/dev/null || echo "NOT FOUND"
-          echo "=== msi dir ==="
-          ls -la frontend/src-tauri/target/release/bundle/msi/ 2>/dev/null || echo "NOT FOUND"
-          echo "=== glob test (AppImage.tar.gz) ==="
-          for f in frontend/src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz; do
-            echo "  [$f]"; [ -f "$f" ] && echo "  -> EXISTS" || echo "  -> missing (unexpanded glob)"
-          done
-          echo "=== done ==="
-
-      # Upload the updater archives + signatures that tauri-action skips
-      - name: Upload updater artifacts
+      # tauri-action deletes .sig files and updater archives after its own (broken)
+      # updater-JSON pass.  We recreate the updater bundles from the surviving
+      # installers, sign them ourselves, and upload bundle + sig to the release.
+      - name: Create, sign and upload updater bundles
         if: startsWith(github.ref, 'refs/tags/v')
         shell: bash
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
         run: |
+          [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] || { echo "No signing key – skipping"; exit 0; }
           TAG="${GITHUB_REF_NAME}"
           REPO="${{ github.repository }}"
+          TAURI_BIN="$PWD/frontend/node_modules/.bin/tauri"
+          WORKDIR="${RUNNER_TEMP:-/tmp}"
           set +e
 
-          upload() {
-            local f="$1"
-            [ -f "$f" ] || return 0
-            local name
-            name="$(basename "$f" | tr ' ' '.')"
-            cp "$f" "/tmp/$name"
-            gh release upload "$TAG" "/tmp/$name" --clobber --repo "$REPO" \
-              && echo "Uploaded: $name" || echo "Failed: $name"
+          # Sign $WORKDIR/$name and upload both the bundle and the .sig
+          sign_upload() {
+            local name="$1"
+            local src="$WORKDIR/$name"
+            [ -f "$src" ] || { echo "SKIP (not found): $name"; return; }
+            (cd frontend && "$TAURI_BIN" signer sign -k "$TAURI_SIGNING_PRIVATE_KEY" "$src")
+            [ -f "${src}.sig" ] || { echo "Sign failed: $name"; return; }
+            echo "Signed: $name"
+            gh release upload "$TAG" "$src"     --clobber --repo "$REPO" && echo "Uploaded: $name"
+            gh release upload "$TAG" "${src}.sig" --clobber --repo "$REPO" && echo "Uploaded: ${name}.sig"
           }
 
-          # Linux: AppImage updater bundles
-          for f in \
-            frontend/src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz \
-            frontend/src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz.sig; do
-            upload "$f"
+          # ── Linux: wrap AppImage in .tar.gz and sign ─────────────────────
+          for f in frontend/src-tauri/target/release/bundle/appimage/*.AppImage; do
+            [ -f "$f" ] || continue
+            AINAME=$(basename "$f")
+            TARNAME="$(echo "$AINAME" | tr ' ' '.').tar.gz"
+            tar czf "$WORKDIR/$TARNAME" -C "$(dirname "$f")" "$AINAME"
+            sign_upload "$TARNAME"; break
           done
 
-          # macOS: app updater bundles (target triple varies, e.g. universal-apple-darwin)
-          for f in \
-            frontend/src-tauri/target/*/release/bundle/macos/*.app.tar.gz \
-            frontend/src-tauri/target/*/release/bundle/macos/*.app.tar.gz.sig; do
-            upload "$f"
+          # ── macOS: tauri-action keeps the .app.tar.gz — just sign it ─────
+          for f in frontend/src-tauri/target/*/release/bundle/macos/*.app.tar.gz; do
+            [ -f "$f" ] || continue
+            TARNAME="$(basename "$f" | tr ' ' '.')"
+            cp "$f" "$WORKDIR/$TARNAME"
+            sign_upload "$TARNAME"
           done
 
-          # Windows: NSIS updater bundles
-          for f in \
-            frontend/src-tauri/target/release/bundle/nsis/*.nsis.zip \
-            frontend/src-tauri/target/release/bundle/nsis/*.nsis.zip.sig; do
-            upload "$f"
+          # ── Windows: zip the NSIS exe and sign ───────────────────────────
+          for f in frontend/src-tauri/target/release/bundle/nsis/*.exe; do
+            [ -f "$f" ] || continue
+            EXENAME=$(basename "$f")
+            ZIPNAME="$(echo "$EXENAME" | tr ' ' '.').nsis.zip"
+            python3 -c "
+import zipfile,sys,os; d,fn,out=sys.argv[1],sys.argv[2],sys.argv[3]
+with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z: z.write(os.path.join(d,fn),fn)
+" "$(dirname "$f")" "$EXENAME" "$WORKDIR/$ZIPNAME"
+            sign_upload "$ZIPNAME"; break
           done
 
-          # Windows: MSI updater bundles
-          for f in \
-            frontend/src-tauri/target/release/bundle/msi/*.msi.zip \
-            frontend/src-tauri/target/release/bundle/msi/*.msi.zip.sig; do
-            upload "$f"
+          # ── Windows: zip the MSI and sign ────────────────────────────────
+          for f in frontend/src-tauri/target/release/bundle/msi/*.msi; do
+            [ -f "$f" ] || continue
+            MSINAME=$(basename "$f")
+            ZIPNAME="$(echo "$MSINAME" | tr ' ' '.').msi.zip"
+            python3 -c "
+import zipfile,sys,os; d,fn,out=sys.argv[1],sys.argv[2],sys.argv[3]
+with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z: z.write(os.path.join(d,fn),fn)
+" "$(dirname "$f")" "$MSINAME" "$WORKDIR/$ZIPNAME"
+            sign_upload "$ZIPNAME"; break
           done
 
   build-android:
@@ -274,18 +274,23 @@ jobs:
           repo    = os.environ['REPO']
           version = tag.lstrip('v')
           base    = f"https://github.com/{repo}/releases/download/{tag}"
-          def find_sig(p):
-              files = glob.glob(f"/tmp/assets/{p}")
-              return open(files[0]).read().strip() if files else None
-          def asset_url(p):
-              files = glob.glob(f"/tmp/assets/{p}")
-              return (base + '/' + os.path.basename(files[0]).replace(' ', '.')) if files else None
+          def sig_url(sig_pattern):
+              """Return (sig_content, download_url) derived from the .sig file itself."""
+              files = sorted(glob.glob(f"/tmp/assets/{sig_pattern}"))
+              if not files: return None, None
+              sf   = files[0]
+              sig  = open(sf).read().strip()
+              # bundle = sig filename without the trailing .sig
+              bundle = os.path.basename(sf)[:-4]
+              if not os.path.isfile(f"/tmp/assets/{bundle}"): return None, None
+              return sig, f"{base}/{bundle}"
           data = {"version": version, "notes": "", "pub_date": datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'), "platforms": {}}
-          sig = find_sig("*.AppImage.tar.gz.sig"); url = asset_url("*.AppImage.tar.gz")
+          sig, url = sig_url("*.AppImage.tar.gz.sig")
           if sig and url: data["platforms"]["linux-x86_64"] = {"signature": sig, "url": url}
-          sig = find_sig("*.nsis.zip.sig") or find_sig("*.msi.zip.sig"); url = asset_url("*.nsis.zip") or asset_url("*.msi.zip")
+          sig, url = sig_url("*.nsis.zip.sig")
+          if not sig: sig, url = sig_url("*.msi.zip.sig")
           if sig and url: data["platforms"]["windows-x86_64"] = {"signature": sig, "url": url}
-          sig = find_sig("*.app.tar.gz.sig"); url = asset_url("*.app.tar.gz")
+          sig, url = sig_url("*.app.tar.gz.sig")
           if sig and url:
               data["platforms"]["darwin-x86_64"]  = {"signature": sig, "url": url}
               data["platforms"]["darwin-aarch64"] = {"signature": sig, "url": url}
