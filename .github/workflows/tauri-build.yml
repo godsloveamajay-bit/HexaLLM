@@ -150,10 +150,7 @@ jobs:
             [ -f "$f" ] || continue
             EXENAME=$(basename "$f")
             ZIPNAME="$(echo "$EXENAME" | tr ' ' '.').nsis.zip"
-            python3 -c "
-import zipfile,sys,os; d,fn,out=sys.argv[1],sys.argv[2],sys.argv[3]
-with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z: z.write(os.path.join(d,fn),fn)
-" "$(dirname "$f")" "$EXENAME" "$WORKDIR/$ZIPNAME"
+            ZOUT="$WORKDIR/$ZIPNAME" ZDIR="$(dirname "$f")" ZFILE="$EXENAME" python3 -c "import zipfile,os; z=zipfile.ZipFile(os.environ['ZOUT'],'w',8); z.write(os.path.join(os.environ['ZDIR'],os.environ['ZFILE']),os.environ['ZFILE']); z.close()"
             sign_upload "$ZIPNAME"; break
           done
 
@@ -162,10 +159,7 @@ with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z: z.write(os.path.join(d,
             [ -f "$f" ] || continue
             MSINAME=$(basename "$f")
             ZIPNAME="$(echo "$MSINAME" | tr ' ' '.').msi.zip"
-            python3 -c "
-import zipfile,sys,os; d,fn,out=sys.argv[1],sys.argv[2],sys.argv[3]
-with zipfile.ZipFile(out,'w',zipfile.ZIP_DEFLATED) as z: z.write(os.path.join(d,fn),fn)
-" "$(dirname "$f")" "$MSINAME" "$WORKDIR/$ZIPNAME"
+            ZOUT="$WORKDIR/$ZIPNAME" ZDIR="$(dirname "$f")" ZFILE="$MSINAME" python3 -c "import zipfile,os; z=zipfile.ZipFile(os.environ['ZOUT'],'w',8); z.write(os.path.join(os.environ['ZDIR'],os.environ['ZFILE']),os.environ['ZFILE']); z.close()"
             sign_upload "$ZIPNAME"; break
           done
 
