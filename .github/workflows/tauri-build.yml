@@ -108,31 +108,45 @@ jobs:
         run: |
           TAG="${GITHUB_REF_NAME}"
           REPO="${{ github.repository }}"
-          set +e  # missing dirs/files are expected on other-platform runners
+          set +e
 
           upload() {
             local f="$1"
             [ -f "$f" ] || return 0
             local name
-            name=$(basename "$f" | tr ' ' '.')
+            name="$(basename "$f" | tr ' ' '.')"
             cp "$f" "/tmp/$name"
             gh release upload "$TAG" "/tmp/$name" --clobber --repo "$REPO" \
-              && echo "Uploaded: $name" || echo "Skip (already exists): $name"
+              && echo "Uploaded: $name" || echo "Failed: $name"
           }
 
-          # Find all updater artifacts in one pass; -o requires grouping parens
-          while IFS= read -r -d '' f; do
+          # Linux: AppImage updater bundles
+          for f in \
+            frontend/src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz \
+            frontend/src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz.sig; do
             upload "$f"
-          done < <(find frontend/src-tauri/target \
-            \( -name "*.AppImage.tar.gz"     \
-            -o -name "*.AppImage.tar.gz.sig" \
-            -o -name "*.app.tar.gz"          \
-            -o -name "*.app.tar.gz.sig"      \
-            -o -name "*.nsis.zip"            \
-            -o -name "*.nsis.zip.sig"        \
-            -o -name "*.msi.zip"             \
-            -o -name "*.msi.zip.sig"         \
-            \) -not -path "*/deps/*" -print0 2>/dev/null || true)
+          done
+
+          # macOS: app updater bundles (target triple varies, e.g. universal-apple-darwin)
+          for f in \
+            frontend/src-tauri/target/*/release/bundle/macos/*.app.tar.gz \
+            frontend/src-tauri/target/*/release/bundle/macos/*.app.tar.gz.sig; do
+            upload "$f"
+          done
+
+          # Windows: NSIS updater bundles
+          for f in \
+            frontend/src-tauri/target/release/bundle/nsis/*.nsis.zip \
+            frontend/src-tauri/target/release/bundle/nsis/*.nsis.zip.sig; do
+            upload "$f"
+          done
+
+          # Windows: MSI updater bundles
+          for f in \
+            frontend/src-tauri/target/release/bundle/msi/*.msi.zip \
+            frontend/src-tauri/target/release/bundle/msi/*.msi.zip.sig; do
+            upload "$f"
+          done
 
   build-android:
     needs: build-tauri
