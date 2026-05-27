@@ -99,6 +99,27 @@ jobs:
           args: ${{ matrix.args }}
           uploadPlainBinary: true
 
+      # Debug: list bundle directories to diagnose glob issues
+      - name: Debug bundle output
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: bash
+        run: |
+          echo "=== pwd ==="
+          pwd
+          echo "=== appimage dir ==="
+          ls -la frontend/src-tauri/target/release/bundle/appimage/ 2>/dev/null || echo "NOT FOUND"
+          echo "=== macos dir ==="
+          ls -la frontend/src-tauri/target/universal-apple-darwin/release/bundle/macos/ 2>/dev/null || echo "NOT FOUND"
+          echo "=== nsis dir ==="
+          ls -la frontend/src-tauri/target/release/bundle/nsis/ 2>/dev/null || echo "NOT FOUND"
+          echo "=== msi dir ==="
+          ls -la frontend/src-tauri/target/release/bundle/msi/ 2>/dev/null || echo "NOT FOUND"
+          echo "=== glob test (AppImage.tar.gz) ==="
+          for f in frontend/src-tauri/target/release/bundle/appimage/*.AppImage.tar.gz; do
+            echo "  [$f]"; [ -f "$f" ] && echo "  -> EXISTS" || echo "  -> missing (unexpanded glob)"
+          done
+          echo "=== done ==="
+
       # Upload the updater archives + signatures that tauri-action skips
       - name: Upload updater artifacts
         if: startsWith(github.ref, 'refs/tags/v')
