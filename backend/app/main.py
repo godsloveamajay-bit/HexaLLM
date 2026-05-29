@@ -36,8 +36,42 @@ def _migrate_db():
             conn.execute(text("ALTER TABLE users ADD COLUMN oauth_provider VARCHAR"))
         if "oauth_id" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN oauth_id VARCHAR"))
-        # Allow NULL hashed_password for OAuth-only accounts (SQLite ignores NOT NULL changes)
-        # Existing rows keep their hashed_password values unchanged.
+
+        # Drop the NOT NULL constraint on hashed_password by recreating the table.
+        # SQLite cannot ALTER a column constraint, so we use the recommended rename approach.
+        # Only needed if the column was originally created NOT NULL.
+        hashed_pw_col = next((c for c in inspector.get_columns("users") if c["name"] == "hashed_password"), None)
+        if hashed_pw_col and not hashed_pw_col.get("nullable", True):
+            conn.execute(text("PRAGMA foreign_keys = OFF"))
+            conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS users_new (
+                    id INTEGER PRIMARY KEY,
+                    email VARCHAR NOT NULL UNIQUE,
+                    username VARCHAR NOT NULL UNIQUE,
+                    hashed_password VARCHAR,
+                    oauth_provider VARCHAR,
+                    oauth_id VARCHAR,
+                    full_name VARCHAR,
+                    avatar_url VARCHAR,
+                    bio TEXT,
+                    is_active BOOLEAN DEFAULT 1,
+                    is_admin BOOLEAN DEFAULT 0,
+                    created_at DATETIME,
+                    updated_at DATETIME
+                )
+            """))
+            conn.execute(text("""
+                INSERT INTO users_new SELECT
+                    id, email, username, hashed_password, oauth_provider, oauth_id,
+                    full_name, avatar_url, bio, is_active, is_admin, created_at, updated_at
+                FROM users
+            """))
+            conn.execute(text("DROP TABLE users"))
+            conn.execute(text("ALTER TABLE users_new RENAME TO users"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_email ON users (email)"))
+            conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS ix_users_username ON users (username)"))
+            conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_id ON users (id)"))
+            conn.execute(text("PRAGMA foreign_keys = ON"))
 
 
 @asynccontextmanager
