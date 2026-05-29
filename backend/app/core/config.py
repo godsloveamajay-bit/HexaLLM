@@ -22,6 +22,26 @@ class Settings(BaseSettings):
 
     MAX_UPLOAD_SIZE_MB: int = 500
 
+    # OAuth providers — leave client ID blank to disable that provider
+    GOOGLE_CLIENT_ID: str = ""
+    GOOGLE_CLIENT_SECRET: str = ""
+
+    MICROSOFT_CLIENT_ID: str = ""
+    MICROSOFT_CLIENT_SECRET: str = ""
+
+    YAHOO_CLIENT_ID: str = ""
+    YAHOO_CLIENT_SECRET: str = ""
+
+    # Apple Sign In — requires Apple Developer account
+    APPLE_CLIENT_ID: str = ""       # Services ID (com.example.app)
+    APPLE_TEAM_ID: str = ""
+    APPLE_KEY_ID: str = ""
+    APPLE_PRIVATE_KEY: str = ""     # PEM private key, newlines replaced with \n
+
+    # Samsung Account — requires Samsung Developer account
+    SAMSUNG_CLIENT_ID: str = ""
+    SAMSUNG_CLIENT_SECRET: str = ""
+
     # SMTP — leave blank to disable email sending (reset links logged to console instead)
     SMTP_HOST: str = ""
     SMTP_PORT: int = 587

@@ -18,6 +18,7 @@ interface AuthState {
   loading: boolean
   login: (email: string, password: string) => Promise<void>
   register: (data: { email: string; username: string; password: string; full_name?: string }) => Promise<void>
+  loginWithToken: (token: string) => Promise<void>
   logout: () => void
   fetchMe: () => Promise<void>
 }
@@ -39,6 +40,13 @@ export const useAuth = create<AuthState>((set) => ({
     localStorage.setItem('token', data.access_token)
     localStorage.setItem('user', JSON.stringify(data.user))
     set({ user: data.user, token: data.access_token })
+  },
+
+  loginWithToken: async (token) => {
+    localStorage.setItem('token', token)
+    const { data } = await api.get('/auth/me', { headers: { Authorization: `Bearer ${token}` } })
+    localStorage.setItem('user', JSON.stringify(data))
+    set({ user: data, token })
   },
 
   logout: () => {

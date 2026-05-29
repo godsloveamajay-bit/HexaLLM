@@ -15,12 +15,13 @@ function PageSpinner() {
 }
 
 // Public pages
-const LoginPage    = lazy(() => import('./pages/Login'))
-const RegisterPage = lazy(() => import('./pages/Register'))
-const PrivacyPage  = lazy(() => import('./pages/PrivacyPolicy'))
-const ForgotPage   = lazy(() => import('./pages/ForgotPassword'))
-const ResetPage    = lazy(() => import('./pages/ResetPassword'))
-const SharePage    = lazy(() => import('./pages/Share'))
+const LoginPage        = lazy(() => import('./pages/Login'))
+const RegisterPage     = lazy(() => import('./pages/Register'))
+const PrivacyPage      = lazy(() => import('./pages/PrivacyPolicy'))
+const ForgotPage       = lazy(() => import('./pages/ForgotPassword'))
+const ResetPage        = lazy(() => import('./pages/ResetPassword'))
+const SharePage        = lazy(() => import('./pages/Share'))
+const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallback'))
 
 // Authenticated pages — all lazy-loaded so the initial bundle stays tiny
 const ChatPage       = lazy(() => import('./pages/Chat'))
@@ -65,6 +66,7 @@ export default function App() {
           <Route path="/forgot-password" element={<ForgotPage />} />
           <Route path="/reset-password"  element={<ResetPage />} />
           <Route path="/share/:token"    element={<SharePage />} />
+          <Route path="/oauth/callback"  element={<OAuthCallbackPage />} />
 
           <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
             <Route path="/"           element={<Navigate to="/chat" replace />} />

@@ -10,7 +10,9 @@ class User(Base):
     id = Column(Integer, primary_key=True, index=True)
     email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
-    hashed_password = Column(String, nullable=False)
+    hashed_password = Column(String, nullable=True)   # null for OAuth-only accounts
+    oauth_provider = Column(String, nullable=True)
+    oauth_id = Column(String, nullable=True)
     full_name = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
     bio = Column(Text, nullable=True)

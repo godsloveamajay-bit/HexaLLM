@@ -1,7 +1,12 @@
 import secrets
+import re
+import urllib.parse
 from datetime import datetime, timedelta, timezone
+from typing import Optional
 
+import httpx
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi.responses import RedirectResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from sqlalchemy.orm import Session
@@ -15,6 +20,178 @@ from ..core.security import (
 from ..models.user import User, APIKey, PasswordResetToken
 from ..schemas.auth import UserRegister, UserLogin, UserOut, UserUpdate, PasswordChange, TokenResponse, APIKeyCreate, APIKeyOut
 from ..services.email_service import send_password_reset
+
+# ── OAuth provider registry ───────────────────────────────────────────────────
+
+_OAUTH = {
+    "google": {
+        "auth_url":     "https://accounts.google.com/o/oauth2/v2/auth",
+        "token_url":    "https://oauth2.googleapis.com/token",
+        "userinfo_url": "https://www.googleapis.com/oauth2/v3/userinfo",
+        "scope":        "openid email profile",
+    },
+    "microsoft": {
+        "auth_url":     "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
+        "token_url":    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
+        "userinfo_url": "https://graph.microsoft.com/v1.0/me",
+        "scope":        "openid email profile User.Read",
+    },
+    "yahoo": {
+        "auth_url":     "https://api.login.yahoo.com/oauth2/request_auth",
+        "token_url":    "https://api.login.yahoo.com/oauth2/get_token",
+        "userinfo_url": "https://api.login.yahoo.com/openid/v1/userinfo",
+        "scope":        "openid email profile",
+    },
+    "apple": {
+        "auth_url":     "https://appleid.apple.com/auth/authorize",
+        "token_url":    "https://appleid.apple.com/auth/token",
+        "scope":        "name email",
+        "form_post":    True,   # Apple uses POST for the callback
+    },
+    "samsung": {
+        "auth_url":     "https://account.samsung.com/auth/authorize",
+        "token_url":    "https://account.samsung.com/auth/token",
+        "userinfo_url": "https://account.samsung.com/auth/userinfo",
+        "scope":        "openid email profile",
+    },
+}
+
+
+def _client_id(provider: str) -> str:
+    return getattr(settings, f"{provider.upper()}_CLIENT_ID", "")
+
+
+def _client_secret(provider: str) -> str:
+    if provider == "apple":
+        return _apple_client_secret()
+    return getattr(settings, f"{provider.upper()}_CLIENT_SECRET", "")
+
+
+def _apple_client_secret() -> str:
+    """Generate the short-lived JWT that Apple requires as client_secret."""
+    if not all([settings.APPLE_TEAM_ID, settings.APPLE_KEY_ID,
+                settings.APPLE_CLIENT_ID, settings.APPLE_PRIVATE_KEY]):
+        return ""
+    from jose import jwt as jose_jwt
+    now = int(datetime.now(timezone.utc).timestamp())
+    private_key = settings.APPLE_PRIVATE_KEY.replace("\\n", "\n")
+    return jose_jwt.encode(
+        {"iss": settings.APPLE_TEAM_ID, "iat": now, "exp": now + 15552000,
+         "aud": "https://appleid.apple.com", "sub": settings.APPLE_CLIENT_ID},
+        private_key,
+        algorithm="ES256",
+        headers={"kid": settings.APPLE_KEY_ID},
+    )
+
+
+def _redirect_uri(provider: str) -> str:
+    return f"{settings.APP_URL}/api/v1/auth/oauth/{provider}/callback"
+
+
+def _unique_username(db: Session, base: str) -> str:
+    """Return a unique username derived from base (email prefix)."""
+    slug = re.sub(r"[^a-z0-9_]", "", base.lower())[:20] or "user"
+    candidate = slug
+    n = 1
+    while db.query(User).filter(User.username == candidate).first():
+        candidate = f"{slug[:17]}{n}"
+        n += 1
+    return candidate
+
+
+def _find_or_create_oauth_user(db: Session, provider: str, info: dict) -> User:
+    """Find existing user by oauth identity, link by email, or create new."""
+    sub = str(info.get("sub") or info.get("id") or "")
+    email = (info.get("email") or "").lower().strip()
+    name = info.get("name") or info.get("displayName") or ""
+    avatar = info.get("picture") or info.get("photo") or None
+
+    # 1. Known OAuth identity
+    if sub:
+        user = db.query(User).filter(
+            User.oauth_provider == provider, User.oauth_id == sub
+        ).first()
+        if user:
+            return user
+
+    # 2. Existing account with same email → link it
+    if email:
+        user = db.query(User).filter(User.email == email).first()
+        if user:
+            user.oauth_provider = provider
+            user.oauth_id = sub
+            if avatar and not user.avatar_url:
+                user.avatar_url = avatar
+            db.commit()
+            return user
+
+    # 3. Create new account
+    is_admin = db.query(User).count() == 0
+    username = _unique_username(db, email.split("@")[0] if email else "user")
+    user = User(
+        email=email,
+        username=username,
+        hashed_password=None,
+        full_name=name or None,
+        avatar_url=avatar,
+        oauth_provider=provider,
+        oauth_id=sub,
+        is_admin=is_admin,
+    )
+    db.add(user)
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def _exchange_code(provider: str, code: str) -> Optional[dict]:
+    cfg = _OAUTH[provider]
+    data = {
+        "grant_type":    "authorization_code",
+        "code":          code,
+        "redirect_uri":  _redirect_uri(provider),
+        "client_id":     _client_id(provider),
+        "client_secret": _client_secret(provider),
+    }
+    try:
+        r = httpx.post(cfg["token_url"], data=data, timeout=10)
+        r.raise_for_status()
+        return r.json()
+    except Exception:
+        return None
+
+
+def _get_userinfo(provider: str, access_token: str, id_token: str = "") -> Optional[dict]:
+    cfg = _OAUTH[provider]
+    if provider == "apple":
+        # Decode ID token — no separate userinfo endpoint
+        from jose import jwt as jose_jwt
+        try:
+            return jose_jwt.decode(id_token, "", options={"verify_signature": False})
+        except Exception:
+            return None
+
+    userinfo_url = cfg.get("userinfo_url", "")
+    if not userinfo_url:
+        return None
+    try:
+        r = httpx.get(userinfo_url, headers={"Authorization": f"Bearer {access_token}"}, timeout=10)
+        r.raise_for_status()
+        data = r.json()
+        # Microsoft uses 'mail' or 'userPrincipalName' for email
+        if provider == "microsoft":
+            data.setdefault("email", data.get("mail") or data.get("userPrincipalName", ""))
+            data.setdefault("sub", data.get("id", ""))
+        return data
+    except Exception:
+        return None
+
+
+def _oauth_error_redirect(msg: str) -> RedirectResponse:
+    return RedirectResponse(
+        url=f"{settings.APP_URL}/login?oauth_error={urllib.parse.quote(msg)}",
+        status_code=302,
+    )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 limiter = Limiter(key_func=get_remote_address)
@@ -52,7 +229,9 @@ def register(request: Request, data: UserRegister, db: Session = Depends(get_db)
 @limiter.limit("20/minute")
 def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
-    if not user or not verify_password(data.password, user.hashed_password):
+    if not user or not user.hashed_password or not verify_password(data.password, user.hashed_password):
+        if user and user.oauth_provider and not user.hashed_password:
+            raise HTTPException(status_code=401, detail=f"This account uses {user.oauth_provider.title()} sign-in. Use the social login button.")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
@@ -168,3 +347,91 @@ def delete_api_key(key_id: int, db: Session = Depends(get_db), current_user: Use
         raise HTTPException(status_code=404, detail="API key not found")
     db.delete(key)
     db.commit()
+
+
+# ── OAuth ─────────────────────────────────────────────────────────────────────
+
+@router.get("/oauth/{provider}")
+def oauth_initiate(provider: str, state: str = ""):
+    if provider not in _OAUTH:
+        raise HTTPException(status_code=400, detail=f"Unknown provider: {provider}")
+    if not _client_id(provider):
+        raise HTTPException(status_code=503, detail=f"{provider.title()} login is not configured")
+
+    cfg = _OAUTH[provider]
+    params: dict = {
+        "client_id":     _client_id(provider),
+        "redirect_uri":  _redirect_uri(provider),
+        "response_type": "code",
+        "scope":         cfg["scope"],
+        "state":         state,
+    }
+    if cfg.get("form_post"):
+        params["response_mode"] = "form_post"
+
+    return RedirectResponse(
+        url=cfg["auth_url"] + "?" + urllib.parse.urlencode(params),
+        status_code=302,
+    )
+
+
+def _handle_oauth_callback(provider: str, code: str, state: str, db: Session, user_json: str = ""):
+    tokens = _exchange_code(provider, code)
+    if not tokens:
+        return _oauth_error_redirect("token_exchange_failed")
+
+    access_token = tokens.get("access_token", "")
+    id_token = tokens.get("id_token", "")
+    info = _get_userinfo(provider, access_token, id_token)
+
+    # Apple sends user name JSON only on first auth
+    if provider == "apple" and user_json:
+        try:
+            import json as _json
+            u = _json.loads(user_json)
+            name_obj = u.get("name", {})
+            info = info or {}
+            info.setdefault("name", f"{name_obj.get('firstName', '')} {name_obj.get('lastName', '')}".strip())
+            info.setdefault("email", u.get("email", ""))
+        except Exception:
+            pass
+
+    if not info or not info.get("email"):
+        return _oauth_error_redirect("no_email")
+
+    user = _find_or_create_oauth_user(db, provider, info)
+    jwt = create_access_token({"sub": str(user.id)})
+    qs = f"token={urllib.parse.quote(jwt)}"
+    if state:
+        qs += f"&state={urllib.parse.quote(state)}"
+    return RedirectResponse(url=f"{settings.APP_URL}/oauth/callback?{qs}", status_code=302)
+
+
+@router.get("/oauth/{provider}/callback")
+def oauth_callback_get(
+    provider: str,
+    code: str = "",
+    state: str = "",
+    error: str = "",
+    db: Session = Depends(get_db),
+):
+    if error:
+        return _oauth_error_redirect(error)
+    if not code:
+        return _oauth_error_redirect("no_code")
+    return _handle_oauth_callback(provider, code, state, db)
+
+
+@router.post("/oauth/{provider}/callback")
+async def oauth_callback_post(provider: str, request: Request, db: Session = Depends(get_db)):
+    """Apple uses response_mode=form_post so the callback arrives as a POST."""
+    form = await request.form()
+    error = form.get("error", "")
+    code = form.get("code", "")
+    state = form.get("state", "")
+    user_json = form.get("user", "")
+    if error:
+        return _oauth_error_redirect(str(error))
+    if not code:
+        return _oauth_error_redirect("no_code")
+    return _handle_oauth_callback(provider, str(code), str(state), db, str(user_json))

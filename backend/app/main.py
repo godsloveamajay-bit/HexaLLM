@@ -31,6 +31,14 @@ def _migrate_db():
                 "ON chat_sessions (share_token)"
             ))
 
+        user_cols = {c["name"] for c in inspector.get_columns("users")}
+        if "oauth_provider" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN oauth_provider VARCHAR"))
+        if "oauth_id" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN oauth_id VARCHAR"))
+        # Allow NULL hashed_password for OAuth-only accounts (SQLite ignores NOT NULL changes)
+        # Existing rows keep their hashed_password values unchanged.
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):

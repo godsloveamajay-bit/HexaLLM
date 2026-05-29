@@ -2,7 +2,27 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Brain, Loader2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
+import { baseURL } from '../lib/api'
+import { isCapacitor } from '../lib/platform'
 import toast from 'react-hot-toast'
+
+const mobilePlatform = isCapacitor()
+  ? (window.Capacitor?.getPlatform() ?? 'web')
+  : 'web'
+
+const PROVIDERS = [
+  { id: 'google',    label: 'Google',    show: true },
+  { id: 'microsoft', label: 'Microsoft', show: true },
+  { id: 'yahoo',     label: 'Yahoo',     show: true },
+  { id: 'apple',     label: 'Apple',     show: mobilePlatform === 'ios' || !isCapacitor() },
+  { id: 'samsung',   label: 'Samsung',   show: mobilePlatform === 'android' },
+].filter(p => p.show)
+
+function oauthRedirect(provider: string) {
+  const state = crypto.randomUUID()
+  sessionStorage.setItem('oauth_state', state)
+  window.location.href = `${baseURL}/auth/oauth/${provider}?state=${encodeURIComponent(state)}`
+}
 
 function parseApiError(err: any, fallback: string): string {
   const detail = err?.response?.data?.detail
@@ -99,6 +119,26 @@ export default function RegisterPage() {
             Already have an account?{' '}
             <Link to="/login" className="text-primary-400 hover:text-primary-300 font-medium">Sign in</Link>
           </p>
+
+          <div className="mt-6">
+            <div className="relative flex items-center">
+              <div className="flex-1 border-t border-gray-800" />
+              <span className="px-3 text-xs text-gray-600">or sign up with</span>
+              <div className="flex-1 border-t border-gray-800" />
+            </div>
+            <div className="mt-4 grid grid-cols-1 gap-2">
+              {PROVIDERS.map(({ id, label }) => (
+                <button
+                  key={id}
+                  type="button"
+                  onClick={() => oauthRedirect(id)}
+                  className="flex items-center justify-center gap-3 w-full px-4 py-2.5 rounded-lg border border-gray-700 bg-gray-900 hover:bg-gray-800 hover:border-gray-600 text-gray-300 text-sm font-medium transition-colors"
+                >
+                  Continue with {label}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
     </div>
