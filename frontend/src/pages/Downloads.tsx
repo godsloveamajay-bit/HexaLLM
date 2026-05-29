@@ -142,11 +142,12 @@ function CliCard({ item }: { item: LocalItem }) {
           </summary>
           <div className="mt-2 space-y-2 pl-5">
             <p className="text-xs text-gray-400">
-              Python installs scripts to a folder that isn't on your PATH by default.
-              Run this once in PowerShell to fix it:
+              pip installs the <code className="font-mono text-gray-300">nebula</code> command to your user Scripts folder
+              (<code className="font-mono text-gray-300">%APPDATA%\Python\Python3XX\Scripts</code>), which isn't on PATH by default.
+              Run this once in PowerShell to fix it permanently:
             </p>
-            <CodeLine code={`$s = python -c "import sysconfig; print(sysconfig.get_path('scripts'))"\n[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$s", "User")\n$env:PATH += ";$s"`} />
-            <p className="text-xs text-gray-500">Then reopen PowerShell and run <code className="font-mono text-emerald-400">nebula</code>.</p>
+            <CodeLine code={`$s = python -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))"\n[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$s", "User")\n$env:PATH += ";$s"`} />
+            <p className="text-xs text-gray-500">Open a new PowerShell window and run <code className="font-mono text-emerald-400">nebula</code>.</p>
           </div>
         </details>
 
