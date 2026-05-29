@@ -1,7 +1,13 @@
 import asyncio
+import secrets
+import socket
 import sys
+import time
+import webbrowser
+from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Optional
+from urllib.parse import parse_qs, urlparse
 
 import click
 from prompt_toolkit import PromptSession
@@ -33,6 +39,10 @@ HELP_TEXT = """
   [cyan]/tools[/]           List active tools
   [cyan]/help[/]            Show this message
   [cyan]/exit[/]            Quit
+
+[bold]NebulaX login[/]
+  [cyan]nebula login URL[/]           Sign in with email + password
+  [cyan]nebula login URL --google[/]  Sign in with Google (opens browser)
 
 [bold]Backends[/]  (priority: NebulaX › Ollama › Pollinations)
   [dim]auto[/]          NebulaX if logged in, then Ollama if running, then Pollinations
@@ -322,6 +332,70 @@ async def _interactive(cfg) -> None:
                     pass
 
 
+# ── OAuth helpers ─────────────────────────────────────────────────────────────
+
+def _free_port() -> int:
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("", 0))
+        return s.getsockname()[1]
+
+
+async def _google_login(url: str) -> None:
+    port = _free_port()
+    nonce = secrets.token_hex(8)
+    state = f"cli_{port}_{nonce}"
+    auth_url = f"{url.rstrip('/')}/api/v1/auth/oauth/google?state={state}"
+
+    result: dict = {}
+
+    class _Handler(BaseHTTPRequestHandler):
+        def do_GET(self):
+            params = parse_qs(urlparse(self.path).query)
+            if "token" in params:
+                result["token"] = params["token"][0]
+            self.send_response(200)
+            self.send_header("Content-Type", "text/html")
+            self.end_headers()
+            self.wfile.write(
+                b"<html><body style='font-family:sans-serif;text-align:center;padding:60px'>"
+                b"<h2>Authentication successful!</h2>"
+                b"<p>You can close this tab and return to the terminal.</p>"
+                b"</body></html>"
+            )
+
+        def log_message(self, *_):
+            pass
+
+    server = HTTPServer(("localhost", port), _Handler)
+    server.timeout = 1
+
+    console.print(f"\n[dim]Opening browser for Google sign-in…[/]")
+    webbrowser.open(auth_url)
+    console.print("[dim]Waiting for authentication (120 s timeout)…  Ctrl-C to cancel.[/]\n")
+
+    deadline = time.time() + 120
+    while "token" not in result and time.time() < deadline:
+        server.handle_request()
+    server.server_close()
+
+    if "token" not in result:
+        console.print("[red]Authentication timed out or was cancelled.[/]")
+        raise SystemExit(1)
+
+    from .nebulax import NebulaXClient
+    user = await NebulaXClient.verify(url, result["token"])
+    if not user:
+        console.print("[red]Login failed: token invalid.[/]")
+        raise SystemExit(1)
+
+    cfg = load_config()
+    cfg.nebulax_url = url
+    cfg.nebulax_token = result["token"]
+    save_config(cfg)
+    console.print(f"[green]Logged in as[/] [cyan]{user.get('email', '?')}[/] [dim]on {url}[/]")
+    console.print("[dim]Token saved to ~/.nebula/config.json[/]\n")
+
+
 # ── Click entry points ─────────────────────────────────────────────────────
 
 @click.group(invoke_without_command=True, context_settings={"help_option_names": ["-h", "--help"]})
@@ -343,10 +417,29 @@ def main(ctx, model, ollama_url):
 
 @main.command("login")
 @click.argument("url")
-@click.option("--email", prompt=True)
-@click.option("--password", prompt=True, hide_input=True)
-def cmd_login(url: str, email: str, password: str):
-    """Authenticate with a NebulaX instance and save credentials."""
+@click.option("--email", default=None, help="Email address (omit to use --google).")
+@click.option("--password", default=None, hide_input=True, help="Password (omit to use --google).")
+@click.option("--google", is_flag=True, default=False, help="Sign in with Google via browser.")
+def cmd_login(url: str, email: Optional[str], password: Optional[str], google: bool):
+    """Authenticate with a NebulaX instance and save credentials.
+
+    \b
+    Email / password:
+      nebula login https://ai.nebualax.co.uk
+
+    Google (opens browser):
+      nebula login https://ai.nebualax.co.uk --google
+    """
+    if google:
+        asyncio.run(_google_login(url))
+        return
+
+    # Fall back to email / password, prompting if not supplied
+    if not email:
+        email = click.prompt("Email")
+    if not password:
+        password = click.prompt("Password", hide_input=True)
+
     async def _do():
         from .nebulax import NebulaXClient
         try:
@@ -356,7 +449,6 @@ def cmd_login(url: str, email: str, password: str):
             cfg.nebulax_token = token
             save_config(cfg)
 
-            # verify and greet
             user = await NebulaXClient.verify(url, token)
             name = user.get("email", "?") if user else email
             console.print(f"\n[green]Logged in as[/] [cyan]{name}[/] [dim]on {url}[/]")

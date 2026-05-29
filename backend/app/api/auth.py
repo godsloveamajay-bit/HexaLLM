@@ -402,6 +402,15 @@ def _handle_oauth_callback(provider: str, code: str, state: str, db: Session, us
     user = _find_or_create_oauth_user(db, provider, info)
     jwt = create_access_token({"sub": str(user.id)})
     qs = f"token={urllib.parse.quote(jwt)}"
+
+    # CLI flow: state = "cli_{port}_{nonce}" → redirect to local server
+    if state.startswith("cli_"):
+        parts = state.split("_", 2)
+        if len(parts) >= 2 and parts[1].isdigit():
+            port = int(parts[1])
+            if 1024 <= port <= 65535:
+                return RedirectResponse(url=f"http://localhost:{port}/callback?{qs}", status_code=302)
+
     if state:
         qs += f"&state={urllib.parse.quote(state)}"
     return RedirectResponse(url=f"{settings.APP_URL}/oauth/callback?{qs}", status_code=302)
