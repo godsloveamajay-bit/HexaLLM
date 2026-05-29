@@ -3,20 +3,11 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Brain, Loader2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { baseURL } from '../lib/api'
-import { isCapacitor } from '../lib/platform'
 import toast from 'react-hot-toast'
 
-const mobilePlatform = isCapacitor()
-  ? (window.Capacitor?.getPlatform() ?? 'web')
-  : 'web'
-
 const PROVIDERS = [
-  { id: 'google',    label: 'Google',    show: true },
-  { id: 'microsoft', label: 'Microsoft', show: true },
-  { id: 'yahoo',     label: 'Yahoo',     show: true },
-  { id: 'apple',     label: 'Apple',     show: mobilePlatform === 'ios' || !isCapacitor() },
-  { id: 'samsung',   label: 'Samsung',   show: mobilePlatform === 'android' },
-].filter(p => p.show)
+  { id: 'google', label: 'Google' },
+]
 
 function oauthRedirect(provider: string) {
   const state = crypto.randomUUID()

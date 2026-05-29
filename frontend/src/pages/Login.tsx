@@ -3,7 +3,6 @@ import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Sparkle, Loader2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { baseURL } from '../lib/api'
-import { isCapacitor } from '../lib/platform'
 import toast from 'react-hot-toast'
 
 function parseApiError(err: any, fallback: string): string {
@@ -19,17 +18,9 @@ function parseApiError(err: any, fallback: string): string {
   return fallback
 }
 
-const mobilePlatform = isCapacitor()
-  ? (window.Capacitor?.getPlatform() ?? 'web')
-  : 'web'
-
 const PROVIDERS = [
-  { id: 'google',    label: 'Google',    always: true,  icon: GoogleIcon },
-  { id: 'microsoft', label: 'Microsoft', always: true,  icon: MicrosoftIcon },
-  { id: 'yahoo',     label: 'Yahoo',     always: true,  icon: YahooIcon },
-  { id: 'apple',     label: 'Apple',     always: mobilePlatform === 'ios' || !isCapacitor(), icon: AppleIcon },
-  { id: 'samsung',   label: 'Samsung',   always: mobilePlatform === 'android', icon: SamsungIcon },
-].filter(p => p.always)
+  { id: 'google', label: 'Google', icon: GoogleIcon },
+]
 
 function oauthRedirect(provider: string) {
   const state = crypto.randomUUID()
@@ -172,38 +163,3 @@ function GoogleIcon({ className }: { className?: string }) {
   )
 }
 
-function MicrosoftIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path d="M11.4 2H2v9.4h9.4V2z" fill="#F25022"/>
-      <path d="M22 2h-9.4v9.4H22V2z" fill="#7FBA00"/>
-      <path d="M11.4 12.6H2V22h9.4v-9.4z" fill="#00A4EF"/>
-      <path d="M22 12.6h-9.4V22H22v-9.4z" fill="#FFB900"/>
-    </svg>
-  )
-}
-
-function YahooIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path d="M0 4h6.6l3.4 6.3L13.4 4H20L12 17.2V24H8v-6.8L0 4z" fill="#720E9E"/>
-      <path d="M17 11.6l2.5-4.6H24l-4.8 8.9-.2.4V24h-3.7v-7.7L17 11.6z" fill="#720E9E"/>
-    </svg>
-  )
-}
-
-function AppleIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg" fill="currentColor">
-      <path d="M18.71 19.5c-.83 1.24-1.71 2.45-3.05 2.47-1.34.03-1.77-.79-3.29-.79-1.53 0-2 .77-3.27.82-1.31.05-2.3-1.32-3.14-2.53C4.25 17 2.94 12.45 4.7 9.39c.87-1.52 2.43-2.48 4.12-2.51 1.28-.02 2.5.87 3.29.87.78 0 2.26-1.07 3.8-.91.65.03 2.47.26 3.64 1.98-.09.06-2.17 1.28-2.15 3.81.03 3.02 2.65 4.03 2.68 4.04-.03.07-.42 1.44-1.38 2.83M13 3.5c.73-.83 1.94-1.46 2.94-1.5.13 1.17-.34 2.35-1.04 3.19-.69.85-1.83 1.51-2.95 1.42-.15-1.15.41-2.35 1.05-3.11z"/>
-    </svg>
-  )
-}
-
-function SamsungIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-      <path d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10 10-4.477 10-10S17.523 2 12 2zm4.5 13.5h-2v-3h-5v3h-2v-7h2v2.5h5V8.5h2v7z" fill="#1428A0"/>
-    </svg>
-  )
-}
