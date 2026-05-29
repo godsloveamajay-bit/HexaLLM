@@ -124,7 +124,7 @@ function CliCard({ item }: { item: LocalItem }) {
               <span className="ml-auto text-xs text-gray-500">v{item.version}</span>
             </p>
             <CodeLine code={`pip install nebulacode==${item.version}`} />
-            <p className="text-xs text-gray-600">Already installed? <span className="font-mono text-gray-500">pip install --upgrade nebulacode</span></p>
+            <p className="text-xs text-gray-600">Already installed? <span className="font-mono text-gray-500">pip install --force-reinstall nebulacode=={item.version}</span></p>
           </div>
           <div className="space-y-2 bg-gray-900/50 rounded-xl p-3 border border-gray-800">
             <p className="text-xs font-medium text-gray-300 flex items-center gap-1.5">
@@ -153,7 +153,8 @@ function CliCard({ item }: { item: LocalItem }) {
 
         <div className="space-y-2">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-1">Quick start</p>
-          <CodeLine code="nebula login https://your-nebulax-server" label="1. Connect to your NebulaX instance" />
+          <CodeLine code="nebula login https://ai.nebualax.co.uk --google" label="1a. Connect with Google (opens browser)" />
+          <CodeLine code="nebula login https://ai.nebualax.co.uk" label="1b. Connect with email + password" />
           <CodeLine code="nebula" label="2. Start the interactive coding session" />
           <CodeLine code="nebula daemon" label="3. (Optional) Run as a remote-control daemon" />
         </div>
