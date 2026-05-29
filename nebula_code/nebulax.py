@@ -36,7 +36,11 @@ class NebulaXClient:
         system: str,
         temperature: float = 0.1,
     ) -> str:
-        """Non-streaming completion via the OpenAI-compat endpoint."""
+        """Streaming completion via the OpenAI-compat endpoint.
+
+        Uses stream=True so Cloudflare sees a continuous byte flow and
+        never hits its 100-second idle-connection timeout (524 error).
+        """
         msgs = []
         if system:
             msgs.append({"role": "system", "content": system})
@@ -46,16 +50,31 @@ class NebulaXClient:
             "model": model,
             "messages": msgs,
             "temperature": temperature,
-            "stream": False,
+            "stream": True,
         }
+        parts: List[str] = []
         async with httpx.AsyncClient(timeout=None) as c:
-            r = await c.post(
+            async with c.stream(
+                "POST",
                 f"{self.base_url}/api/v1/openai/chat/completions",
                 json=payload,
                 headers=self._h,
-            )
-            r.raise_for_status()
-            return r.json()["choices"][0]["message"]["content"]
+            ) as r:
+                r.raise_for_status()
+                async for line in r.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        content = chunk["choices"][0]["delta"].get("content", "")
+                        if content:
+                            parts.append(content)
+                    except (json.JSONDecodeError, KeyError):
+                        pass
+        return "".join(parts)
 
     # ── Knowledge bases ──────────────────────────────────────────────────────
 
