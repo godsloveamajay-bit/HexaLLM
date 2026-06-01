@@ -266,6 +266,27 @@ function DesktopCard({ assets, version }: { assets: GHAsset[]; version: string }
         })}
       </div>
 
+      {/* macOS first-open guidance — the app isn't notarized yet, so Gatekeeper
+          blocks it with "can't be checked for malicious software". */}
+      <div className="flex items-start gap-2.5 rounded-xl border border-amber-700/40 bg-amber-900/10 px-3.5 py-3">
+        <Apple className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+        <div className="text-xs text-gray-300 space-y-1.5">
+          <p className="font-medium text-amber-300">macOS: “can’t be opened / can’t scan for viruses”?</p>
+          <p className="text-gray-400">
+            The app isn’t Apple-notarized yet, so macOS blocks it on first launch. To open it:
+          </p>
+          <ul className="list-disc ml-4 space-y-1 text-gray-400">
+            <li>Drag <span className="text-gray-200">NebulaX AI</span> to Applications, then <span className="text-gray-200">right-click it → Open → Open</span> (only needed once), or</li>
+            <li>run this once in Terminal:
+              <code className="block mt-1 bg-gray-900 border border-gray-700/60 rounded-lg px-2 py-1 font-mono text-emerald-400 select-all">
+                xattr -dr com.apple.quarantine "/Applications/NebulaX AI.app"
+              </code>
+            </li>
+          </ul>
+          <p className="text-gray-500">It’s safe — this just clears the “downloaded from the internet” quarantine flag.</p>
+        </div>
+      </div>
+
       <details className="group">
         <summary className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-300 transition-colors list-none select-none">
           <ChevronRight className="w-3.5 h-3.5 group-open:rotate-90 transition-transform" />

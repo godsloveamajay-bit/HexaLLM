@@ -1,6 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
-  <rect width="512" height="512" rx="112" fill="#111827"/>
-  <path d="M256 96l24.5 73.5L354 196l-73.5 24.5L256 294l-24.5-73.5L158 196l73.5-24.5L256 96z" fill="#6366f1"/>
-  <path d="M160 320l14 42L216 376l-42 14L160 432l-14-42L104 376l42-14L160 320z" fill="#8b5cf6"/>
-  <path d="M352 300l10 30L392 340l-30 10L352 380l-10-30L312 340l30-10L352 300z" fill="#a78bfa"/>
+  <defs>
+    <radialGradient id="ember" cx="50%" cy="44%" r="62%">
+      <stop offset="0%" stop-color="#f7d29a"/>
+      <stop offset="42%" stop-color="#e0954a"/>
+      <stop offset="100%" stop-color="#a85f28"/>
+    </radialGradient>
+    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#e0954a" stop-opacity="0.55"/>
+      <stop offset="100%" stop-color="#e0954a" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+  <!-- warm charcoal tile, reads well on light or dark -->
+  <rect width="512" height="512" rx="120" fill="#241c15"/>
+  <!-- soft cosy glow -->
+  <circle cx="256" cy="252" r="180" fill="url(#glow)"/>
+  <!-- the ember / nebula core -->
+  <circle cx="256" cy="252" r="116" fill="url(#ember)"/>
+  <!-- a gentle spark -->
+  <path d="M256 150l14 50 50 14-50 14-14 50-14-50-50-14 50-14 14-50z" fill="#fdf3e3" opacity="0.9"/>
+  <circle cx="372" cy="156" r="10" fill="#f3c98a" opacity="0.85"/>
+  <circle cx="150" cy="350" r="7" fill="#f3c98a" opacity="0.7"/>
 </svg>

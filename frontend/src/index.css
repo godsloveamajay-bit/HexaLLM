@@ -2,6 +2,34 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Theme tokens. The gray and primary scales (tailwind.config.js) resolve to
+   these CSS variables. Default = cosy warm "charcoal" dark; .light flips the
+   neutral ramp to warm cream. Accent = amber. Values are space-separated RGB
+   so Tailwind's alpha modifier (e.g. bg-gray-800/60) keeps working. */
+:root {
+  color-scheme: dark;
+  --g50: 250 246 241;  --g100: 242 236 228; --g200: 227 217 205; --g300: 201 188 171;
+  --g400: 161 144 125; --g500: 125 108 90;  --g600: 92 77 62;    --g700: 68 56 44;
+  --g800: 51 42 32;    --g850: 42 34 26;    --g900: 34 27 20;    --g925: 27 21 15;
+  --g950: 20 16 9;
+  --p50: 251 245 236;  --p100: 246 232 211; --p200: 236 207 166; --p300: 224 176 114;
+  --p400: 214 150 74;  --p500: 201 127 51;  --p600: 176 106 40;  --p700: 143 82 35;
+  --p800: 116 67 35;   --p900: 97 57 31;    --p950: 55 29 14;
+}
+:root.light {
+  color-scheme: light;
+  /* neutral ramp inverted in luminance (warm cream) — bg classes go light,
+     text classes go dark, with no markup changes */
+  --g50: 43 38 32;     --g100: 58 52 44;    --g200: 79 71 60;    --g300: 107 98 83;
+  --g400: 138 128 114; --g500: 168 156 138; --g600: 195 184 166; --g700: 214 205 191;
+  --g800: 233 225 213; --g850: 240 233 222; --g900: 246 241 233; --g925: 250 246 240;
+  --g950: 253 251 247;
+  /* accent shades used as text/icons go a touch darker for contrast on cream */
+  --p300: 201 127 51;  --p400: 176 106 40;  --p500: 159 94 36;
+}
+
+html, body { transition: background-color .25s ease, color .25s ease; }
+
 @layer base {
   html {
     overflow-x: hidden;
@@ -165,7 +193,7 @@
 
 /* Glass morphism surface */
 .glass {
-  background: rgba(15, 23, 42, 0.8);
+  background: rgb(var(--g950) / 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }

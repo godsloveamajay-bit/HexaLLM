@@ -2,9 +2,10 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Bot, Cpu, Wand2,
   BarChart3, FileText, Key, LogOut, Settings, BookOpen, X, ImageIcon,
-  Brain, Zap, Server, Users, Terminal, Download,
+  Brain, Zap, Server, Users, Terminal, Download, Sun, Moon,
 } from 'lucide-react'
 import { useAuth } from '../../store/auth'
+import { useTheme } from '../../lib/theme'
 import { clsx } from 'clsx'
 
 interface Props {
@@ -37,6 +38,7 @@ const ADMIN_EXTRA = [
 export default function Sidebar({ isOpen, onClose }: Props) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const [theme, toggleTheme] = useTheme()
 
   const navItems = user?.is_admin ? [...BASE_NAV, ...ADMIN_EXTRA] : BASE_NAV
 
@@ -73,6 +75,14 @@ export default function Sidebar({ isOpen, onClose }: Props) {
       </nav>
 
       <div className="mt-3 pt-3 border-t border-gray-700/50 space-y-0.5">
+        <button
+          onClick={toggleTheme}
+          className="sidebar-link w-full text-left"
+          aria-label="Toggle light/dark theme"
+        >
+          {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+          {theme === 'light' ? 'Dark mode' : 'Light mode'}
+        </button>
         <NavLink
           to="/settings"
           onClick={onClose}

@@ -1,37 +1,20 @@
 /** @type {import('tailwindcss').Config} */
+const ramp = (name) => Object.fromEntries(
+  ['50','100','200','300','400','500','600','700','800','850','900','925','950']
+    .map((s) => [s, `rgb(var(--${name}-${s}) / <alpha-value>)`])
+)
 export default {
+  // Theme is class-driven: <html class="light"> flips the CSS variables below.
+  // gray/primary resolve to those variables, so every existing gray-*/primary-*
+  // class themes automatically with no per-page edits. Palette = cosy warm
+  // charcoal (dark) / warm cream (light) with an amber accent.
+  darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
       colors: {
-        gray: {
-          50:  '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          850: '#172033',
-          900: '#0f172a',
-          925: '#0a0f1e',
-          950: '#060b18',
-        },
-        primary: {
-          50:  '#eef2ff',
-          100: '#e0e7ff',
-          200: '#c7d2fe',
-          300: '#a5b4fc',
-          400: '#818cf8',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
-          950: '#1e1b4b',
-        },
+        gray: ramp('g'),
+        primary: ramp('p'),
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],
