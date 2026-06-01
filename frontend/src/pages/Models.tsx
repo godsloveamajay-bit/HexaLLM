@@ -19,7 +19,7 @@ function ModelCard({ model, onDelete, onLike, isOwner }: { model: Model; onDelet
     <div className="card hover:border-gray-700 transition-all fade-in">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-600 to-purple-700 flex items-center justify-center flex-shrink-0">
+          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-600 to-secondary-600 flex items-center justify-center flex-shrink-0">
             <Cpu className="w-5 h-5 text-white" />
           </div>
           <div className="min-w-0">
@@ -30,7 +30,7 @@ function ModelCard({ model, onDelete, onLike, isOwner }: { model: Model; onDelet
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {model.is_fine_tuned && <span className="badge bg-purple-900/40 text-purple-300">fine-tuned</span>}
+          {model.is_fine_tuned && <span className="badge bg-secondary-900/40 text-secondary-300">fine-tuned</span>}
           {model.is_public
             ? <span className="badge bg-green-900/40 text-green-300"><Globe className="w-3 h-3 mr-1" />public</span>
             : <span className="badge bg-gray-800 text-gray-400"><Lock className="w-3 h-3 mr-1" />private</span>}

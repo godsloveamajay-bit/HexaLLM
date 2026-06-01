@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
   Send, Plus, Trash2, Bot, User, Loader2, ChevronDown, BookOpen,
-  FileText, Sparkles, Sparkle, Zap, Scale, Brain, Settings2, Menu,
+  FileText, Sparkles, Zap, Scale, Brain, Settings2, Menu,
   X, Paperclip, Share2, BookMarked, Clipboard, ClipboardCheck,
   Mic, MicOff, Square, Download, RotateCcw, Search, Terminal,
   ChevronRight, Wrench,
 } from 'lucide-react'
+import AiSparkle from '../components/AiSparkle'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -133,14 +134,14 @@ function ChatThoughtDrawer({ steps, reasoning, running }: { steps: StepEvent[]; 
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 transition-colors"
       >
-        <Brain className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
-        <span className="flex-1 text-left font-medium">
+        <Brain className="w-3.5 h-3.5 text-secondary-400 flex-shrink-0" />
+        <span className="flex-1 text-left font-medium text-secondary-300">
           {running ? 'Agent Thinking…' : 'Agent Thinking'}
         </span>
         {running && (
           <span className="flex gap-0.5">
             {[0, 0.15, 0.3].map((d, i) => (
-              <span key={i} className="w-1 h-1 rounded-full bg-emerald-400 animate-bounce" style={{ animationDelay: `${d}s` }} />
+              <span key={i} className="w-1 h-1 rounded-full bg-secondary-400 animate-bounce" style={{ animationDelay: `${d}s` }} />
             ))}
           </span>
         )}
@@ -157,8 +158,8 @@ function ChatThoughtDrawer({ steps, reasoning, running }: { steps: StepEvent[]; 
           {steps.map((s, i) => (
             <details key={i} className="group/step">
               <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-800/30 list-none">
-                <Wrench className="w-3 h-3 text-emerald-500/70 flex-shrink-0" />
-                <code className="text-emerald-400 font-mono">{s.name}</code>
+                <Wrench className="w-3 h-3 text-secondary-500/80 flex-shrink-0" />
+                <code className="text-secondary-400 font-mono">{s.name}</code>
                 <span className="text-gray-600 truncate flex-1">{s.input.slice(0, 60)}{s.input.length > 60 ? '…' : ''}</span>
                 <ChevronRight className="w-3 h-3 group-open/step:rotate-90 transition-transform flex-shrink-0" />
               </summary>
@@ -228,7 +229,7 @@ function MessageBubble({
         </div>
       ) : (
         <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
-          <Sparkle className={clsx('w-6 h-6 text-primary-500 fill-primary-500', isActive ? 'star-shine' : 'star-rest')} />
+          <AiSparkle size={26} active={isActive} />
         </div>
       )}
 
@@ -240,8 +241,8 @@ function MessageBubble({
           )}
           {isWarming ? (
             <div className="flex items-center gap-2 py-2">
-              <span className="inline-block w-3.5 h-3.5 border-2 border-gray-600 border-t-amber-400 rounded-full animate-spin" />
-              <span className="text-sm text-amber-300/90">
+              <span className="inline-block w-3.5 h-3.5 border-2 border-gray-600 border-t-energy-400 rounded-full animate-spin" />
+              <span className="text-sm text-energy-300/90">
                 Warming up{warmingModel ? ` ${warmingModel}` : ' the model'}… the first response after idle can take up to a minute.
               </span>
             </div>

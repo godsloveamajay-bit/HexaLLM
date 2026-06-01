@@ -7,7 +7,7 @@ export default function PrivacyPolicyPage() {
       <div className="max-w-3xl mx-auto">
         {/* Header */}
         <div className="flex items-center gap-3 mb-10">
-          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center">
+          <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center">
             <Sparkle className="w-5 h-5 text-white fill-white" />
           </div>
           <span className="font-bold text-lg text-gray-100">NebulaX AI</span>

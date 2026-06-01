@@ -60,7 +60,7 @@ export default function LoginPage() {
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-purple-600 flex items-center justify-center shadow-2xl shadow-primary-900/60 mb-4">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-2xl shadow-primary-900/60 mb-4">
             <Sparkle className="w-8 h-8 text-white fill-white" />
           </div>
           <h1 className="text-2xl font-bold text-gray-100">NebulaX AI</h1>
@@ -162,4 +162,3 @@ function GoogleIcon({ className }: { className?: string }) {
     </svg>
   )
 }
-

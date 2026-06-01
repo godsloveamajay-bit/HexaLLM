@@ -38,7 +38,7 @@ export default function LogsPage() {
   }
 
   const methodColor = (m: string) => {
-    if (m === 'GET') return 'bg-blue-900/40 text-blue-300'
+    if (m === 'GET') return 'bg-secondary-900/40 text-secondary-300'
     if (m === 'POST') return 'bg-green-900/40 text-green-300'
     if (m === 'DELETE') return 'bg-red-900/40 text-red-300'
     return 'bg-gray-800 text-gray-400'

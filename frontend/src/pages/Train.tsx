@@ -21,7 +21,7 @@ const STATUS_ICONS: Record<string, any> = {
 
 const STATUS_COLORS: Record<string, string> = {
   pending: 'text-yellow-400',
-  running: 'text-blue-400',
+  running: 'text-secondary-400',
   completed: 'text-green-400',
   failed: 'text-red-400',
 }

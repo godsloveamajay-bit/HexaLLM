@@ -41,13 +41,13 @@ const TOOL_ICONS: Record<string, any> = {
 }
 
 const TOOL_COLOR: Record<string, string> = {
-  web_search:   'text-blue-400',
+  web_search:   'text-secondary-400',
   code_exec:    'text-yellow-400',
   bash_exec:    'text-yellow-400',
-  read_file:    'text-sky-400',
+  read_file:    'text-secondary-400',
   write_file:   'text-green-400',
   patch_file:   'text-green-400',
-  search_files: 'text-purple-400',
+  search_files: 'text-primary-400',
 }
 
 function StepRow({ step }: { step: StepEvent }) {

@@ -180,7 +180,7 @@ function PersonaCard({ persona, onEdit, onDelete, onFork, isOwn }: {
       <div className="flex flex-wrap gap-1.5">
         {persona.tools.map((t) => <span key={t} className="badge bg-primary-900/30 text-primary-400 text-xs">{t.replace('_', ' ')}</span>)}
         {persona.knowledge_base_id && <span className="badge bg-green-900/30 text-green-400 text-xs"><BookOpen className="w-3 h-3 mr-1" />KB</span>}
-        {persona.use_memory && <span className="badge bg-purple-900/30 text-purple-400 text-xs"><Brain className="w-3 h-3 mr-1" />Memory</span>}
+        {persona.use_memory && <span className="badge bg-secondary-900/30 text-secondary-400 text-xs"><Brain className="w-3 h-3 mr-1" />Memory</span>}
       </div>
 
       <div className="flex items-center justify-between pt-1 border-t border-gray-800">

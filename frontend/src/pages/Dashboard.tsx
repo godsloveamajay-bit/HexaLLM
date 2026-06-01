@@ -65,14 +65,14 @@ export default function DashboardPage() {
       {/* Stats grid */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
         <StatCard icon={Activity} label="Total Requests" value={overview?.total_requests?.toLocaleString() ?? '—'} sub="All time" color="bg-primary-600" />
-        <StatCard icon={MessageSquare} label="Chat Sessions" value={overview?.total_chats?.toLocaleString() ?? '—'} sub="All time" color="bg-blue-600" />
-        <StatCard icon={Cpu} label="Your Models" value={overview?.total_models?.toLocaleString() ?? '—'} sub="Created" color="bg-purple-600" />
+        <StatCard icon={MessageSquare} label="Chat Sessions" value={overview?.total_chats?.toLocaleString() ?? '—'} sub="All time" color="bg-secondary-600" />
+        <StatCard icon={Cpu} label="Your Models" value={overview?.total_models?.toLocaleString() ?? '—'} sub="Created" color="bg-primary-600" />
         <StatCard icon={Bot} label="Agent Runs" value={overview?.total_agent_runs?.toLocaleString() ?? '—'} sub="All time" color="bg-green-600" />
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 mb-8">
-        <StatCard icon={Zap} label="Tokens Used" value={(overview?.total_tokens ?? 0) > 1000 ? `${((overview?.total_tokens ?? 0) / 1000).toFixed(1)}K` : overview?.total_tokens?.toString() ?? '—'} color="bg-amber-600" />
-        <StatCard icon={TrendingUp} label="Requests (30d)" value={overview?.requests_30d?.toLocaleString() ?? '—'} color="bg-teal-600" />
+        <StatCard icon={Zap} label="Tokens Used" value={(overview?.total_tokens ?? 0) > 1000 ? `${((overview?.total_tokens ?? 0) / 1000).toFixed(1)}K` : overview?.total_tokens?.toString() ?? '—'} color="bg-energy-600" />
+        <StatCard icon={TrendingUp} label="Requests (30d)" value={overview?.requests_30d?.toLocaleString() ?? '—'} color="bg-energy-600" />
         <StatCard icon={Clock} label="Avg Latency" value={overview?.avg_latency_ms ? `${overview.avg_latency_ms}ms` : '—'} sub="Per request" color="bg-rose-600" />
       </div>
 
@@ -91,7 +91,7 @@ export default function DashboardPage() {
               <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false}
                 tickFormatter={(d) => d.slice(5)} />
               <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
-              <Tooltip contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px' }}
+              <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}
                 labelStyle={{ color: '#e5e7eb' }} itemStyle={{ color: '#818cf8' }} />
               <Area type="monotone" dataKey="requests" stroke="#6366f1" fill="url(#grad)" strokeWidth={2} />
             </AreaChart>
@@ -106,9 +106,9 @@ export default function DashboardPage() {
       {/* Quick actions */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {[
-          { to: '/chat', icon: MessageSquare, title: 'Start a Chat', desc: 'Talk to any Ollama model', color: 'from-blue-600 to-primary-600' },
-          { to: '/models', icon: Cpu, title: 'Browse Models', desc: 'Discover & share models', color: 'from-purple-600 to-pink-600' },
-          { to: '/agents', icon: Bot, title: 'Run an Agent', desc: 'Automate tasks with AI', color: 'from-green-600 to-teal-600' },
+          { to: '/chat', icon: MessageSquare, title: 'Start a Chat', desc: 'Talk to any Ollama model', color: 'from-secondary-600 to-primary-600' },
+          { to: '/models', icon: Cpu, title: 'Browse Models', desc: 'Discover & share models', color: 'from-primary-600 to-energy-600' },
+          { to: '/agents', icon: Bot, title: 'Run an Agent', desc: 'Automate tasks with AI', color: 'from-energy-600 to-secondary-600' },
         ].map(({ to, icon: Icon, title, desc, color }) => (
           <Link key={to} to={to} className="card group hover:border-gray-700 transition-all flex items-center gap-4">
             <div className={`w-10 h-10 rounded-lg bg-gradient-to-br ${color} flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform`}>

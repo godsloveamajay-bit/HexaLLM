@@ -45,9 +45,9 @@ export default function AnalyticsPage() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
         {[
           { icon: TrendingUp, label: 'Total Requests', value: totalRequests.toLocaleString(), color: 'bg-primary-600' },
-          { icon: Zap, label: 'Total Tokens', value: totalTokens > 1000 ? `${(totalTokens / 1000).toFixed(1)}K` : totalTokens.toString(), color: 'bg-amber-600' },
+          { icon: Zap, label: 'Total Tokens', value: totalTokens > 1000 ? `${(totalTokens / 1000).toFixed(1)}K` : totalTokens.toString(), color: 'bg-energy-600' },
           { icon: AlertTriangle, label: 'Error Rate', value: `${errorRate}%`, color: 'bg-rose-600' },
-          { icon: Clock, label: 'Active Days', value: daily.filter((d) => d.requests > 0).length.toString(), color: 'bg-teal-600' },
+          { icon: Clock, label: 'Active Days', value: daily.filter((d) => d.requests > 0).length.toString(), color: 'bg-secondary-600' },
         ].map(({ icon: Icon, label, value, color }) => (
           <div key={label} className="card flex items-center gap-3">
             <div className={`w-9 h-9 rounded-lg ${color} flex items-center justify-center flex-shrink-0`}>

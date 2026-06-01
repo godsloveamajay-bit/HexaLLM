@@ -5,9 +5,8 @@ const ramp = (name) => Object.fromEntries(
 )
 export default {
   // Theme is class-driven: <html class="light"> flips the CSS variables below.
-  // gray/primary resolve to those variables, so every existing gray-*/primary-*
-  // class themes automatically with no per-page edits. Palette = cosy warm
-  // charcoal (dark) / warm cream (light) with an amber accent.
+  // gray/primary/secondary/energy resolve to those variables, so existing
+  // semantic classes theme automatically and new accents stay palette-bound.
   darkMode: 'class',
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
@@ -15,6 +14,8 @@ export default {
       colors: {
         gray: ramp('g'),
         primary: ramp('p'),
+        secondary: ramp('s'),
+        energy: ramp('e'),
       },
       fontFamily: {
         sans: ['Inter', 'system-ui', 'sans-serif'],

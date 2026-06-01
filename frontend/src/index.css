@@ -2,30 +2,38 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Theme tokens. The gray and primary scales (tailwind.config.js) resolve to
-   these CSS variables. Default = cosy warm "charcoal" dark; .light flips the
-   neutral ramp to warm cream. Accent = amber. Values are space-separated RGB
-   so Tailwind's alpha modifier (e.g. bg-gray-800/60) keeps working. */
+/* Theme tokens. The gray, primary, secondary, and energy scales
+   (tailwind.config.js) resolve to these CSS variables. Default = a warm
+   "sunset" palette tuned to the AI sparkle: a warm charcoal canvas, medium
+   orange primary actions, gold system signals, and deep-orange high-energy
+   accents — the warm end of the sparkle's orange-to-pink sweep. Values are
+   space-separated RGB so Tailwind's alpha modifier (e.g. bg-gray-800/60) keeps
+   working. */
 :root {
   color-scheme: dark;
-  --g50: 250 246 241;  --g100: 242 236 228; --g200: 227 217 205; --g300: 201 188 171;
-  --g400: 161 144 125; --g500: 125 108 90;  --g600: 92 77 62;    --g700: 68 56 44;
-  --g800: 51 42 32;    --g850: 42 34 26;    --g900: 34 27 20;    --g925: 27 21 15;
-  --g950: 20 16 9;
-  --p50: 251 245 236;  --p100: 246 232 211; --p200: 236 207 166; --p300: 224 176 114;
-  --p400: 214 150 74;  --p500: 201 127 51;  --p600: 176 106 40;  --p700: 143 82 35;
-  --p800: 116 67 35;   --p900: 97 57 31;    --p950: 55 29 14;
+  --g-50: 250 247 244;  --g-100: 242 236 231; --g-200: 224 214 206; --g-300: 198 183 173;
+  --g-400: 165 146 135; --g-500: 128 110 100; --g-600: 94 76 66;    --g-700: 66 51 43;
+  --g-800: 46 34 28;    --g-850: 38 28 22;    --g-900: 31 22 17;     --g-925: 25 17 13;
+  --g-950: 19 13 10;
+  --p-50: 255 247 237;  --p-100: 255 234 213; --p-200: 254 211 170; --p-300: 253 180 116;
+  --p-400: 251 146 60;  --p-500: 249 115 22;  --p-600: 234 88 12;   --p-700: 194 65 12;
+  --p-800: 154 52 18;   --p-900: 124 45 18;   --p-950: 67 20 7;
+  --s-50: 255 251 235;  --s-100: 254 243 199; --s-200: 253 230 138; --s-300: 252 211 77;
+  --s-400: 251 191 36;  --s-500: 245 158 11;  --s-600: 217 119 6;   --s-700: 180 83 9;
+  --s-800: 146 64 14;   --s-900: 120 53 15;   --s-950: 69 26 3;
+  --e-50: 255 247 237;  --e-100: 255 237 213; --e-200: 254 215 170; --e-300: 253 186 116;
+  --e-400: 251 146 60;  --e-500: 249 115 22;  --e-600: 234 88 12;   --e-700: 194 65 12;
+  --e-800: 154 52 18;   --e-900: 124 45 18;   --e-950: 67 20 7;
 }
 :root.light {
   color-scheme: light;
-  /* neutral ramp inverted in luminance (warm cream) — bg classes go light,
-     text classes go dark, with no markup changes */
-  --g50: 43 38 32;     --g100: 58 52 44;    --g200: 79 71 60;    --g300: 107 98 83;
-  --g400: 138 128 114; --g500: 168 156 138; --g600: 195 184 166; --g700: 214 205 191;
-  --g800: 233 225 213; --g850: 240 233 222; --g900: 246 241 233; --g925: 250 246 240;
-  --g950: 253 251 247;
-  /* accent shades used as text/icons go a touch darker for contrast on cream */
-  --p300: 201 127 51;  --p400: 176 106 40;  --p500: 159 94 36;
+  /* Light mode: warm cream canvas, same sunset accents with inverted luminance. */
+  --g-50: 31 22 17;     --g-100: 46 34 28;    --g-200: 66 51 43;    --g-300: 94 76 66;
+  --g-400: 128 110 100; --g-500: 165 146 135; --g-600: 198 183 173; --g-700: 224 214 206;
+  --g-800: 240 232 225; --g-850: 247 241 235; --g-900: 250 246 241; --g-925: 252 249 245;
+  --g-950: 251 247 243;
+  --p-300: 194 65 12;   --p-400: 234 88 12;   --p-500: 249 115 22;
+  --s-300: 180 83 9;    --s-400: 217 119 6;   --s-500: 245 158 11;
 }
 
 html, body { transition: background-color .25s ease, color .25s ease; }
@@ -62,7 +70,7 @@ html, body { transition: background-color .25s ease, color .25s ease; }
   }
   .btn-primary {
     @apply btn bg-primary-600 hover:bg-primary-500 active:bg-primary-700
-           text-white shadow-sm shadow-primary-900/30;
+           text-white shadow-sm shadow-primary-900/30 ring-1 ring-primary-400/20;
   }
   .btn-secondary {
     @apply btn bg-gray-800 hover:bg-gray-700 text-gray-200
@@ -154,25 +162,46 @@ html, body { transition: background-color .25s ease, color .25s ease; }
 .typing-dot:nth-child(2) { animation-delay: 0.2s; }
 .typing-dot:nth-child(3) { animation-delay: 0.4s; }
 
-/* AI streaming indicator */
-@keyframes star-shine {
-  0%, 100% {
-    transform: scale(0.82) rotate(0deg);
-    opacity: 0.65;
-    filter: drop-shadow(0 0 4px rgba(99,102,241,0.4));
-  }
-  50% {
-    transform: scale(1.2) rotate(45deg);
-    opacity: 1;
-    filter: drop-shadow(0 0 10px rgba(99,102,241,0.8))
-            drop-shadow(0 0 20px rgba(99,102,241,0.4));
-  }
+/* AI streaming sparkle (see components/AiSparkle.tsx).
+   transform-box: fill-box makes every transform pivot on the element's own
+   centre, so the star spins/scales in place instead of drifting. */
+.ai-sparkle-spin,
+.ai-sparkle-breathe,
+.ai-sparkle-pop,
+.ai-sparkle-pop-2 {
+  transform-box: fill-box;
+  transform-origin: center;
+  will-change: transform, opacity;
 }
-.star-shine { animation: star-shine 1.5s ease-in-out infinite; }
 
-.star-rest {
-  opacity: 0.7;
-  filter: drop-shadow(0 0 3px rgba(99,102,241,0.35));
+@keyframes ai-sparkle-spin {
+  to { transform: rotate(360deg); }
+}
+.ai-sparkle-spin { animation: ai-sparkle-spin 7s linear infinite; }
+
+/* Points breathe: stretch one axis while squashing the other, so the star
+   morphs between a fat and a slender sparkle as it turns. */
+@keyframes ai-sparkle-breathe {
+  0%, 100% { transform: scale(1, 1); }
+  25%      { transform: scale(1.16, 0.86); }
+  50%      { transform: scale(1, 1); }
+  75%      { transform: scale(0.86, 1.16); }
+}
+.ai-sparkle-breathe { animation: ai-sparkle-breathe 2.6s ease-in-out infinite; }
+
+/* Companion sparkles twinkle in and out on a stagger. */
+@keyframes ai-sparkle-pop {
+  0%, 100% { transform: scale(0.4); opacity: 0; }
+  50%      { transform: scale(1);   opacity: 1; }
+}
+.ai-sparkle-pop   { animation: ai-sparkle-pop 1.8s ease-in-out 0.2s infinite; }
+.ai-sparkle-pop-2 { animation: ai-sparkle-pop 2.2s ease-in-out 1s   infinite; }
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-sparkle-spin,
+  .ai-sparkle-breathe,
+  .ai-sparkle-pop,
+  .ai-sparkle-pop-2 { animation: none; }
 }
 
 /* Stream cursor */
@@ -193,7 +222,7 @@ html, body { transition: background-color .25s ease, color .25s ease; }
 
 /* Glass morphism surface */
 .glass {
-  background: rgb(var(--g950) / 0.8);
+  background: rgb(var(--g-950) / 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
 }

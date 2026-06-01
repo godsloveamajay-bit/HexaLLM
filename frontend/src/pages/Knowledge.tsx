@@ -47,7 +47,7 @@ const POPULAR_EMBED = ['nomic-embed-text', 'mxbai-embed-large', 'all-minilm', 's
 function statusBadge(s: KBDocument['status']) {
   const map: Record<KBDocument['status'], { cls: string; icon: any; label: string }> = {
     pending: { cls: 'bg-gray-800 text-gray-400', icon: Clock, label: 'Pending' },
-    processing: { cls: 'bg-blue-900/40 text-blue-300', icon: Loader2, label: 'Processing' },
+    processing: { cls: 'bg-secondary-900/40 text-secondary-300', icon: Loader2, label: 'Processing' },
     ready: { cls: 'bg-green-900/40 text-green-300', icon: CheckCircle2, label: 'Ready' },
     failed: { cls: 'bg-red-900/40 text-red-300', icon: AlertCircle, label: 'Failed' },
   }
@@ -434,7 +434,7 @@ export default function KnowledgePage() {
                 )}
               >
                 <div className="flex items-start gap-3">
-                  <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-600 to-purple-700 flex items-center justify-center flex-shrink-0">
+                  <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-primary-600 to-secondary-600 flex items-center justify-center flex-shrink-0">
                     <BookOpen className="w-4 h-4 text-white" />
                   </div>
                   <div className="flex-1 min-w-0">
