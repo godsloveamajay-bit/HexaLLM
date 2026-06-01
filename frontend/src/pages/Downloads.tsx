@@ -209,14 +209,14 @@ function DesktopCard({ assets, version }: { assets: GHAsset[]; version: string }
     {
       label: 'Linux',
       badge: '.deb',
-      icon: <Monitor className="w-4 h-4 text-orange-400" />,
+      icon: <Monitor className="w-4 h-4 text-energy-400" />,
       installHint: 'Debian / Ubuntu x86_64. Run: sudo dpkg -i *.deb',
       assetPattern: /amd64\.deb$/i,
     },
     {
       label: 'Windows',
       badge: '.exe',
-      icon: <Monitor className="w-4 h-4 text-blue-400" />,
+      icon: <Monitor className="w-4 h-4 text-secondary-400" />,
       installHint: 'Windows 10 / 11 x64 NSIS installer.',
       assetPattern: /x64-setup\.exe$/i,
     },
@@ -268,10 +268,10 @@ function DesktopCard({ assets, version }: { assets: GHAsset[]; version: string }
 
       {/* macOS first-open guidance — the app isn't notarized yet, so Gatekeeper
           blocks it with "can't be checked for malicious software". */}
-      <div className="flex items-start gap-2.5 rounded-xl border border-amber-700/40 bg-amber-900/10 px-3.5 py-3">
-        <Apple className="w-4 h-4 text-amber-400 mt-0.5 flex-shrink-0" />
+      <div className="flex items-start gap-2.5 rounded-xl border border-energy-700/40 bg-energy-900/10 px-3.5 py-3">
+        <Apple className="w-4 h-4 text-energy-400 mt-0.5 flex-shrink-0" />
         <div className="text-xs text-gray-300 space-y-1.5">
-          <p className="font-medium text-amber-300">macOS: “can’t be opened / can’t scan for viruses”?</p>
+          <p className="font-medium text-energy-300">macOS: “can’t be opened / can’t scan for viruses”?</p>
           <p className="text-gray-400">
             The app isn’t Apple-notarized yet, so macOS blocks it on first launch. To open it:
           </p>
@@ -311,13 +311,13 @@ function MobileCard({ assets, version }: { assets: GHAsset[]; version: string })
   return (
     <div className="card space-y-4">
       <div className="flex items-start gap-4">
-        <div className="w-12 h-12 rounded-xl bg-purple-900/30 border border-purple-700/40 flex items-center justify-center flex-shrink-0">
-          <Smartphone className="w-6 h-6 text-purple-400" />
+        <div className="w-12 h-12 rounded-xl bg-primary-900/30 border border-primary-700/40 flex items-center justify-center flex-shrink-0">
+          <Smartphone className="w-6 h-6 text-primary-400" />
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
             <h2 className="text-base font-semibold text-gray-100">NebulaX Mobile</h2>
-            <span className="badge bg-purple-900/30 text-purple-400 border border-purple-800/40">v{version}</span>
+            <span className="badge bg-primary-900/30 text-primary-400 border border-primary-800/40">v{version}</span>
           </div>
           <p className="text-sm text-gray-400 mt-1">
             Chat with your models on the go. Available on iOS and Android.
@@ -371,6 +371,20 @@ interface Release {
 }
 
 const CHANGELOG: Release[] = [
+  {
+    version: '0.8.0',
+    date: '2026-06-01',
+    summary: 'Live streaming, faster replies, and a warm new look across every app.',
+    changes: [
+      { type: 'new',      text: 'Live token streaming — responses render as they generate' },
+      { type: 'new',      text: 'Animated AI sparkle while the assistant is thinking' },
+      { type: 'improved', text: 'Direct-prose answers skip the old double-generation pass — much faster first token' },
+      { type: 'improved', text: 'Trivial prompts skip the thinking phase entirely' },
+      { type: 'improved', text: 'Refreshed warm "sunset" theme with light & dark modes' },
+      { type: 'fixed',    text: 'Editable installs no longer run a stale copy — nebula always uses the installed build' },
+      { type: 'fixed',    text: 'Downloads page now always serves the latest CLI wheel' },
+    ],
+  },
   {
     version: '0.7.0',
     date: '2026-05-26',
@@ -488,7 +502,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.6.0'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.8.0'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 
