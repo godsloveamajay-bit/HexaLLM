@@ -56,6 +56,43 @@ def needs_reasoning(text: str) -> bool:
     return bool(_REASONING_HINT_RE.search(text))
 
 
+# Escalation cues — these promote a request to a heavier (slower) tier. Kept
+# deliberately explicit so casual use stays in the fast lane; a user only pays
+# the 14B latency when they ask for depth.
+_DEEP_HINT_RE = re.compile(
+    r"\b("
+    r"rigorous(ly)?|in[\s-]?depth|deep[\s-]?dive|think (deeply|hard(er)?)|"
+    r"thorough(ly)?|comprehensive(ly)?|exhaustive(ly)?|"
+    r"formal proof|from first principles|prove rigorously|"
+    r"carefully (analy[sz]e|reason|consider)|detailed analysis"
+    r")\b",
+    re.IGNORECASE,
+)
+_HEAVY_CODE_RE = re.compile(
+    r"\b("
+    r"refactor|re-?architect|architect|migrate|rewrite|optimi[sz]e|"
+    r"design (a|an|the) (system|api|architecture|schema|database)|"
+    r"entire (codebase|module|file|project)|"
+    r"implement (a|an|the) (full|complete|entire)"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def needs_deep_reasoning(text: str) -> bool:
+    """Explicit deep-reasoning cues (or a very long prompt) → escalate to 14B."""
+    if not text:
+        return False
+    return len(text) > 2000 or bool(_DEEP_HINT_RE.search(text))
+
+
+def looks_like_heavy_code(text: str) -> bool:
+    """Big/structural code work → escalate to the 14B coder."""
+    if not text:
+        return False
+    return looks_like_code(text) and (len(text) > 800 or bool(_HEAVY_CODE_RE.search(text)))
+
+
 # ── variant definitions ──────────────────────────────────────────────────────
 
 @dataclass
@@ -86,16 +123,153 @@ class Variant:
         return seen
 
 
+# Underlying Ollama bases. Routing resolves these case-INSENSITIVELY against the
+# live `/api/tags` list (see `route()`), so the exact casing here is forgiving —
+# Ollama reports tags inconsistently (qwen2.5:7B but deepseek-r1:32b).
+#
+# Each "department" has a fast default plus heavier opt-in tiers that only kick
+# in on explicit cues (see the escalation heuristics below). On this CPU box
+# bigger = slower, so defaults stay in the 7-8B fast lane.
+_CODING = "Qwen2.5-Coder:7B"          # default coder (fast, ~1.7 tok/s)
+_CODING_HEAVY = "Qwen2.5-Coder:14B"   # hard refactors/architecture (~0.85 tok/s)
+_CHAT = "qwen2.5:7B"                   # general chat (refreshed from openchat:7B)
+_THINKING = "deepseek-r1:latest"      # default reasoner (8B distill, CPU sweet spot)
+_THINKING_DEEP = "deepseek-r1:14B"    # escalated reasoning on explicit deep cues
+_THINKING_DEEPEST = "deepseek-r1:32b" # strongest; opt-in only (direct selection, ~0.45 tok/s)
+_GENERAL = "llama3.1:8b"              # writing/general (refreshed from llama3:8B)
+_LARGE = "qwen3:14B"                  # balanced default + universal fallback
+_FAST = "llama3.2:3b"                # snappy 3B for titles / quick replies (~4 tok/s)
+_VISION = "llama3.2-vision:11b"      # image understanding (new capability)
+# Legacy models kept installed as safety fallbacks during/after the refresh:
+_OPENCHAT = "openchat:7B"
+_LLAMA3 = "llama3:8b"
+
+# Models that emit a separate chain-of-thought (reasoning) stream.
+_REASONING_MODELS = ("deepseek-r1", "qwen3")
+
+# Trivial social inputs — greetings, acknowledgements, sign-offs — that don't
+# warrant a reasoning pass. A message qualifies only if it is composed ENTIRELY
+# of these words/phrases (any real question contains a non-trivial word and so
+# fails the anchored match). Matched whole and case-insensitively.
+_TRIVIAL_WORD = (
+    r"(?:hi|hey+|hello|hiya|howdy|there|yo|sup|wassup|gm|good\s*(?:morning|afternoon|evening|night)|"
+    r"how(?:'?s| are| is)?(?:\s*(?:you|it|things|everything|it\s*going))?|"
+    r"thanks?|thank\s*you|thx|ty|cheers|much\s*appreciated|"
+    r"ok(?:ay)?|kk?|cool|nice|great|awesome|perfect|got\s*it|gotcha|sounds\s*good|will\s*do|"
+    r"yes|yep|yeah|nope?|np|no\s*problem|sure|alright|right|"
+    r"lol|lmao|haha+|hehe|"
+    r"bye|goodbye|see\s*(?:you|ya)|take\s*care|later)"
+)
+_TRIVIAL_RE = re.compile(
+    rf"^{_TRIVIAL_WORD}(?:[\s,.!?]+{_TRIVIAL_WORD})*[\s,.!?]*$",
+    re.IGNORECASE,
+)
+
+
+def is_reasoning_model(model: str) -> bool:
+    """True if the model produces a chain-of-thought (deepseek-r1, qwen3)."""
+    m = (model or "").lower()
+    return any(r in m for r in _REASONING_MODELS)
+
+
+def is_trivial_message(text: str) -> bool:
+    """True for short greetings / acknowledgements that don't need reasoning."""
+    t = (text or "").strip()
+    return 0 < len(t) <= 60 and bool(_TRIVIAL_RE.match(t))
+
+
+def should_think(model: str, user_text: str) -> Optional[bool]:
+    """Return False to suppress chain-of-thought when a reasoning model is asked
+    a trivial question (so it answers instantly instead of reasoning for minutes);
+    None to leave the model's default behavior untouched."""
+    if is_reasoning_model(model) and is_trivial_message(user_text):
+        return False
+    return None
+
+
+# ── text-to-image intent ─────────────────────────────────────────────────────
+# "generate/create/make/render an image|picture|… of X"  → prompt = X.
+# Requires an explicit connector (of/showing/:/…) after the image noun so we
+# don't fire on "generate an image classifier in Python".
+_IMG_EXPLICIT_RE = re.compile(
+    r"^\s*(?:please\s+|pls\s+|hey,?\s+)?"
+    r"(?:can|could|would)?\s*(?:you\s+)?"
+    r"(?:generate|create|make|render|produce|design|cook up|whip up|give me|show me|imagine)\s+"
+    r"(?:me\s+)?(?:an?|some|a\s+few|a\s+couple\s+of)?\s*"
+    r"(?:image|picture|photo(?:graph)?|pic|drawing|painting|illustration|artwork|art|"
+    r"render(?:ing)?|logo|wallpaper|portrait|sketch|graphic|icon|poster|scene)s?"
+    r"\s*(?:of|showing|depicting|featuring|with|that shows?|about|for|[:\-,])\s*(.+)",
+    re.IGNORECASE | re.DOTALL,
+)
+# Visual verbs that imply image output directly: "draw/paint/sketch … X".
+_IMG_DRAW_RE = re.compile(
+    r"^\s*(?:please\s+|pls\s+)?(?:can|could|would)?\s*(?:you\s+)?"
+    r"(?:draw|paint|sketch|illustrate)\s+(?:me\s+)?(?:an?|some)?\s*(.+)",
+    re.IGNORECASE | re.DOTALL,
+)
+# Explicit slash command.
+_IMG_SLASH_RE = re.compile(r"^\s*/(?:image|imagine|img|draw|gen)\s+(.+)", re.IGNORECASE | re.DOTALL)
+
+
+def detect_image_request(text: str) -> Optional[str]:
+    """If the message is a text-to-image request, return the image prompt
+    (whitespace-collapsed, single line); else None."""
+    for rx in (_IMG_SLASH_RE, _IMG_EXPLICIT_RE, _IMG_DRAW_RE):
+        m = rx.match(text or "")
+        if m:
+            prompt = " ".join(m.group(1).split()).strip().strip("\"'.")
+            if len(prompt) >= 2:
+                return prompt
+    return None
+
+
+# Substrings identifying a vision-capable (multimodal) model.
+_VISION_MODELS = ("vision", "llava", "-vl", "moondream", "minicpm-v", "bakllava")
+
+
+def is_vision_model(model: str) -> bool:
+    """True if the model can read images."""
+    m = (model or "").lower()
+    return any(v in m for v in _VISION_MODELS)
+
+
+def fast_model_for(available_models: List[str]) -> Optional[str]:
+    """A small, fast model for cheap throwaway work (chat titles, etc.).
+    Prefers the 3B; never returns a slow reasoning model."""
+    avail_lc = {m.lower(): m for m in available_models}
+    for pref in (_FAST, _CHAT, _GENERAL, _OPENCHAT, _LLAMA3):
+        if pref.lower() in avail_lc:
+            return avail_lc[pref.lower()]
+    # else: any non-reasoning model
+    for m in available_models:
+        if not is_reasoning_model(m) and not is_vision_model(m):
+            return m
+    return None
+
+
+def vision_model_for(available_models: List[str]) -> Optional[str]:
+    """Pick a pulled vision model (prefer the configured default), else None.
+    Used to auto-route any request carrying an image to a model that can see."""
+    avail_lc = {m.lower(): m for m in available_models}
+    if _VISION.lower() in avail_lc:
+        return avail_lc[_VISION.lower()]
+    for m in available_models:
+        if is_vision_model(m):
+            return m
+    return None
+
+
 VARIANTS: Dict[str, Variant] = {
     # ── 1. Code & Maths ──────────────────────────────────────────────────────
     "nebulax:code": Variant(
         id="nebulax:code",
         label="NebulaX Code",
-        description="Coding and maths. Routes to DeepSeek-R1 for pure reasoning/proofs, DeepSeek-Coder for everything else.",
-        default_model="deepseek-coder:6.7b",
+        description="Coding and maths. Big refactors → Qwen2.5-Coder:14B, pure proofs → DeepSeek-R1, everyday code → Qwen2.5-Coder:7B.",
+        default_model=_CODING,
         routes=[
-            RoutedModel("deepseek-r1:8b", "reasoning"),   # proofs, equations, step-by-step maths
-            RoutedModel("deepseek-coder:6.7b", "code"),   # code generation, debugging, refactoring
+            RoutedModel(_CODING_HEAVY, "code_heavy"),  # refactors, architecture, big implementations
+            RoutedModel(_CODING, "code"),              # everyday code gen/debug
+            RoutedModel(_THINKING, "reasoning"),       # proofs, equations, step-by-step maths (no code)
         ],
         system_prompt=(
             "You are NebulaX Code, an expert software engineer and mathematician. "
@@ -106,7 +280,7 @@ VARIANTS: Dict[str, Variant] = {
         temperature=0.2,
         num_ctx=16384,
         num_predict=4096,
-        fallbacks=["phi3:mini"],
+        fallbacks=[_CODING, _LARGE, _GENERAL],
     ),
 
     # ── 2. Chat & Everyday tasks ─────────────────────────────────────────────
@@ -114,7 +288,7 @@ VARIANTS: Dict[str, Variant] = {
         id="nebulax:chat",
         label="NebulaX Chat",
         description="Friendly conversation and everyday tasks. Fast, warm, and to the point.",
-        default_model="llama3.2:3b",
+        default_model=_CHAT,
         routes=[],
         system_prompt=(
             "You are NebulaX Chat, a friendly and helpful assistant. "
@@ -125,7 +299,7 @@ VARIANTS: Dict[str, Variant] = {
         temperature=0.7,
         num_ctx=8192,
         num_predict=1024,
-        fallbacks=["phi3:mini"],
+        fallbacks=[_GENERAL, _OPENCHAT, _LARGE],
     ),
 
     # ── 3. Writing & Literature ──────────────────────────────────────────────
@@ -133,7 +307,7 @@ VARIANTS: Dict[str, Variant] = {
         id="nebulax:write",
         label="NebulaX Write",
         description="Creative writing, editing, storytelling, and literary analysis.",
-        default_model="llama3.2:3b",
+        default_model=_GENERAL,
         routes=[],
         system_prompt=(
             "You are NebulaX Write, a skilled writer and literary assistant. "
@@ -145,16 +319,18 @@ VARIANTS: Dict[str, Variant] = {
         temperature=0.9,
         num_ctx=8192,
         num_predict=2048,
-        fallbacks=["phi3:mini"],
+        fallbacks=[_LLAMA3, _LARGE, _CHAT],
     ),
 
     # ── 4. Deep reasoning & Analysis ────────────────────────────────────────
     "nebulax:think": Variant(
         id="nebulax:think",
         label="NebulaX Think",
-        description="Deep analysis, research, strategy, and complex problem solving.",
-        default_model="deepseek-r1:8b",
-        routes=[],
+        description="Deep analysis, research, strategy, and complex problem solving. Escalates to DeepSeek-R1:14B on explicit deep-reasoning requests.",
+        default_model=_THINKING,
+        routes=[
+            RoutedModel(_THINKING_DEEP, "reasoning_deep"),  # "rigorous", "in depth", very long prompts
+        ],
         system_prompt=(
             "You are NebulaX Think, an analytical assistant built for deep reasoning. "
             "Break complex problems into steps. State your assumptions explicitly. "
@@ -164,8 +340,11 @@ VARIANTS: Dict[str, Variant] = {
         ),
         temperature=0.4,
         num_ctx=16384,
-        num_predict=4096,
-        fallbacks=["llama3.2:3b", "phi3:mini"],
+        # deepseek-r1's chain-of-thought is verbose and shares this budget with
+        # the answer (reasoning streams to the Thought Drawer, answer to the body).
+        # Keep it generous so a long reasoning pass doesn't truncate the answer.
+        num_predict=8192,
+        fallbacks=[_THINKING, _LARGE, _GENERAL],
     ),
 
     # ── 5. Balanced ──────────────────────────────────────────────────────────
@@ -173,10 +352,12 @@ VARIANTS: Dict[str, Variant] = {
         id="nebulax:balanced",
         label="NebulaX Balanced",
         description="Spreads work across all models. Routes each message to the best model for the job.",
-        default_model="llama3.2:3b",
+        default_model=_LARGE,
         routes=[
-            RoutedModel("deepseek-coder:6.7b", "code"),
-            RoutedModel("deepseek-r1:8b", "reasoning"),
+            RoutedModel(_CODING_HEAVY, "code_heavy"),
+            RoutedModel(_CODING, "code"),
+            RoutedModel(_THINKING_DEEP, "reasoning_deep"),
+            RoutedModel(_THINKING, "reasoning"),
         ],
         system_prompt=(
             "You are NebulaX Balanced, a versatile assistant. "
@@ -186,8 +367,10 @@ VARIANTS: Dict[str, Variant] = {
         ),
         temperature=0.6,
         num_ctx=8192,
-        num_predict=2048,
-        fallbacks=["phi3:mini"],
+        # Balanced routes reasoning queries to deepseek-r1, whose <think> stream
+        # shares this budget with the answer — give it room so the body isn't empty.
+        num_predict=4096,
+        fallbacks=[_GENERAL, _CHAT],
     ),
 
     # ── 6. Custom ────────────────────────────────────────────────────────────
@@ -195,13 +378,35 @@ VARIANTS: Dict[str, Variant] = {
         id="nebulax:custom",
         label="NebulaX Custom",
         description="Bring-your-own system prompt. Full control over the assistant's voice and behavior.",
-        default_model="llama3.2:3b",
+        default_model=_GENERAL,
         routes=[],
         system_prompt="",  # user-supplied prompt used directly
         temperature=0.7,
         num_ctx=8192,
         num_predict=2048,
-        fallbacks=["phi3:mini"],
+        fallbacks=[_LLAMA3, _LARGE, _CHAT],
+    ),
+
+    # ── 7. Vision ────────────────────────────────────────────────────────────
+    "nebulax:vision": Variant(
+        id="nebulax:vision",
+        label="NebulaX Vision",
+        description="Understands images — screenshots, diagrams, charts, photos, UI mockups, handwriting.",
+        default_model=_VISION,
+        routes=[],
+        system_prompt=(
+            "You are NebulaX Vision, a multimodal assistant that can see images. "
+            "Describe and analyze what's in the image accurately and specifically. "
+            "For screenshots/diagrams/UI, read text and structure precisely; for charts, "
+            "report the actual values and trends; for code or errors in an image, transcribe "
+            "and explain them. If the image is unclear, say what you can and can't make out."
+        ),
+        temperature=0.5,
+        num_ctx=8192,
+        num_predict=2048,
+        # No text-only fallback: vision needs a vision model. If _VISION isn't
+        # pulled the router raises a clear "pull one of: …" error.
+        fallbacks=[],
     ),
 }
 
@@ -247,14 +452,26 @@ def route(
     (names from `/api/tags`). We never route to a model the user hasn't pulled.
     """
     v = VARIANTS[variant_id]
-    available = set(available_models)
+    # Case-insensitive resolution: Ollama reports tags with inconsistent casing
+    # (qwen2.5:7B vs deepseek-r1:32b), so resolve a desired name to the ACTUAL
+    # available tag rather than requiring an exact-case match.
+    avail_lc = {m.lower(): m for m in available_models}
+
+    def resolve(name: str) -> Optional[str]:
+        return avail_lc.get(name.lower())
 
     code = looks_like_code(user_text)
+    heavy_code = looks_like_heavy_code(user_text)
     reasoning = needs_reasoning(user_text)
+    deep = needs_deep_reasoning(user_text)
 
     def matches(condition: str) -> bool:
+        if condition == "code_heavy":
+            return heavy_code
         if condition == "code":
             return code
+        if condition == "reasoning_deep":
+            return deep
         if condition == "reasoning":
             return reasoning
         if condition == "default":
@@ -264,31 +481,32 @@ def route(
     chosen: Optional[str] = None
     reason = "default"
 
-    # 1. Try the variant's explicit routes in order.
+    # 1. Try the variant's explicit routes in order (first match wins).
     for r in v.routes:
-        if matches(r.condition) and r.name in available:
-            chosen = r.name
+        actual = resolve(r.name)
+        if matches(r.condition) and actual:
+            chosen = actual
             reason = r.condition
             break
 
     # 2. Fall back to the variant's default model.
-    if chosen is None and v.default_model in available:
-        chosen = v.default_model
+    if chosen is None and resolve(v.default_model):
+        chosen = resolve(v.default_model)
         reason = "default"
 
     # 3. Fall back to declared fallbacks in order.
     if chosen is None:
         for fb in v.fallbacks:
-            if fb in available:
-                chosen = fb
+            if resolve(fb):
+                chosen = resolve(fb)
                 reason = f"fallback:{fb}"
                 break
 
     # 4. Last resort: any candidate that exists.
     if chosen is None:
         for c in v.all_candidates():
-            if c in available:
-                chosen = c
+            if resolve(c):
+                chosen = resolve(c)
                 reason = f"fallback:{c}"
                 break
 

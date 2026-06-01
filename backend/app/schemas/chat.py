@@ -48,6 +48,7 @@ class ChatMessageOut(BaseModel):
     content: str
     tokens_used: Optional[int]
     latency_ms: Optional[int]
+    steps: Optional[List[dict]] = None
     created_at: datetime
 
     class Config:
@@ -56,7 +57,7 @@ class ChatMessageOut(BaseModel):
 
 class AgentTaskCreate(BaseModel):
     task: str
-    model: str = "llama3.2:3b"
+    model: str = "llama3:8B"
     tools: List[str] = ["web_search", "code_exec", "read_file"]
     max_steps: int = 10
     system_prompt: Optional[str] = None

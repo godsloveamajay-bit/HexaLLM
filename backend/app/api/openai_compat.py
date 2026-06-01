@@ -71,7 +71,18 @@ async def chat_completions(
             }
             yield f"data: {json.dumps(done)}\n\ndata: [DONE]\n\n"
 
-        return StreamingResponse(stream_gen(), media_type="text/event-stream")
+        # Content-Encoding: identity bypasses the GZipMiddleware (which otherwise
+        # buffers the entire SSE stream in the zlib compressor until the model
+        # finishes, causing Cloudflare 524 timeouts on long responses).
+        return StreamingResponse(
+            stream_gen(),
+            media_type="text/event-stream",
+            headers={
+                "Content-Encoding": "identity",
+                "Cache-Control": "no-cache",
+                "X-Accel-Buffering": "no",
+            },
+        )
 
     # Non-streaming
     full = ""

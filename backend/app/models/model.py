@@ -12,7 +12,7 @@ class AIModel(Base):
     name = Column(String, nullable=False)
     slug = Column(String, unique=True, index=True, nullable=False)
     description = Column(Text, nullable=True)
-    base_model = Column(String, nullable=False)  # e.g. "llama3.2:3b"
+    base_model = Column(String, nullable=False)  # e.g. "llama3:8B"
     ollama_model_name = Column(String, nullable=True)  # name registered in Ollama
     tags = Column(JSON, default=list)
     is_public = Column(Boolean, default=True)

@@ -1,4 +1,5 @@
 from rich.console import Console
+from rich.live import Live
 from rich.markdown import Markdown
 from rich.panel import Panel
 from rich.rule import Rule
@@ -35,7 +36,7 @@ def print_welcome(model: str, backend_label: str) -> None:
         Panel(
             Text.assemble(
                 ("NebulaCode", "bold white"),
-                ("  v0.7.0\n", "dim"),
+                ("  v0.8.0\n", "dim"),
                 ("model    ", "dim"),
                 (model, "cyan"),
                 ("\nbackend  ", "dim"),
@@ -85,6 +86,46 @@ def print_response(text: str) -> None:
     console.print(Markdown(text))
     console.print(Rule(style="dim bright_blue"))
     console.print()
+
+
+class StreamingResponse:
+    """Live-renders the answer as Markdown while tokens stream in, framed
+    identically to print_response. On a CPU box the answer can take minutes;
+    streaming turns a frozen prompt into visible, real-time output.
+
+    Usage:
+        sr = StreamingResponse(); sr.start()
+        sr.update(delta); ...
+        sr.stop()   # leaves the finished Markdown in scrollback
+    """
+
+    def __init__(self) -> None:
+        self.text = ""
+        self._live: "Live | None" = None
+
+    def start(self) -> None:
+        console.print()
+        console.print(Rule(style="dim bright_blue"))
+        self._live = Live(
+            Markdown(""),
+            console=console,
+            refresh_per_second=8,
+            vertical_overflow="visible",
+        )
+        self._live.start()
+
+    def update(self, delta: str) -> None:
+        self.text += delta
+        if self._live is not None:
+            self._live.update(Markdown(self.text))
+
+    def stop(self) -> None:
+        if self._live is not None:
+            self._live.update(Markdown(self.text))
+            self._live.stop()
+            self._live = None
+        console.print(Rule(style="dim bright_blue"))
+        console.print()
 
 
 def print_error(text: str) -> None:

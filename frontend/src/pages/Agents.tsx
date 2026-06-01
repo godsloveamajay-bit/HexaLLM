@@ -192,7 +192,7 @@ function ThoughtDrawer({ steps, running }: { steps: Step[]; running: boolean }) 
 
 export default function AgentsPage() {
   const [task, setTask] = useState('')
-  const [model, setModel] = useState('llama3.2:3b')
+  const [model, setModel] = useState('llama3:8B')
   const [persona, setPersona] = useState<string>('research')
   const [selectedTools, setSelectedTools] = useState(PERSONAS[0].tools)
   const [customPrompt, setCustomPrompt] = useState('')
@@ -200,7 +200,7 @@ export default function AgentsPage() {
   const [running, setRunning] = useState(false)
   const [currentRun, setCurrentRun] = useState<AgentRun | null>(null)
   const [history, setHistory] = useState<AgentRun[]>([])
-  const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3.2:3b'])
+  const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3:8B'])
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
   const [selectedMcp, setSelectedMcp] = useState<number[]>([])
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus | null>(null)

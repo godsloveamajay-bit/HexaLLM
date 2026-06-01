@@ -1,0 +1,41 @@
+# Containerised Ollama — STAGED, not yet active.
+# Purpose: portability + a near-instant cutover to GPU inference later.
+#
+# It reuses the EXISTING model store (~80GB at /usr/share/ollama/.ollama/models)
+# as a bind mount, so NOTHING re-downloads — the same GGUF blobs run on CPU now
+# and GPU later. The native systemd `ollama.service` keeps running until you
+# deliberately cut over (see README.md), because on a CPU-only box a container
+# buys no speed; the win is the one-line GPU switch when hardware arrives.
+#
+# Requires the compose plugin:  sudo apt-get install -y docker-compose-plugin
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    # localhost-only, mirrors the native service's 127.0.0.1 binding (never
+    # expose 11434 publicly — it's an unauthenticated API).
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      # Reuse the existing on-disk models (blobs + manifests). No re-pull.
+      - /usr/share/ollama/.ollama/models:/root/.ollama/models
+    environment:
+      # Same tuning as the native drop-in (keepalive.conf): pin the LRU-hot set,
+      # single-request latency priority. See [[nebulax-ollama-models]].
+      OLLAMA_KEEP_ALIVE: "-1"
+      OLLAMA_MAX_LOADED_MODELS: "5"
+      OLLAMA_NUM_PARALLEL: "1"
+    restart: unless-stopped
+    # NOTE: intentionally no `mem_limit` — a hard RAM cap would let the kernel
+    # OOM-kill pinned models. The host's 64GB + swappiness=10 is the guardrail.
+
+    # ── GPU: uncomment this block AFTER attaching a GPU + installing
+    #    nvidia-container-toolkit (see README.md "GPU cutover"). That's the
+    #    entire change needed to go from CPU to GPU inference. ──
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]

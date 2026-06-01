@@ -99,7 +99,7 @@ export default function RemoteCLIPage() {
   const [loadingSessions, setLoadingSessions] = useState(true)
   const [selectedSession, setSelectedSession] = useState<string>('')
   const [task, setTask] = useState('')
-  const [model, setModel] = useState('llama3.2:3b')
+  const [model, setModel] = useState('llama3:8B')
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [runState, setRunState] = useState<RunState>({ status: 'idle', steps: [] })
   const outputRef = useRef<HTMLDivElement>(null)

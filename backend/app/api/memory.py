@@ -34,7 +34,7 @@ class MemoryOut(BaseModel):
 
 class AutoExtractRequest(BaseModel):
     messages: List[dict]
-    model: str = "llama3.2:3b"
+    model: str = "llama3:8B"
 
 
 @router.get("", response_model=List[MemoryOut])

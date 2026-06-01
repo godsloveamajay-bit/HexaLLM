@@ -12,7 +12,7 @@ interface Model {
   license: string; downloads: number; likes: number; owner_username?: string; created_at: string;
 }
 
-const POPULAR_BASES = ['llama3.2:3b', 'llama3.1:8b', 'llama3.1:70b', 'mistral:7b', 'phi3:mini', 'gemma2:2b', 'qwen2.5:7b', 'deepseek-r1:7b']
+const POPULAR_BASES = ['qwen3:14B', 'llama3:8B', 'openchat:7B', 'Qwen2.5-Coder:7B', 'deepseek-r1:latest', 'mistral:7b', 'gemma2:2b', 'phi3:mini']
 
 function ModelCard({ model, onDelete, onLike, isOwner }: { model: Model; onDelete: () => void; onLike: () => void; isOwner: boolean }) {
   return (
@@ -137,7 +137,7 @@ export default function ModelsPage() {
           value={pullingModel}
           onChange={(e) => setPullingModel(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && pullModel()}
-          placeholder="Pull an Ollama model (e.g. llama3.2:3b)"
+          placeholder="Pull an Ollama model (e.g. llama3:8B)"
           className="input flex-1"
         />
         <button onClick={pullModel} disabled={!pullingModel.trim()} className="btn-secondary flex-shrink-0">Pull</button>

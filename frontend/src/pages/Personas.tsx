@@ -41,7 +41,7 @@ function PersonaForm({
     name: initial?.name || '',
     description: initial?.description || '',
     emoji: initial?.emoji || '🤖',
-    base_model: initial?.base_model || (ollamaModels[0] || 'llama3.2:3b'),
+    base_model: initial?.base_model || (ollamaModels[0] || 'llama3:8B'),
     system_prompt: initial?.system_prompt || '',
     tools: initial?.tools || [],
     knowledge_base_id: initial?.knowledge_base_id ?? null as number | null,
@@ -204,7 +204,7 @@ export default function PersonasPage() {
   const [mine, setMine] = useState<Persona[]>([])
   const [community, setCommunity] = useState<Persona[]>([])
   const [kbs, setKbs] = useState<KnowledgeBase[]>([])
-  const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3.2:3b'])
+  const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3:8B'])
   const [loading, setLoading] = useState(true)
   const [tab, setTab] = useState<'mine' | 'community'>('mine')
   const [showForm, setShowForm] = useState(false)

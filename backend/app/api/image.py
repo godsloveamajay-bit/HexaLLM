@@ -11,7 +11,7 @@ from ..models.user import User
 router = APIRouter(prefix="/image", tags=["image"])
 
 _OLLAMA_URL = "http://localhost:11434"
-_ENHANCE_MODEL = "llama3.2:3b"
+_ENHANCE_MODEL = "llama3:8B"
 
 _ENHANCE_SYSTEM = (
     "You are an expert image prompt engineer. "
@@ -38,6 +38,42 @@ async def _enhance_prompt(prompt: str) -> str:
         return prompt  # fallback to original if Ollama unavailable
 
 
+async def generate_image_data_url(
+    prompt: str,
+    *,
+    width: int = 1024,
+    height: int = 1024,
+    seed: Optional[int] = None,
+    model: str = "flux",
+    pollinations_enhance: bool = True,
+    negative_prompt: str = "",
+) -> dict:
+    """Generate an image via Pollinations and return it as a base64 data URL.
+
+    Shared by the /image/generate endpoint and the in-chat "generate an image
+    of …" shortcut. Raises httpx errors on failure (callers handle them).
+    """
+    seed = seed if seed is not None else random.randint(1, 2**31)
+    encoded_prompt = urllib.parse.quote(prompt)
+    url = (
+        f"https://image.pollinations.ai/prompt/{encoded_prompt}"
+        f"?width={width}&height={height}"
+        f"&nologo=true&seed={seed}&model={model}"
+    )
+    if pollinations_enhance:
+        url += "&enhance=true"
+    if negative_prompt:
+        url += f"&negative={urllib.parse.quote(negative_prompt)}"
+
+    async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+        resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
+        resp.raise_for_status()
+
+    content_type = resp.headers.get("content-type", "image/jpeg").split(";")[0]
+    b64 = base64.b64encode(resp.content).decode()
+    return {"data_url": f"data:{content_type};base64,{b64}", "seed": seed}
+
+
 class ImageRequest(BaseModel):
     prompt: str
     negative_prompt: str = ""
@@ -54,39 +90,28 @@ async def generate_image(
     req: ImageRequest,
     current_user: User = Depends(get_current_user),
 ):
-    seed = req.seed if req.seed is not None else random.randint(1, 2**31)
-
     final_prompt = req.prompt
     if req.enhance_prompt:
         final_prompt = await _enhance_prompt(req.prompt)
 
-    encoded_prompt = urllib.parse.quote(final_prompt)
-    url = (
-        f"https://image.pollinations.ai/prompt/{encoded_prompt}"
-        f"?width={req.width}&height={req.height}"
-        f"&nologo=true&seed={seed}&model={req.model}"
-    )
-    if req.pollinations_enhance:
-        url += "&enhance=true"
-    if req.negative_prompt:
-        url += f"&negative={urllib.parse.quote(req.negative_prompt)}"
-
     try:
-        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
-            resp = await client.get(url, headers={"User-Agent": "Mozilla/5.0"})
-            resp.raise_for_status()
+        result = await generate_image_data_url(
+            final_prompt,
+            width=req.width,
+            height=req.height,
+            seed=req.seed,
+            model=req.model,
+            pollinations_enhance=req.pollinations_enhance,
+            negative_prompt=req.negative_prompt,
+        )
     except httpx.TimeoutException:
         raise HTTPException(status_code=504, detail="Image generation timed out")
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Image provider error: {exc}")
 
-    content_type = resp.headers.get("content-type", "image/jpeg").split(";")[0]
-    b64 = base64.b64encode(resp.content).decode()
-    data_url = f"data:{content_type};base64,{b64}"
-
     return {
-        "url": data_url,
-        "seed": seed,
+        "url": result["data_url"],
+        "seed": result["seed"],
         "prompt": req.prompt,
         "enhanced_prompt": final_prompt if req.enhance_prompt else None,
     }

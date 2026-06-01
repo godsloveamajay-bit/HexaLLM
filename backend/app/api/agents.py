@@ -5,7 +5,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List
 import json
-from ..core.database import get_db
+from ..core.database import get_db, SessionLocal
 from ..core.security import get_current_user
 from ..models.user import User
 from ..models.chat import AgentRun
@@ -106,8 +106,13 @@ async def run_agent_stream(
     current_user: User = Depends(get_current_user),
 ):
     """Stream agent steps as SSE events."""
+    # Capture primitives now, while the request-scoped session is alive. The
+    # generator below runs AFTER this handler returns (during streaming), by
+    # which point `db`/`current_user` are detached — so it must use its own
+    # session and these captured ids, never the request objects.
+    user_id = current_user.id
     agent_run = AgentRun(
-        user_id=current_user.id,
+        user_id=user_id,
         model_name=data.model,
         task=data.task,
         status="running",
@@ -121,12 +126,13 @@ async def run_agent_stream(
     async def event_stream():
         steps = []
         queue: asyncio.Queue = asyncio.Queue()
+        gen_db = SessionLocal()  # fresh session owned by this generator
 
         async def on_step_q(step):
             steps.append(step)
             await queue.put(step)
 
-        mcp_clients = _resolve_mcp_clients(db, data.mcp_server_ids, current_user.id)
+        mcp_clients = _resolve_mcp_clients(gen_db, data.mcp_server_ids, user_id)
         sandbox = Sandbox()
 
         async def agent_task():
@@ -149,25 +155,37 @@ async def run_agent_stream(
 
         task = asyncio.create_task(agent_task())
 
+        final_status, final_result, final_error = "completed", None, None
         while True:
             item = await queue.get()
             if "__done__" in item:
-                yield f"data: {json.dumps({'type': 'done', 'result': item.get('result'), 'error': item.get('error')})}\n\n"
+                final_result = item.get("result")
+                final_error = item.get("error")
+                if final_error:
+                    final_status = "failed"
+                yield f"data: {json.dumps({'type': 'done', 'result': final_result, 'error': final_error})}\n\n"
                 break
             elif "__error__" in item:
-                yield f"data: {json.dumps({'type': 'error', 'error': item['__error__']})}\n\n"
+                final_status, final_error = "failed", item["__error__"]
+                yield f"data: {json.dumps({'type': 'error', 'error': final_error})}\n\n"
                 break
             else:
                 yield f"data: {json.dumps({'type': 'step', 'step': item})}\n\n"
 
         await task
 
-        run = db.query(AgentRun).filter(AgentRun.id == run_id).first()
-        if run:
-            run.status = "completed"
-            run.steps = steps
-            run.completed_at = datetime.now(timezone.utc)
-            db.commit()
+        # Persist the outcome (result + error + steps) so it shows in history.
+        try:
+            run = gen_db.query(AgentRun).filter(AgentRun.id == run_id).first()
+            if run:
+                run.status = final_status
+                run.result = final_result
+                run.error = final_error
+                run.steps = steps
+                run.completed_at = datetime.now(timezone.utc)
+                gen_db.commit()
+        finally:
+            gen_db.close()
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")
 

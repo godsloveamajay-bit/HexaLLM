@@ -8,6 +8,8 @@ bcrypt==4.0.1
 python-multipart==0.0.12
 pydantic==2.10.3
 pydantic-settings==2.6.1
+email-validator==2.4.0  # required by pydantic EmailStr in schemas/auth.py
+slowapi==0.1.9          # rate limiting, imported in app/main.py
 httpx==0.28.1
 celery==5.4.0
 redis==5.2.1
@@ -17,7 +19,9 @@ transformers==4.47.1
 peft==0.14.0
 datasets==3.2.0
 accelerate==1.2.1
-bitsandbytes==0.45.0
+bitsandbytes==0.45.0  # CUDA-only at runtime; wheel installs on CPU but is unused here
+# CPU-only host: install torch from the CPU wheel index, e.g.
+#   pip install --index-url https://download.pytorch.org/whl/cpu torch==2.5.1
 torch==2.5.1
 tqdm==4.67.1
 psutil==6.1.1

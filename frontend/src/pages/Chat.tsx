@@ -6,7 +6,7 @@ import {
   Mic, MicOff, Square, Download, RotateCcw, Search, Terminal,
   ChevronRight, Wrench,
 } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import js from 'react-syntax-highlighter/dist/esm/languages/prism/javascript'
@@ -114,17 +114,18 @@ function CodeBlock({ language, children }: { language?: string; children: string
 }
 
 // ── CLI Thought Drawer ────────────────────────────────────────────────────
-function ChatThoughtDrawer({ steps, running }: { steps: StepEvent[]; running: boolean }) {
+function ChatThoughtDrawer({ steps, reasoning, running }: { steps: StepEvent[]; reasoning?: string; running: boolean }) {
   const [open, setOpen] = useState(false)
   const prevRunning = useRef(false)
+  const hasReasoning = !!(reasoning && reasoning.trim())
 
   useEffect(() => {
     if (running && !prevRunning.current) setOpen(true)
-    if (!running && prevRunning.current && steps.length > 0) setOpen(false)
+    if (!running && prevRunning.current) setOpen(false)
     prevRunning.current = running
-  }, [running, steps.length])
+  }, [running])
 
-  if (steps.length === 0 && !running) return null
+  if (steps.length === 0 && !hasReasoning && !running) return null
 
   return (
     <div className="mb-2 rounded-lg border border-gray-700/60 bg-gray-950/50 overflow-hidden text-xs">
@@ -132,9 +133,9 @@ function ChatThoughtDrawer({ steps, running }: { steps: StepEvent[]; running: bo
         onClick={() => setOpen(o => !o)}
         className="w-full flex items-center gap-2 px-3 py-2 text-gray-400 hover:text-gray-200 hover:bg-gray-800/40 transition-colors"
       >
-        <Terminal className="w-3.5 h-3.5 text-emerald-500 flex-shrink-0" />
+        <Brain className="w-3.5 h-3.5 text-indigo-400 flex-shrink-0" />
         <span className="flex-1 text-left font-medium">
-          {running ? 'Running…' : `${steps.length} terminal step${steps.length !== 1 ? 's' : ''}`}
+          {running ? 'Agent Thinking…' : 'Agent Thinking'}
         </span>
         {running && (
           <span className="flex gap-0.5">
@@ -146,8 +147,13 @@ function ChatThoughtDrawer({ steps, running }: { steps: StepEvent[]; running: bo
         {open ? <ChevronDown className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />}
       </button>
 
-      {open && steps.length > 0 && (
+      {open && (hasReasoning || steps.length > 0) && (
         <div className="border-t border-gray-700/60 divide-y divide-gray-800/60">
+          {hasReasoning && (
+            <div className="px-3 py-2 text-gray-400 whitespace-pre-wrap font-mono leading-relaxed max-h-72 overflow-y-auto">
+              {reasoning!.trim()}
+            </div>
+          )}
           {steps.map((s, i) => (
             <details key={i} className="group/step">
               <summary className="flex items-center gap-2 px-3 py-2 cursor-pointer hover:bg-gray-800/30 list-none">
@@ -168,19 +174,44 @@ function ChatThoughtDrawer({ steps, running }: { steps: StepEvent[]; running: bo
   )
 }
 
+// Split deepseek-r1 <think>…</think> reasoning out of the visible answer.
+// Handles a still-streaming, unclosed <think> (everything after it is reasoning).
+function splitThink(content: string): { think: string; clean: string; thinking: boolean } {
+  let think = ''
+  const closed = /<think>([\s\S]*?)<\/think>/gi
+  let m: RegExpExecArray | null
+  while ((m = closed.exec(content))) think += (think ? '\n' : '') + m[1].trim()
+  let clean = content.replace(closed, '')
+  let thinking = false
+  const openIdx = clean.lastIndexOf('<think>')
+  if (openIdx !== -1) {
+    think += (think ? '\n' : '') + clean.slice(openIdx + '<think>'.length).trim()
+    clean = clean.slice(0, openIdx)
+    thinking = true
+  }
+  return { think: think.trim(), clean: clean.trim(), thinking }
+}
+
 // ── Message bubble with copy/actions ────────────────────────────────────
 function MessageBubble({
-  msg, index, isLast, isActive, streamPhase, sending, onRegenerate, isCliActive,
+  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, isCliActive,
 }: {
   msg: Message; index: number; isLast: boolean
-  isActive: boolean; streamPhase: string; sending: boolean
+  isActive: boolean; streamPhase: string; warmingModel?: string; sending: boolean
   onRegenerate: () => void; isCliActive: boolean
 }) {
   const [copied, setCopied] = useState(false)
+  const isWarming   = streamPhase === 'warming'  && isLast && msg.role === 'assistant'
   const isThinking  = streamPhase === 'thinking' && isLast && msg.role === 'assistant'
   const isTyping    = streamPhase === 'typing'   && isLast && msg.role === 'assistant'
-  const isFastStream = sending && isLast && msg.role === 'assistant'
-  const streaming   = isThinking || isTyping || isFastStream
+  // During the cold-load warm-up there are no tokens yet, so suppress the
+  // generic "sending" typing indicator and show the warming notice instead.
+  const isFastStream = sending && !isWarming && isLast && msg.role === 'assistant'
+  const streaming   = isWarming || isThinking || isTyping || isFastStream
+  // Fold deepseek-r1 <think> reasoning into the Agent Thinking drawer; show only
+  // the clean answer in the message body.
+  const { think, clean, thinking: thinkOpen } = splitThink(msg.content)
+  const reasoningStreaming = (isTyping || isFastStream) && thinkOpen
 
   const copyMsg = () => {
     navigator.clipboard.writeText(msg.content).then(() => {
@@ -204,10 +235,17 @@ function MessageBubble({
       {/* Content */}
       {msg.role === 'assistant' ? (
         <div className="max-w-2xl flex-1">
-          {(msg.steps && msg.steps.length > 0 || isCliActive) && (
-            <ChatThoughtDrawer steps={msg.steps || []} running={isCliActive} />
+          {((msg.steps && msg.steps.length > 0) || isCliActive || !!think) && (
+            <ChatThoughtDrawer steps={msg.steps || []} reasoning={think} running={isCliActive || reasoningStreaming} />
           )}
-          {isThinking ? (
+          {isWarming ? (
+            <div className="flex items-center gap-2 py-2">
+              <span className="inline-block w-3.5 h-3.5 border-2 border-gray-600 border-t-amber-400 rounded-full animate-spin" />
+              <span className="text-sm text-amber-300/90">
+                Warming up{warmingModel ? ` ${warmingModel}` : ' the model'}… the first response after idle can take up to a minute.
+              </span>
+            </div>
+          ) : isThinking ? (
             <div className="flex items-center gap-1.5 py-2">
               {[0, 0.2, 0.4].map((d, i) => (
                 <span key={i} className="w-2 h-2 rounded-full bg-primary-500 typing-dot" style={{ animationDelay: `${d}s` }} />
@@ -215,11 +253,16 @@ function MessageBubble({
             </div>
           ) : (isTyping || isFastStream) ? (
             <p className="whitespace-pre-wrap leading-relaxed text-gray-200 text-sm">
-              {msg.content}<span className="stream-cursor text-primary-500" />
+              {clean}<span className="stream-cursor text-primary-500" />
             </p>
           ) : (
             <div className="prose prose-sm">
               <ReactMarkdown
+                // Allow base64 data: image URLs (generated images stream in as
+                // data URLs); keep default sanitization for everything else.
+                urlTransform={(url) =>
+                  url.startsWith('data:image/') ? url : defaultUrlTransform(url)
+                }
                 components={{
                   code({ className, children }) {
                     const lang = /language-(\w+)/.exec(className || '')?.[1]
@@ -228,9 +271,20 @@ function MessageBubble({
                       ? <CodeBlock language={lang}>{code}</CodeBlock>
                       : <code className={className}>{children}</code>
                   },
+                  img({ src, alt }) {
+                    return (
+                      <img
+                        src={src}
+                        alt={alt || ''}
+                        loading="lazy"
+                        className="rounded-lg border border-gray-700/60 max-w-full my-2"
+                        style={{ maxHeight: '512px' }}
+                      />
+                    )
+                  },
                 }}
               >
-                {msg.content}
+                {clean}
               </ReactMarkdown>
             </div>
           )}
@@ -310,7 +364,8 @@ export default function ChatPage() {
   const [input, setInput] = useState('')
   const [model, setModel] = useState('nebulax:balanced')
   const [sending, setSending] = useState(false)
-  const [streamPhase, setStreamPhase] = useState<'idle' | 'thinking' | 'typing'>('idle')
+  const [streamPhase, setStreamPhase] = useState<'idle' | 'thinking' | 'warming' | 'typing'>('idle')
+  const [warmingModel, setWarmingModel] = useState<string>('')
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false)
   const [sessionSearch, setSessionSearch] = useState('')
   const [systemPrompt, setSystemPrompt] = useState('')
@@ -323,6 +378,10 @@ export default function ChatPage() {
   const [templates, setTemplates] = useState<Template[]>([])
   const [showTemplates, setShowTemplates] = useState(false)
   const [newTemplateName, setNewTemplateName] = useState('')
+  const [personas, setPersonas] = useState<any[]>([])
+  const [showPersonas, setShowPersonas] = useState(false)
+  // Per-message temperature override (applied when a persona is selected).
+  const [temperature, setTemperature] = useState<number | null>(null)
   const [listening, setListening] = useState(false)
   const [cliSessions, setCliSessions] = useState<CliSession[]>([])
   const [activeCli, setActiveCli] = useState<string>('')
@@ -352,7 +411,7 @@ export default function ChatPage() {
   }, [showTemplates])
 
   useEffect(() => {
-    loadSessions(); loadKbs(); loadVariants(); loadOllamaModels(); loadTemplates(); loadCliSessions()
+    loadSessions(); loadKbs(); loadVariants(); loadOllamaModels(); loadTemplates(); loadPersonas(); loadCliSessions()
   }, [])
 
   useEffect(() => {
@@ -372,6 +431,9 @@ export default function ChatPage() {
   }
   const loadVariants = async () => {
     try { const { data } = await api.get('/models/nebulax/variants'); setVariants(data.variants || []) } catch {}
+  }
+  const loadPersonas = async () => {
+    try { const { data } = await api.get('/personas'); setPersonas(data || []) } catch {}
   }
   const loadTemplates = async () => {
     try { const { data } = await api.get('/templates'); setTemplates(data) } catch {}
@@ -396,7 +458,7 @@ export default function ChatPage() {
         const first: Session = data[0]
         setActiveSession(first); setModel(first.model_name)
         const { data: msgs } = await api.get(`/chat/sessions/${first.id}/messages`)
-        setMessages(msgs.map((m: any) => ({ role: m.role as Message['role'], content: m.content })))
+        setMessages(msgs.map((m: any) => ({ role: m.role as Message['role'], content: m.content, steps: m.steps || undefined })))
       }
     } catch {}
   }
@@ -425,10 +487,10 @@ export default function ChatPage() {
     const live = liveStreams.get(session.id)
     if (live) {
       if (live.done) {
-        try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages(data.map((m: any) => ({ role: m.role as Message['role'], content: m.content }))) } catch {}
+        try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages(data.map((m: any) => ({ role: m.role as Message['role'], content: m.content, steps: m.steps || undefined }))) } catch {}
         liveStreams.delete(session.id)
       } else {
-        try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages([...data.map((m: any) => ({ role: m.role as Message['role'], content: m.content })), { role: 'assistant' as const, content: live.content }]) } catch { setMessages([{ role: 'assistant' as const, content: live.content }]) }
+        try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages([...data.map((m: any) => ({ role: m.role as Message['role'], content: m.content, steps: m.steps || undefined })), { role: 'assistant' as const, content: live.content }]) } catch { setMessages([{ role: 'assistant' as const, content: live.content }]) }
         setSending(true); setStreamPhase(live.content ? 'typing' : 'thinking')
         live.onComplete.push((content, citations, route, usage, latency_ms) => {
           if (!mountedRef.current) return
@@ -439,7 +501,7 @@ export default function ChatPage() {
       }
       return
     }
-    try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages(data.map((m: any) => ({ role: m.role, content: m.content }))) } catch {}
+    try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages(data.map((m: any) => ({ role: m.role, content: m.content, steps: m.steps || undefined }))) } catch {}
   }
 
   const deleteSession = async (id: number, e: React.MouseEvent) => {
@@ -480,7 +542,7 @@ export default function ChatPage() {
       const resp = await fetch(`${baseURL}/chat/completions`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${localStorage.getItem('token')}` },
-        body: JSON.stringify({ model, messages: userMessages, session_id: session.id, system_prompt: systemPrompt || null, stream: true, knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null }),
+        body: JSON.stringify({ model, messages: userMessages, session_id: session.id, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null }),
         signal: abortRef.current.signal,
       })
 
@@ -505,6 +567,11 @@ export default function ChatPage() {
           if (event === 'route') { try { entry.route = JSON.parse(data) } catch {} }
           else if (event === 'citations') { try { entry.citations = JSON.parse(data) } catch {} }
           else if (event === 'usage') { try { const p = JSON.parse(data); entry.usage = { prompt_tokens: p.prompt_tokens || 0, completion_tokens: p.completion_tokens || 0 }; entry.latency_ms = p.latency_ms || 0 } catch {} }
+          else if (event === 'warming') {
+            // Model isn't resident yet (cold start) — first token may take a while.
+            try { const w = JSON.parse(data); setWarmingModel(w.model || '') } catch {}
+            setStreamPhase('warming')
+          }
           else if (event === 'step') {
             try {
               const step: StepEvent = JSON.parse(data)
@@ -549,6 +616,7 @@ export default function ChatPage() {
         })
         setSending(false)
         setStreamPhase('idle')
+        setWarmingModel('')
       }
       setAttachment(null)
       if (!errored && isFirst && session) {
@@ -634,6 +702,16 @@ export default function ChatPage() {
   }
 
   const applyTemplate = (t: Template) => { setSystemPrompt(t.content); setShowSystem(true); setShowTemplates(false); if (model !== CUSTOM_VARIANT_ID) setModel(CUSTOM_VARIANT_ID) }
+  const applyPersona = (p: any) => {
+    // A persona is a saved chat config: model + system prompt + KB + temperature.
+    if (p.base_model) setModel(p.base_model)
+    setSystemPrompt(p.system_prompt || '')
+    setShowSystem(true)
+    if (p.knowledge_base_id) setKbId(p.knowledge_base_id)
+    setTemperature(typeof p.temperature === 'number' ? p.temperature : null)
+    setShowPersonas(false)
+    toast.success(`Persona "${p.name}" applied`)
+  }
   const saveTemplate = async () => {
     if (!newTemplateName.trim() || !systemPrompt.trim()) return
     try { const { data } = await api.post('/templates', { name: newTemplateName.trim(), content: systemPrompt }); setTemplates(t => [data, ...t]); setNewTemplateName(''); toast.success('Template saved!') } catch { toast.error('Failed to save') }
@@ -720,7 +798,14 @@ export default function ChatPage() {
                 setActiveSession(a => a ? { ...a, model_name: m } : a)
               }
             }} className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-500">
-              {variants.map((v) => <option key={v.id} value={v.id} disabled={!v.ready}>{v.label}{v.ready ? '' : ' (unavailable)'}</option>)}
+              <optgroup label="NebulaX (smart routing)">
+                {variants.map((v) => <option key={v.id} value={v.id} disabled={!v.ready}>{v.label}{v.ready ? '' : ' (unavailable)'}</option>)}
+              </optgroup>
+              {ollamaModels.length > 0 && (
+                <optgroup label="Models (direct)">
+                  {ollamaModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                </optgroup>
+              )}
             </select>
 
             <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary-900/20 text-primary-300 text-xs font-medium border border-primary-800/40 flex-shrink-0">
@@ -734,13 +819,36 @@ export default function ChatPage() {
               </button>
             )}
 
+            {/* Personas */}
+            <div className="relative flex items-center flex-shrink-0">
+              <button onClick={() => setShowPersonas(!showPersonas)} className="btn-ghost text-xs gap-1 p-1.5" title="Personas">
+                <Bot className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Personas</span>
+              </button>
+              {showPersonas && (
+                <div className="absolute right-0 top-full mt-1 w-72 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 p-3 space-y-1">
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pb-1">Personas</p>
+                  {personas.length === 0 && <p className="text-xs text-gray-600">No personas yet. Create one on the Personas page.</p>}
+                  {personas.map((p) => (
+                    <div key={p.id} onClick={() => applyPersona(p)} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-gray-800">
+                      <span className="text-base leading-none">{p.emoji || '🤖'}</span>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm text-gray-200 truncate">{p.name}</p>
+                        <p className="text-xs text-gray-500 truncate">{p.base_model}{p.description ? ` · ${p.description}` : ''}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
             {/* Templates */}
             <div className="relative flex items-center gap-1 flex-shrink-0" data-templates-panel>
               <button onClick={() => setShowTemplates(!showTemplates)} className="btn-ghost text-xs gap-1 p-1.5" title="Prompt templates">
                 <BookMarked className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Templates</span>
               </button>
-              {model === CUSTOM_VARIANT_ID && (
+              {(model === CUSTOM_VARIANT_ID || !model.startsWith('nebulax:')) && (
                 <button onClick={() => setShowSystem(!showSystem)} className="btn-ghost text-xs gap-1 p-1.5">
                   <ChevronDown className={clsx('w-3 h-3 transition-transform', showSystem && 'rotate-180')} />
                   <span className="hidden sm:inline">System</span>
@@ -793,10 +901,10 @@ export default function ChatPage() {
           </div>
         </div>
 
-        {model === CUSTOM_VARIANT_ID && showSystem && (
+        {(model === CUSTOM_VARIANT_ID || !model.startsWith('nebulax:')) && showSystem && (
           <div className="px-4 py-2 border-b border-gray-800 bg-gray-900/50">
             <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} placeholder="You are a helpful assistant that…" rows={2} className="input text-sm resize-none" />
-            <p className="text-xs text-gray-500 mt-1">Custom variant lets you set the system prompt. Other variants enforce their own behaviour.</p>
+            <p className="text-xs text-gray-500 mt-1">Custom variant & direct models use this system prompt. Branded variants enforce their own behaviour.</p>
           </div>
         )}
 
@@ -831,7 +939,7 @@ export default function ChatPage() {
               key={i} msg={msg} index={i}
               isLast={i === messages.length - 1}
               isActive={(streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
-              streamPhase={streamPhase} sending={sending}
+              streamPhase={streamPhase} warmingModel={warmingModel} sending={sending}
               onRegenerate={regenerate}
               isCliActive={!!activeCli && (streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
             />

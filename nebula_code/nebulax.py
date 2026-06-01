@@ -7,7 +7,7 @@ appear in the NebulaX web UI history.
 """
 
 import json
-from typing import Dict, List, Optional
+from typing import AsyncIterator, Dict, List, Optional
 
 import httpx
 
@@ -29,19 +29,20 @@ class NebulaXClient:
             r.raise_for_status()
             return [m["name"] for m in r.json().get("models", [])]
 
-    async def full_response(
+    async def stream_response(
         self,
         model: str,
         messages: List[Dict],
         system: str,
         temperature: float = 0.1,
-    ) -> str:
-        """Streaming completion via the OpenAI-compat endpoint.
+    ) -> AsyncIterator[str]:
+        """Token stream via the OpenAI-compat endpoint.
 
-        Uses stream=True so Cloudflare sees a continuous byte flow and
-        never hits its 100-second idle-connection timeout (524 error).
+        Uses stream=True so Cloudflare sees a continuous byte flow and never
+        hits its 100-second idle-connection timeout (524). Presence of this
+        method lets the Agent render the answer live instead of buffering it.
         """
-        msgs = []
+        msgs: List[Dict] = []
         if system:
             msgs.append({"role": "system", "content": system})
         msgs.extend(messages)
@@ -52,7 +53,6 @@ class NebulaXClient:
             "temperature": temperature,
             "stream": True,
         }
-        parts: List[str] = []
         async with httpx.AsyncClient(timeout=None) as c:
             async with c.stream(
                 "POST",
@@ -70,10 +70,21 @@ class NebulaXClient:
                     try:
                         chunk = json.loads(data)
                         content = chunk["choices"][0]["delta"].get("content", "")
-                        if content:
-                            parts.append(content)
                     except (json.JSONDecodeError, KeyError):
-                        pass
+                        continue
+                    if content:
+                        yield content
+
+    async def full_response(
+        self,
+        model: str,
+        messages: List[Dict],
+        system: str,
+        temperature: float = 0.1,
+    ) -> str:
+        parts: List[str] = []
+        async for chunk in self.stream_response(model, messages, system, temperature):
+            parts.append(chunk)
         return "".join(parts)
 
     # ── Knowledge bases ──────────────────────────────────────────────────────
@@ -187,13 +198,15 @@ class PollinationsClient:
     async def list_models(self) -> List[str]:
         return list(self.MODELS)
 
-    async def full_response(
+    async def stream_response(
         self,
         model: str,
         messages: List[Dict],
         system: str,
         temperature: float = 0.1,
-    ) -> str:
+    ) -> AsyncIterator[str]:
+        """Token stream via Pollinations' OpenAI-compat SSE. Presence of this
+        method lets the Agent render the answer live instead of buffering it."""
         msgs: List[Dict] = []
         if system:
             msgs.append({"role": "system", "content": system})
@@ -203,16 +216,41 @@ class PollinationsClient:
             "model": model,
             "messages": msgs,
             "temperature": temperature,
-            "stream": False,
+            "stream": True,
         }
-        async with httpx.AsyncClient(timeout=120) as c:
-            r = await c.post(
+        async with httpx.AsyncClient(timeout=None) as c:
+            async with c.stream(
+                "POST",
                 f"{self.BASE}/",
                 json=payload,
                 headers={
                     "Content-Type": "application/json",
-                    "User-Agent": "NebulaCode/0.6",
+                    "User-Agent": "NebulaCode/0.8",
                 },
-            )
-            r.raise_for_status()
-            return r.json()["choices"][0]["message"]["content"]
+            ) as r:
+                r.raise_for_status()
+                async for line in r.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                        content = chunk["choices"][0]["delta"].get("content", "")
+                    except (json.JSONDecodeError, KeyError):
+                        continue
+                    if content:
+                        yield content
+
+    async def full_response(
+        self,
+        model: str,
+        messages: List[Dict],
+        system: str,
+        temperature: float = 0.1,
+    ) -> str:
+        parts: List[str] = []
+        async for chunk in self.stream_response(model, messages, system, temperature):
+            parts.append(chunk)
+        return "".join(parts)

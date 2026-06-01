@@ -18,7 +18,15 @@ from prompt_toolkit.styles import Style
 from .agent import Agent, OllamaClient
 from .config import CONFIG_DIR, load_config, save_config
 from .tools import TOOL_DESCRIPTIONS, TOOL_FUNCS
-from .ui import console, print_error, print_info, print_response, print_tool, print_welcome
+from .ui import (
+    StreamingResponse,
+    console,
+    print_error,
+    print_info,
+    print_response,
+    print_tool,
+    print_welcome,
+)
 
 HISTORY_FILE = CONFIG_DIR / "history"
 PROMPT_STYLE = Style.from_dict(
@@ -47,7 +55,7 @@ HELP_TEXT = """
 [bold]Backends[/]  (priority: NebulaX › Ollama › Pollinations)
   [dim]auto[/]          NebulaX if logged in, then Ollama if running, then Pollinations
   [dim]pollinations[/]  Free cloud — works out of the box, no install needed
-  [dim]ollama[/]        Local inference — run [cyan]ollama pull llama3.2[/] first
+  [dim]ollama[/]        Local inference — run [cyan]ollama pull llama3[/] first
   Switch with: [cyan]nebula set backend pollinations[/]  or  [cyan]nebula set backend ollama[/]
 
 [bold]Built-in tools[/]
@@ -120,6 +128,26 @@ async def _pick_backend(cfg):
     return cloud, "Pollinations  [dim](free cloud · no setup)[/]", None, None
 
 
+# Fast-loading models (within Cloudflare's ~100s 524 window on this CPU-only box).
+# Prefer these over models[0] for auto-selection, since the server lists the
+# largest model (qwen3:14B, ~290s cold-load) first — picking it blindly causes a
+# Cloudflare 524 on first token. Matched case-insensitively against installed names.
+_FAST_MODEL_PREFS = ("llama3:8B", "openchat:7B", "Qwen2.5-Coder:7B")
+
+
+def _pick_default_model(models: list) -> str:
+    """Pick a sensible default from the available models.
+
+    Prefers a known fast model (cold-loads inside Cloudflare's 524 window) over
+    the server's models[0], which is typically the slowest/largest model.
+    """
+    lower = {m.lower(): m for m in models}
+    for pref in _FAST_MODEL_PREFS:
+        if pref.lower() in lower:
+            return lower[pref.lower()]
+    return models[0]
+
+
 async def _interactive(cfg) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -131,8 +159,10 @@ async def _interactive(cfg) -> None:
         if cfg.model not in PollinationsClient.MODELS:
             cfg.model = PollinationsClient.DEFAULT_MODEL
     elif nx is None:  # Ollama
-        if cfg.model not in ("llama3.2:3b", "phi3:mini") and ":" not in cfg.model:
-            cfg.model = "llama3.2:3b"
+        if ":" not in cfg.model:
+            # Bare/invalid model name — fall back to a default that exists;
+            # the live-list validation just below corrects it if needed.
+            cfg.model = "llama3:8B"
 
     agent = Agent(
         model=cfg.model,
@@ -151,10 +181,10 @@ async def _interactive(cfg) -> None:
                 console.print(
                     f"[yellow]Note:[/] '{cfg.model}' not found. "
                     f"Available: {', '.join(models[:5])}. "
-                    f"Switching to [cyan]{models[0]}[/]."
+                    f"Switching to [cyan]{_pick_default_model(models)}[/]."
                 )
-                cfg.model = models[0]
-                agent.model = models[0]
+                cfg.model = _pick_default_model(models)
+                agent.model = cfg.model
         except Exception as e:
             src = "NebulaX" if nx else "Ollama"
             console.print(f"[red]Cannot reach {src}:[/] {e}")
@@ -293,6 +323,7 @@ async def _interactive(cfg) -> None:
 
         # ── agent run ─────────────────────────────────────────────────────
         done_event: Optional[dict] = None
+        stream: Optional[StreamingResponse] = None
 
         with console.status("[dim]Thinking…[/]", spinner="dots") as status:
             async for event in agent.run(user_input, active_tool_funcs, active_tool_descs):
@@ -305,6 +336,14 @@ async def _interactive(cfg) -> None:
                         event["output"],
                     )
                     status.start()
+                elif event["type"] == "answer_chunk":
+                    # First token of the final answer — swap the spinner for a
+                    # live Markdown render so output appears as it generates.
+                    if stream is None:
+                        status.stop()
+                        stream = StreamingResponse()
+                        stream.start()
+                    stream.update(event["text"])
                 elif event["type"] == "done":
                     done_event = event
                 elif event["type"] == "error":
@@ -312,8 +351,13 @@ async def _interactive(cfg) -> None:
                     print_error(event["text"])
                     status.start()
 
+        if stream is not None:
+            stream.stop()
+
         if done_event:
-            print_response(done_event["text"])
+            # If the answer already streamed live, it's on screen — don't repaint.
+            if not done_event.get("streamed"):
+                print_response(done_event["text"])
             # sync run to NebulaX in the background
             if nx and done_event.get("steps"):
                 try:
@@ -399,7 +443,7 @@ async def _google_login(url: str) -> None:
 # ── Click entry points ─────────────────────────────────────────────────────
 
 @click.group(invoke_without_command=True, context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option("0.7.0", "-V", "--version")
+@click.version_option("0.8.0", "-V", "--version")
 @click.option("--model", "-m", default=None, help="Model to use (overrides config).")
 @click.option("--ollama-url", default=None, help="Ollama base URL (overrides config).")
 @click.pass_context
@@ -572,6 +616,21 @@ def cmd_daemon(no_reconnect: bool):
             sys.exit(1)
 
         backend = nx
+
+        # Validate / auto-select model — same logic as interactive mode.
+        try:
+            models = await backend.list_models()
+            if models and cfg.model not in models:
+                picked = _pick_default_model(models)
+                console.print(
+                    f"[yellow]Note:[/] Model [cyan]{cfg.model!r}[/] not available on this server. "
+                    f"Switching to [cyan]{picked}[/]."
+                )
+                cfg.model = picked
+                save_config(cfg)
+        except Exception:
+            pass
+
         agent = Agent(
             model=cfg.model,
             max_steps=cfg.max_steps,

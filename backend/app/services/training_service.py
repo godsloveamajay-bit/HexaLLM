@@ -59,8 +59,8 @@ def run_training_job(job_id: int, model_base: str, dataset_path: str, config: di
         if tokenizer.pad_token is None:
             tokenizer.pad_token = tokenizer.eos_token
 
-        load_kwargs = {"device_map": "auto"}
-        if config.get("method") == "qlora":
+        use_cuda = torch.cuda.is_available()
+        if config.get("method") == "qlora" and use_cuda:
             from transformers import BitsAndBytesConfig
             bnb_config = BitsAndBytesConfig(
                 load_in_4bit=True,
@@ -68,9 +68,19 @@ def run_training_job(job_id: int, model_base: str, dataset_path: str, config: di
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch.bfloat16,
             )
-            load_kwargs["quantization_config"] = bnb_config
+            load_kwargs = {"device_map": "auto", "quantization_config": bnb_config}
+        elif use_cuda:
+            load_kwargs = {"device_map": "auto", "torch_dtype": torch.bfloat16}
+        else:
+            # CPU-only box: QLoRA/4-bit needs a GPU (the bitsandbytes here is built
+            # without GPU support). Fall back to full-precision LoRA on CPU — works,
+            # but slow, so keep base models small (≤1-3B) and datasets tiny.
+            load_kwargs = {"torch_dtype": torch.float32}
+            update_job(logs="[WARN] No GPU detected — training LoRA on CPU in float32 (slow); QLoRA/4-bit disabled. Use a small base model.")
 
         model = AutoModelForCausalLM.from_pretrained(model_base, **load_kwargs)
+        if not use_cuda:
+            model = model.to("cpu")
 
         lora_config = LoraConfig(
             task_type=TaskType.CAUSAL_LM,

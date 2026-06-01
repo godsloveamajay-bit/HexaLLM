@@ -25,36 +25,36 @@ _METADATA: dict[str, dict] = {
         "install_cmd": "pip install nebulacode-0.7.0-py3-none-any.whl",
         "run_cmd":     "nebula",
     },
-    "NebulaX AI_0.6.0_amd64.deb": {
+    "NebulaX.AI_0.7.0_amd64.deb": {
         "name":        "NebulaX Desktop",
-        "version":     "0.6.0",
+        "version":     "0.7.0",
         "description": "Native desktop app for Linux (Debian/Ubuntu) — offline model management, local inference",
         "platform":    "linux",
         "type":        "desktop-app",
-        "install_cmd": "sudo dpkg -i 'NebulaX AI_0.6.0_amd64.deb'",
+        "install_cmd": "sudo dpkg -i 'NebulaX.AI_0.7.0_amd64.deb'",
         "run_cmd":     "nebulax-ai",
     },
-    "NebulaX-AI_0.6.0_x64-setup.exe": {
+    "NebulaX.AI_0.7.0_x64-setup.exe": {
         "name":        "NebulaX Desktop",
-        "version":     "0.6.0",
+        "version":     "0.7.0",
         "description": "Native desktop app for Windows — offline model management, local inference",
         "platform":    "windows",
         "type":        "desktop-app",
-        "install_cmd": "Run NebulaX-AI_0.6.0_x64-setup.exe",
+        "install_cmd": "Run NebulaX.AI_0.7.0_x64-setup.exe",
         "run_cmd":     "NebulaX AI",
     },
-    "NebulaX-AI_0.6.0_x64.dmg": {
+    "NebulaX.AI_0.7.0_universal.dmg": {
         "name":        "NebulaX Desktop",
-        "version":     "0.6.0",
-        "description": "Native desktop app for macOS — offline model management, local inference",
+        "version":     "0.7.0",
+        "description": "Native desktop app for macOS (Apple Silicon + Intel) — offline model management, local inference",
         "platform":    "macos",
         "type":        "desktop-app",
-        "install_cmd": "Open NebulaX-AI_0.6.0_x64.dmg and drag to Applications",
+        "install_cmd": "Open NebulaX.AI_0.7.0_universal.dmg and drag to Applications",
         "run_cmd":     "NebulaX AI",
     },
-    "nebulax-ai-0.6.0.apk": {
+    "nebulax-ai-0.7.0-android.apk": {
         "name":        "NebulaX Mobile",
-        "version":     "0.6.0",
+        "version":     "0.7.0",
         "description": "Android app — chat with your models on the go",
         "platform":    "android",
         "type":        "mobile-app",

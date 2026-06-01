@@ -29,3 +29,28 @@ dist/
 
 # Misc
 *.DS_Store
+
+# Secrets (root .env holds OAuth creds — never commit)
+.env
+*.env
+!.env.example
+
+# SQLite runtime + WAL/SHM + stray DBs
+*.db
+*.db-shm
+*.db-wal
+
+# User data (uploads, datasets) — not source
+backend/data/datasets/
+backend/data/uploads/
+
+# Desktop/mobile build artifacts (served at runtime, not source)
+backend/downloads/*.dmg
+backend/downloads/*.deb
+backend/downloads/*.exe
+backend/downloads/*.apk
+backend/downloads/*.AppImage
+
+# Python caches
+__pycache__/
+*.pyc

@@ -29,6 +29,9 @@ class ChatMessage(Base):
     content = Column(Text, nullable=False)
     tokens_used = Column(Integer, nullable=True)
     latency_ms = Column(Integer, nullable=True)
+    # Persisted agent tool-steps (CLI ReAct loop) so the "Agent Thinking" drawer
+    # survives a reload. List of {name, input, output, thought}.
+    steps = Column(JSON, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     session = relationship("ChatSession", back_populates="messages")

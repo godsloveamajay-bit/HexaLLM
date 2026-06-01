@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Plus, Play, Trash2, Pencil, Loader2, Clock, CheckCircle2, XCircle, Zap, Bot } from 'lucide-react'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
@@ -43,7 +43,7 @@ function WorkflowForm({ initial, ollamaModels, onSave, onCancel }: {
     name: initial?.name || '',
     description: initial?.description || '',
     task: initial?.task || '',
-    model: initial?.model || (ollamaModels[0] || 'llama3.2:3b'),
+    model: initial?.model || (ollamaModels[0] || 'llama3:8B'),
     tools: initial?.tools || ['web_search'],
     system_prompt: initial?.system_prompt || '',
     max_steps: initial?.max_steps ?? 10,
@@ -127,10 +127,12 @@ function WorkflowForm({ initial, ollamaModels, onSave, onCancel }: {
 export default function WorkflowsPage() {
   const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [loading, setLoading] = useState(true)
-  const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3.2:3b'])
+  const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3:8B'])
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Workflow | null>(null)
   const [running, setRunning] = useState<Set<number>>(new Set())
+  // run_count at the moment each workflow was triggered → detect completion.
+  const runBaseline = useRef<Map<number, number>>(new Map())
 
   const load = async () => {
     try {
@@ -147,6 +149,32 @@ export default function WorkflowsPage() {
   }
 
   useEffect(() => { load() }, [])
+
+  // While any workflow is running, poll until each one's run_count increments
+  // (= the background agent finished), then surface the result.
+  useEffect(() => {
+    if (running.size === 0) return
+    const iv = setInterval(async () => {
+      try {
+        const { data } = await api.get('/workflows')
+        setWorkflows(data)
+        setRunning((cur) => {
+          const next = new Set(cur)
+          for (const id of cur) {
+            const wf = data.find((w: Workflow) => w.id === id)
+            if (wf && wf.run_count > (runBaseline.current.get(id) ?? 0)) {
+              next.delete(id)
+              runBaseline.current.delete(id)
+              if (wf.last_error) toast.error(`"${wf.name}" failed`)
+              else toast.success(`"${wf.name}" finished`)
+            }
+          }
+          return next
+        })
+      } catch {}
+    }, 4000)
+    return () => clearInterval(iv)
+  }, [running])
 
   const save = async (data: any) => {
     if (editing) {
@@ -169,15 +197,18 @@ export default function WorkflowsPage() {
   }
 
   const run = async (id: number) => {
+    // Remember the run_count now; the poller marks it done when this increments.
+    // (Agent runs take minutes on CPU, so we keep "running" until then.)
+    const wf = workflows.find((w) => w.id === id)
+    runBaseline.current.set(id, wf?.run_count ?? 0)
     setRunning((s) => new Set(s).add(id))
     try {
       await api.post(`/workflows/${id}/run`)
-      toast.success('Workflow triggered — running in background')
-      setTimeout(() => load(), 3000)
+      toast.success('Workflow started — running in background…')
     } catch {
       toast.error('Failed to trigger')
-    } finally {
       setRunning((s) => { const next = new Set(s); next.delete(id); return next })
+      runBaseline.current.delete(id)
     }
   }
 

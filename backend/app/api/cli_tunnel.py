@@ -130,7 +130,7 @@ def list_cli_sessions(current_user: User = Depends(get_current_user)):
 class CliRunRequest(BaseModel):
     task: str
     session_id: Optional[str] = None
-    model: str = "llama3.2:3b"
+    model: str = "llama3:8B"
     tools: List[str] = ["web_search", "code_exec", "bash_exec", "read_file", "write_file"]
 
 

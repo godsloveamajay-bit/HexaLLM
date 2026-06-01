@@ -25,6 +25,47 @@ from ..services import model_router
 router = APIRouter(prefix="/chat", tags=["chat"])
 
 
+async def _stream_with_keepalive(agen, interval: float = 20.0):
+    """Iterate an async generator, emitting a keepalive sentinel during long gaps.
+
+    A cold model load on this CPU-only box can take minutes before the first
+    token. Cloudflare returns 524 if the origin sends nothing for ~100s, so we
+    interleave keepalives to hold the connection open until the first real token
+    arrives. Yields ("chunk", value) for real items and ("ping", None) otherwise.
+    """
+    queue: asyncio.Queue = asyncio.Queue()
+    _DONE = object()
+
+    async def _pump():
+        try:
+            async for item in agen:
+                await queue.put(("chunk", item))
+        except Exception as exc:  # propagate to the consumer
+            await queue.put(("error", exc))
+        finally:
+            await queue.put(("done", _DONE))
+
+    task = asyncio.create_task(_pump())
+    try:
+        while True:
+            try:
+                kind, value = await asyncio.wait_for(queue.get(), timeout=interval)
+            except asyncio.TimeoutError:
+                yield ("ping", None)
+                continue
+            if kind == "done":
+                return
+            if kind == "error":
+                raise value
+            yield ("chunk", value)
+    finally:
+        task.cancel()
+        try:
+            await task
+        except BaseException:
+            pass
+
+
 # ── CLI-backed tool descriptions ───────────────────────────────────────────────
 
 _CLI_TOOLS = {
@@ -193,13 +234,14 @@ async def _cli_agent_stream(
         else:
             output = await _dispatch_cli_tool(cli_session, tool_name, tool_input)
 
-        step_payload = json.dumps({
+        step_obj = {
             "name":    tool_name,
             "input":   tool_input,
             "output":  output,
             "thought": thought,
-        })
-        yield f"event: step\ndata: {step_payload}\n\n"
+        }
+        collected.setdefault("steps", []).append(step_obj)
+        yield f"event: step\ndata: {json.dumps(step_obj)}\n\n"
 
         agent_messages.append({"role": "user", "content": f"Tool result:\n{output}"})
 
@@ -361,6 +403,27 @@ async def chat_completions(
     # Route nebulax:* variants → concrete Ollama model + variant params.
     eff_model, variant_prompt, eff_temp, eff_ctx, eff_max, route_meta = await _apply_router(req)
 
+    # If the request carries an image but the routed model can't see, switch to a
+    # pulled vision model — so any department transparently handles images.
+    if images and not model_router.is_vision_model(eff_model):
+        _avail = [m.get("name", "") for m in await ollama.list_models()]
+        _vis = model_router.vision_model_for(_avail)
+        if _vis:
+            eff_model = _vis
+            route_meta = {**(route_meta or {"variant": req.model}), "vision_switch": _vis}
+
+    # Suppress chain-of-thought for trivial greetings/acknowledgements sent to a
+    # reasoning model, so "hi" answers instantly instead of reasoning for minutes.
+    # None for substantive queries / non-reasoning models (model's default).
+    _last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+    eff_think = model_router.should_think(eff_model, _last_user)
+
+    # In-chat text-to-image: "generate an image of …" works in ANY chat. Skip when
+    # an image is attached (that's a vision query) or during a CLI agent run.
+    img_prompt = None
+    if not images and not req.cli_session_id:
+        img_prompt = model_router.detect_image_request(_last_user)
+
     # User-supplied system_prompt is honored only for variants that opt in
     # (currently nebulax:custom) and for raw Ollama model calls. Other
     # NebulaX variants enforce their branded voice.
@@ -393,8 +456,23 @@ async def chat_completions(
                 if citations:
                     yield f"event: citations\ndata: {json.dumps(citations)}\n\n"
 
-                if req.cli_session_id:
-                    collected: Dict = {}
+                collected: Dict = {}
+                if img_prompt:
+                    # Text-to-image short-circuit: stream a status note, generate
+                    # via Pollinations, then stream the image as a one-line markdown
+                    # data URL (no newlines — the SSE framing splits on \n\n).
+                    from .image import generate_image_data_url
+                    status = f"🎨 Generating an image of *{img_prompt}*… "
+                    full_response += status
+                    yield f"data: {status}\n\n"
+                    try:
+                        result = await generate_image_data_url(img_prompt)
+                        chunk = f"![{img_prompt}]({result['data_url']})"
+                    except Exception as exc:
+                        chunk = f"⚠️ Image generation failed: {exc}"
+                    full_response += chunk
+                    yield f"data: {chunk}\n\n"
+                elif req.cli_session_id:
                     async for sse_chunk in _cli_agent_stream(
                         messages=messages,
                         system_prompt=system_prompt,
@@ -406,12 +484,21 @@ async def chat_completions(
                         yield sse_chunk
                     full_response = collected.get("text", "")
                 else:
-                    async for chunk in ollama.chat_stream(
+                    # Warn the UI if the model must cold-load (slow on this CPU-only
+                    # box) and keep the connection alive past Cloudflare's ~100s 524
+                    # window until the first token arrives.
+                    if not await ollama.is_loaded(eff_model):
+                        yield f"event: warming\ndata: {json.dumps({'model': eff_model})}\n\n"
+                    agen = ollama.chat_stream(
                         eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx,
-                        images=images, usage=usage_info,
-                    ):
-                        full_response += chunk
-                        yield f"data: {chunk}\n\n"
+                        images=images, usage=usage_info, think=eff_think,
+                    )
+                    async for kind, value in _stream_with_keepalive(agen):
+                        if kind == "ping":
+                            yield ": keepalive\n\n"
+                        else:
+                            full_response += value
+                            yield f"data: {value}\n\n"
             finally:
                 latency = int((time.time() - start) * 1000)
                 prompt_tok = usage_info.get("prompt_tokens", 0)
@@ -424,6 +511,7 @@ async def chat_completions(
                         session_id=session.id, role="assistant", content=full_response,
                         latency_ms=latency,
                         tokens_used=(prompt_tok + completion_tok) or None,
+                        steps=(collected.get("steps") or None),
                     ))
                     session.updated_at = datetime.now(timezone.utc)
                     db.commit()
@@ -434,12 +522,24 @@ async def chat_completions(
                     yield f"event: usage\ndata: {json.dumps({'prompt_tokens': prompt_tok, 'completion_tokens': completion_tok, 'latency_ms': latency})}\n\n"
                 yield "data: [DONE]\n\n"
 
-        return StreamingResponse(generate(), media_type="text/event-stream")
+        return StreamingResponse(
+            generate(),
+            media_type="text/event-stream",
+            headers={"Content-Encoding": "identity", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
 
     # Non-streaming
     full_response = ""
-    async for chunk in ollama.chat_stream(eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx):
-        full_response += chunk
+    if img_prompt:
+        from .image import generate_image_data_url
+        try:
+            result = await generate_image_data_url(img_prompt)
+            full_response = f"🎨 Generating an image of *{img_prompt}*… ![{img_prompt}]({result['data_url']})"
+        except Exception as exc:
+            full_response = f"⚠️ Image generation failed: {exc}"
+    else:
+        async for chunk in ollama.chat_stream(eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx, think=eff_think):
+            full_response += chunk
 
     latency = int((time.time() - start) * 1000)
     log_request(db, current_user.id, "/chat/completions", "POST", 200, model_name=req.model, latency_ms=latency)
@@ -498,14 +598,9 @@ async def rename_session(
     if not available:
         raise HTTPException(status_code=503, detail="Ollama unavailable")
 
-    # Prefer the session's saved model; fall back to any available model.
-    candidate = session.model_name if session.model_name in available else next(iter(available))
-    if model_router.is_variant(candidate):
-        try:
-            decision = model_router.route(candidate, first_user.content, list(available))
-            candidate = decision.chosen_model
-        except RuntimeError:
-            candidate = next(iter(available))
+    # Titles are throwaway — always use a small fast model (never make deepseek
+    # reason about a 5-word title). Falls back to any available model.
+    candidate = model_router.fast_model_for(list(available)) or next(iter(available))
 
     try:
         title = await ollama.generate_title(candidate, first_user.content)
