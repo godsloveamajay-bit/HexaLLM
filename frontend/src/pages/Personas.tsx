@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Globe, Lock, Copy, Loader2, Cpu, BookOpen, Brain, Zap, Bot, FlaskConical, Search, Code2 } from 'lucide-react'
+import { Plus, Pencil, Trash2, Globe, Lock, Copy, Loader2, Cpu, BookOpen, Brain, Zap, Bot, FlaskConical, Search, Code2, Star } from 'lucide-react'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -19,7 +19,9 @@ interface Persona {
   temperature: number
   max_tokens: number | null
   is_public: boolean
+  is_favorite: boolean
   uses: number
+  last_used_at?: string | null
   owner_username?: string
   created_at: string
 }
@@ -153,11 +155,11 @@ function PersonaForm({
   )
 }
 
-function PersonaCard({ persona, onEdit, onDelete, onFork, isOwn }: {
-  persona: Persona; onEdit?: () => void; onDelete?: () => void; onFork?: () => void; isOwn: boolean
+function PersonaCard({ persona, onEdit, onDelete, onFork, onToggleFavorite, isOwn }: {
+  persona: Persona; onEdit?: () => void; onDelete?: () => void; onFork?: () => void; onToggleFavorite?: () => void; isOwn: boolean
 }) {
   return (
-    <div className="card flex flex-col gap-3">
+    <div className={clsx('card flex flex-col gap-3', persona.is_favorite && 'ring-1 ring-secondary-500/40')}>
       <div className="flex items-start justify-between gap-2">
         <div className="flex items-center gap-3">
           <span className="text-2xl">{persona.emoji}</span>
@@ -166,7 +168,13 @@ function PersonaCard({ persona, onEdit, onDelete, onFork, isOwn }: {
             <p className="text-xs text-gray-500 mt-0.5">{persona.base_model}</p>
           </div>
         </div>
-        <div className="flex items-center gap-1">
+        <div className="flex items-center gap-1.5">
+          {isOwn && (
+            <button onClick={onToggleFavorite} title={persona.is_favorite ? 'Unpin favorite' : 'Pin as favorite'}
+              className={clsx('transition-colors', persona.is_favorite ? 'text-secondary-400' : 'text-gray-600 hover:text-secondary-400')}>
+              <Star className="w-4 h-4" fill={persona.is_favorite ? 'currentColor' : 'none'} />
+            </button>
+          )}
           {persona.is_public ? <Globe className="w-3.5 h-3.5 text-green-500" /> : <Lock className="w-3.5 h-3.5 text-gray-600" />}
         </div>
       </div>
@@ -187,6 +195,7 @@ function PersonaCard({ persona, onEdit, onDelete, onFork, isOwn }: {
         <span className="text-xs text-gray-600">
           {persona.owner_username ? `by ${persona.owner_username} · ` : ''}
           {persona.uses} uses
+          {persona.last_used_at && ` · used ${formatDistanceToNow(new Date(persona.last_used_at), { addSuffix: true })}`}
         </span>
         <div className="flex gap-1">
           {!isOwn && <button onClick={onFork} className="btn-secondary text-xs py-1 px-2 gap-1"><Copy className="w-3 h-3" />Fork</button>}
@@ -250,6 +259,16 @@ export default function PersonasPage() {
     toast.success('Deleted')
   }
 
+  const toggleFavorite = async (p: Persona) => {
+    // optimistic flip + re-sort favorites first
+    setMine((m) =>
+      [...m.map((x) => (x.id === p.id ? { ...x, is_favorite: !x.is_favorite } : x))]
+        .sort((a, b) => Number(b.is_favorite) - Number(a.is_favorite))
+    )
+    try { await api.post(`/personas/${p.id}/favorite`) }
+    catch { toast.error('Failed to update favorite'); load() }
+  }
+
   const fork = async (id: number) => {
     await api.post(`/personas/${id}/fork`)
     toast.success('Forked to your personas')
@@ -307,6 +326,7 @@ export default function PersonasPage() {
               <PersonaCard key={p.id} persona={p} isOwn
                 onEdit={() => { setEditing(p); setShowForm(true) }}
                 onDelete={() => del(p.id)}
+                onToggleFavorite={() => toggleFavorite(p)}
               />
             ))}
           </div>

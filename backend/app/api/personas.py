@@ -52,7 +52,9 @@ class PersonaOut(BaseModel):
     temperature: float
     max_tokens: Optional[int]
     is_public: bool
+    is_favorite: bool = False
     uses: int
+    last_used_at: Optional[str] = None
     owner_username: Optional[str] = None
     created_at: str
 
@@ -74,7 +76,9 @@ def _serialize(persona: SavedPersona, include_owner: bool = False) -> PersonaOut
         temperature=persona.temperature,
         max_tokens=persona.max_tokens,
         is_public=persona.is_public,
+        is_favorite=bool(persona.is_favorite),
         uses=persona.uses,
+        last_used_at=persona.last_used_at.isoformat() if persona.last_used_at else None,
         owner_username=persona.user.username if include_owner and persona.user else None,
         created_at=persona.created_at.isoformat(),
     )
@@ -87,7 +91,7 @@ def list_personas(
 ):
     return [_serialize(p) for p in db.query(SavedPersona).filter(
         SavedPersona.user_id == current_user.id
-    ).order_by(SavedPersona.updated_at.desc()).all()]
+    ).order_by(SavedPersona.is_favorite.desc(), SavedPersona.updated_at.desc()).all()]
 
 
 @router.get("/community", response_model=List[PersonaOut])
@@ -128,6 +132,40 @@ def update_persona(
     for k, v in data.model_dump(exclude_none=True).items():
         setattr(persona, k, v)
     persona.updated_at = datetime.now(timezone.utc)
+    db.commit()
+    db.refresh(persona)
+    return _serialize(persona)
+
+
+@router.post("/{persona_id}/use", status_code=204)
+def record_use(
+    persona_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Bump usage stats when a persona is applied in chat."""
+    persona = db.query(SavedPersona).filter(
+        SavedPersona.id == persona_id, SavedPersona.user_id == current_user.id
+    ).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    persona.uses = (persona.uses or 0) + 1
+    persona.last_used_at = datetime.now(timezone.utc)
+    db.commit()
+
+
+@router.post("/{persona_id}/favorite", response_model=PersonaOut)
+def toggle_favorite(
+    persona_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    persona = db.query(SavedPersona).filter(
+        SavedPersona.id == persona_id, SavedPersona.user_id == current_user.id
+    ).first()
+    if not persona:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    persona.is_favorite = not bool(persona.is_favorite)
     db.commit()
     db.refresh(persona)
     return _serialize(persona)

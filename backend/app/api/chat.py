@@ -557,6 +557,86 @@ def list_sessions(db: Session = Depends(get_db), current_user: User = Depends(ge
     return db.query(ChatSession).filter(ChatSession.user_id == current_user.id).order_by(ChatSession.updated_at.desc()).all()
 
 
+def _snippet(content: str, query: str, radius: int = 60) -> str:
+    """Return a short excerpt of `content` centred on the first match of `query`."""
+    lo = content.lower().find(query.lower())
+    if lo < 0:
+        return content[: radius * 2].strip()
+    start = max(0, lo - radius)
+    end = min(len(content), lo + len(query) + radius)
+    out = content[start:end].strip()
+    if start > 0:
+        out = "…" + out
+    if end < len(content):
+        out = out + "…"
+    return out
+
+
+@router.get("/sessions/search")
+def search_sessions(
+    q: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Full-text-ish search across the current user's chats — matches both the
+    session title and message content, returning a snippet for each hit."""
+    q = (q or "").strip()
+    if len(q) < 2:
+        return []
+
+    like = f"%{q}%"
+    # Sessions whose title OR any message content matches.
+    rows = (
+        db.query(ChatMessage, ChatSession)
+        .join(ChatSession, ChatMessage.session_id == ChatSession.id)
+        .filter(
+            ChatSession.user_id == current_user.id,
+            ChatMessage.content.ilike(like),
+        )
+        .order_by(ChatSession.updated_at.desc(), ChatMessage.id.asc())
+        .limit(400)
+        .all()
+    )
+
+    results: Dict[int, dict] = {}
+    for msg, sess in rows:
+        entry = results.get(sess.id)
+        if entry is None:
+            results[sess.id] = {
+                "id": sess.id,
+                "title": sess.title,
+                "model_name": sess.model_name,
+                "updated_at": sess.updated_at,
+                "match_count": 1,
+                "snippet": _snippet(msg.content, q),
+                "role": msg.role,
+            }
+        else:
+            entry["match_count"] += 1
+
+    # Also surface title-only matches (no message body hit).
+    title_hits = (
+        db.query(ChatSession)
+        .filter(ChatSession.user_id == current_user.id, ChatSession.title.ilike(like))
+        .order_by(ChatSession.updated_at.desc())
+        .limit(100)
+        .all()
+    )
+    for sess in title_hits:
+        if sess.id not in results:
+            results[sess.id] = {
+                "id": sess.id,
+                "title": sess.title,
+                "model_name": sess.model_name,
+                "updated_at": sess.updated_at,
+                "match_count": 0,
+                "snippet": "",
+                "role": None,
+            }
+
+    return sorted(results.values(), key=lambda r: r["updated_at"], reverse=True)
+
+
 @router.post("/sessions", response_model=ChatSessionOut, status_code=201)
 def create_session(
     data: ChatSessionCreate,

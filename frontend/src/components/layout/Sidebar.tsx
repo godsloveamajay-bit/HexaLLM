@@ -2,7 +2,7 @@ import { NavLink, useNavigate } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Bot, Cpu, Wand2,
   BarChart3, FileText, Key, LogOut, Settings, BookOpen, X, ImageIcon,
-  Brain, Zap, Server, Users, Terminal, Download, Sun, Moon,
+  Brain, Zap, Server, Users, Terminal, Download, Sun, Moon, MonitorSmartphone,
 } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { useTheme } from '../../lib/theme'
@@ -38,7 +38,14 @@ const ADMIN_EXTRA = [
 export default function Sidebar({ isOpen, onClose }: Props) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
-  const [theme, toggleTheme] = useTheme()
+  const [theme, setTheme] = useTheme()
+  // Quick cycle: dark → light → auto → dark
+  const nextTheme = theme === 'dark' ? 'light' : theme === 'light' ? 'auto' : 'dark'
+  const themeMeta = {
+    dark: { icon: Sun, label: 'Light mode' },
+    light: { icon: MonitorSmartphone, label: 'System theme' },
+    auto: { icon: Moon, label: 'Dark mode' },
+  }[theme]
 
   const navItems = user?.is_admin ? [...BASE_NAV, ...ADMIN_EXTRA] : BASE_NAV
 
@@ -76,12 +83,13 @@ export default function Sidebar({ isOpen, onClose }: Props) {
 
       <div className="mt-3 pt-3 border-t border-gray-700/50 space-y-0.5">
         <button
-          onClick={toggleTheme}
+          onClick={() => setTheme(nextTheme)}
           className="sidebar-link w-full text-left"
-          aria-label="Toggle light/dark theme"
+          aria-label="Switch theme"
+          title={`Theme: ${theme}`}
         >
-          {theme === 'light' ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
-          {theme === 'light' ? 'Dark mode' : 'Light mode'}
+          <themeMeta.icon className="w-4 h-4" />
+          {themeMeta.label}
         </button>
         <NavLink
           to="/settings"

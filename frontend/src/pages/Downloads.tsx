@@ -372,6 +372,17 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.9.0',
+    date: '2026-06-02',
+    summary: 'Personalise everything — system theme, full-text chat search, and pinned personas.',
+    changes: [
+      { type: 'new',      text: 'System theme option that follows your OS light/dark setting automatically' },
+      { type: 'new',      text: 'Search across the full text of every conversation, with matching snippets' },
+      { type: 'new',      text: 'Pin favourite personas to the top and see per-persona usage stats' },
+      { type: 'improved', text: 'Appearance settings panel with Light / Dark / System' },
+    ],
+  },
+  {
     version: '0.8.0',
     date: '2026-06-01',
     summary: 'Live streaming, faster replies, and a warm new look across every app.',
@@ -502,7 +513,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.8.0'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.9.0'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 

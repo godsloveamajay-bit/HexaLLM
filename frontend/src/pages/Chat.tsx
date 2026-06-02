@@ -58,6 +58,7 @@ interface StepEvent { name: string; input: string; output: string; thought: stri
 interface Template { id: number; name: string; content: string }
 interface Attachment { type: 'image' | 'pdf' | 'text'; name: string; base64: string; preview?: string }
 interface Session { id: number; title: string; model_name: string; updated_at: string }
+interface ContentMatch { id: number; title: string; model_name: string; updated_at: string; match_count: number; snippet: string; role: string | null }
 interface KB { id: number; name: string; document_count: number; chunk_count: number }
 interface CliSession { session_id: string; hostname: string; cwd: string; platform: string }
 interface NebulaVariant {
@@ -369,6 +370,8 @@ export default function ChatPage() {
   const [warmingModel, setWarmingModel] = useState<string>('')
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false)
   const [sessionSearch, setSessionSearch] = useState('')
+  const [contentResults, setContentResults] = useState<ContentMatch[] | null>(null)
+  const [searching, setSearching] = useState(false)
   const [systemPrompt, setSystemPrompt] = useState('')
   const [showSystem, setShowSystem] = useState(false)
   const [kbs, setKbs] = useState<KB[]>([])
@@ -712,6 +715,7 @@ export default function ChatPage() {
     setTemperature(typeof p.temperature === 'number' ? p.temperature : null)
     setShowPersonas(false)
     toast.success(`Persona "${p.name}" applied`)
+    if (p.id) api.post(`/personas/${p.id}/use`).catch(() => {})
   }
   const saveTemplate = async () => {
     if (!newTemplateName.trim() || !systemPrompt.trim()) return
@@ -722,6 +726,22 @@ export default function ChatPage() {
   }
 
   const activeKb = kbs.find((k) => k.id === kbId)
+  // Search message *content* across all sessions (debounced). Titles are still
+  // matched locally for instant feedback; this adds full-text body matches.
+  useEffect(() => {
+    const q = sessionSearch.trim()
+    if (q.length < 2) { setContentResults(null); setSearching(false); return }
+    setSearching(true)
+    const t = setTimeout(async () => {
+      try {
+        const { data } = await api.get('/chat/sessions/search', { params: { q } })
+        setContentResults(data)
+      } catch { setContentResults([]) }
+      finally { setSearching(false) }
+    }, 250)
+    return () => clearTimeout(t)
+  }, [sessionSearch])
+
   const filteredSessions = sessions.filter(s => s.title.toLowerCase().includes(sessionSearch.toLowerCase()))
   const isStreaming = streamPhase !== 'idle' || sending
 
@@ -760,26 +780,58 @@ export default function ChatPage() {
         </div>
 
         <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          {filteredSessions.map((s) => (
-            <div key={s.id} onClick={() => selectSession(s)}
-              className={clsx('flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer group text-sm transition-colors',
-                activeSession?.id === s.id ? 'bg-primary-900/40 text-primary-300' : 'hover:bg-gray-800 text-gray-400'
-              )}>
-              <Bot className="w-3.5 h-3.5 flex-shrink-0" />
-              <div className="flex-1 min-w-0">
-                <p className="truncate text-sm">{s.title}</p>
-                <p className="text-xs text-gray-600 truncate">{s.model_name.replace('nebulax:', '')}</p>
+          {/* When searching, show full-text results (title + message body) with
+              snippets; otherwise the plain recent-session list. */}
+          {contentResults !== null ? (
+            <>
+              {searching && contentResults.length === 0 && (
+                <p className="text-xs text-gray-600 px-3 py-4 text-center">Searching…</p>
+              )}
+              {contentResults.map((s) => (
+                <div key={s.id} onClick={() => selectSession(s)}
+                  className={clsx('flex items-start gap-2 px-3 py-2.5 rounded-lg cursor-pointer group text-sm transition-colors',
+                    activeSession?.id === s.id ? 'bg-primary-900/40 text-primary-300' : 'hover:bg-gray-800 text-gray-400'
+                  )}>
+                  <Bot className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
+                  <div className="flex-1 min-w-0">
+                    <p className="truncate text-sm">{s.title}</p>
+                    {s.snippet ? (
+                      <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">{s.snippet}</p>
+                    ) : (
+                      <p className="text-xs text-gray-600 truncate">{s.model_name.replace('nebulax:', '')}</p>
+                    )}
+                    {s.match_count > 1 && (
+                      <p className="text-[10px] text-primary-500/80 mt-0.5">{s.match_count} matches</p>
+                    )}
+                  </div>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                    <button onClick={(e) => deleteSession(s.id, e)} className="hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                  </div>
+                </div>
+              ))}
+              {!searching && contentResults.length === 0 && (
+                <p className="text-xs text-gray-600 px-3 py-4 text-center">No chats match "{sessionSearch}"</p>
+              )}
+            </>
+          ) : (
+            filteredSessions.map((s) => (
+              <div key={s.id} onClick={() => selectSession(s)}
+                className={clsx('flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer group text-sm transition-colors',
+                  activeSession?.id === s.id ? 'bg-primary-900/40 text-primary-300' : 'hover:bg-gray-800 text-gray-400'
+                )}>
+                <Bot className="w-3.5 h-3.5 flex-shrink-0" />
+                <div className="flex-1 min-w-0">
+                  <p className="truncate text-sm">{s.title}</p>
+                  <p className="text-xs text-gray-600 truncate">{s.model_name.replace('nebulax:', '')}</p>
+                </div>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
+                  {activeSession?.id === s.id && (
+                    <button onClick={e => { e.stopPropagation(); shareSession() }} className="hover:text-primary-400" title="Share"><Share2 className="w-3 h-3" /></button>
+                  )}
+                  <button onClick={(e) => deleteSession(s.id, e)} className="hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
+                </div>
               </div>
-              <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                {activeSession?.id === s.id && (
-                  <button onClick={e => { e.stopPropagation(); shareSession() }} className="hover:text-primary-400" title="Share"><Share2 className="w-3 h-3" /></button>
-                )}
-                <button onClick={(e) => deleteSession(s.id, e)} className="hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
-              </div>
-            </div>
-          ))}
-          {filteredSessions.length === 0 && sessionSearch && (
-            <p className="text-xs text-gray-600 px-3 py-4 text-center">No chats match "{sessionSearch}"</p>
+            ))
           )}
         </div>
       </div>

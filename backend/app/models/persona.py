@@ -20,7 +20,9 @@ class SavedPersona(Base):
     temperature = Column(Float, default=0.7)
     max_tokens = Column(Integer, nullable=True)
     is_public = Column(Boolean, default=False)
+    is_favorite = Column(Boolean, default=False)
     uses = Column(Integer, default=0)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 

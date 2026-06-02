@@ -1,14 +1,22 @@
 import { useState } from 'react'
-import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, ExternalLink, Lock } from 'lucide-react'
+import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, ExternalLink, Lock, Palette, Sun, Moon, MonitorSmartphone } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
 import { isTauri, isCapacitor } from '../lib/platform'
+import { useTheme, type Theme } from '../lib/theme'
+
+const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun; hint: string }[] = [
+  { value: 'light', label: 'Light', icon: Sun, hint: 'Warm cream' },
+  { value: 'dark', label: 'Dark', icon: Moon, hint: 'Warm charcoal' },
+  { value: 'auto', label: 'System', icon: MonitorSmartphone, hint: 'Follow OS' },
+]
 
 type UpdateStatus = 'idle' | 'checking' | 'found' | 'none'
 
 export default function SettingsPage() {
   const { user, fetchMe } = useAuth()
+  const [theme, setTheme, resolvedTheme] = useTheme()
   const [form, setForm] = useState({
     full_name: user?.full_name || '',
     bio: user?.bio || '',
@@ -138,6 +146,42 @@ export default function SettingsPage() {
             Save Changes
           </button>
         </form>
+      </div>
+
+      {/* Appearance */}
+      <div className="card mb-5">
+        <div className="flex items-center gap-3 mb-5">
+          <div className="w-8 h-8 rounded-lg bg-primary-600/20 flex items-center justify-center">
+            <Palette className="w-4 h-4 text-primary-400" />
+          </div>
+          <h2 className="font-semibold text-gray-100">Appearance</h2>
+        </div>
+        <div className="grid grid-cols-3 gap-3">
+          {THEME_OPTIONS.map(({ value, label, icon: Icon, hint }) => {
+            const active = theme === value
+            return (
+              <button
+                key={value}
+                onClick={() => setTheme(value)}
+                aria-pressed={active}
+                className={`flex flex-col items-center gap-1.5 rounded-xl border p-4 transition-colors ${
+                  active
+                    ? 'border-primary-500 bg-primary-600/10 text-primary-300'
+                    : 'border-gray-700/60 text-gray-400 hover:border-gray-600 hover:text-gray-200'
+                }`}
+              >
+                <Icon className="w-5 h-5" />
+                <span className="text-sm font-medium">{label}</span>
+                <span className="text-[11px] text-gray-500">{hint}</span>
+              </button>
+            )
+          })}
+        </div>
+        {theme === 'auto' && (
+          <p className="mt-3 text-xs text-gray-500">
+            Following your system setting — currently <span className="text-gray-300">{resolvedTheme}</span>.
+          </p>
+        )}
       </div>
 
       {/* Password */}

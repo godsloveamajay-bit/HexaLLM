@@ -31,6 +31,13 @@ def _migrate_db():
                 "ON chat_sessions (share_token)"
             ))
 
+        if "saved_personas" in inspector.get_table_names():
+            persona_cols = {c["name"] for c in inspector.get_columns("saved_personas")}
+            if "is_favorite" not in persona_cols:
+                conn.execute(text("ALTER TABLE saved_personas ADD COLUMN is_favorite BOOLEAN DEFAULT 0"))
+            if "last_used_at" not in persona_cols:
+                conn.execute(text("ALTER TABLE saved_personas ADD COLUMN last_used_at DATETIME"))
+
         user_cols = {c["name"] for c in inspector.get_columns("users")}
         if "oauth_provider" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN oauth_provider VARCHAR"))
