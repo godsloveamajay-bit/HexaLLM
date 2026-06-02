@@ -372,6 +372,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.9.1',
+    date: '2026-06-02',
+    summary: 'Text-to-video in chat, and a fix for collapsed multi-line replies.',
+    changes: [
+      { type: 'new',   text: 'Generate short videos in any chat — "generate a video of …" or /video' },
+      { type: 'fixed', text: 'Streamed replies and the reasoning drawer no longer collapse onto a single line (lost line breaks)' },
+    ],
+  },
+  {
     version: '0.9.0',
     date: '2026-06-02',
     summary: 'Personalise everything — system theme, full-text chat search, and pinned personas.',
@@ -513,7 +522,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.9.0'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.9.1'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 

@@ -66,6 +66,18 @@ async def _stream_with_keepalive(agen, interval: float = 20.0):
             pass
 
 
+def _sse_data(value: str) -> str:
+    """SSE-encode a token while preserving newlines.
+
+    A naive ``data: {value}\\n\\n`` breaks whenever ``value`` contains a newline:
+    the blank line terminates the event early and the remainder is dropped by the
+    client parser, so multi-line answers and chain-of-thought collapse onto one
+    line. SSE allows multi-line payloads as repeated ``data:`` lines, and the
+    frontend rejoins them with ``\\n`` — so emit one ``data:`` line per text line.
+    """
+    return "".join(f"data: {line}\n" for line in value.split("\n")) + "\n"
+
+
 # ── CLI-backed tool descriptions ───────────────────────────────────────────────
 
 _CLI_TOOLS = {
@@ -181,7 +193,7 @@ async def _cli_agent_stream(
     cli_session = user_sessions.get(cli_session_id)
     if not cli_session:
         collected["text"] = "(CLI session not found or disconnected)"
-        yield f"data: {collected['text']}\n\n"
+        yield _sse_data(collected['text'])
         return
 
     tool_list = "\n".join(f"  {k}: {v}" for k, v in _CLI_TOOLS.items())
@@ -211,7 +223,7 @@ async def _cli_agent_stream(
             parsed = _extract_json_chat(raw2)
             if not parsed:
                 final_text = f"(Model returned malformed response: {raw[:200]})"
-                yield f"data: {final_text}\n\n"
+                yield _sse_data(final_text)
                 collected["text"] = final_text
                 return
 
@@ -225,7 +237,7 @@ async def _cli_agent_stream(
             # stream the answer in reasonable chunks
             chunk_size = max(4, len(final_text) // 80)
             for i in range(0, len(final_text), chunk_size):
-                yield f"data: {final_text[i:i + chunk_size]}\n\n"
+                yield _sse_data(final_text[i:i + chunk_size])
             collected["text"] = final_text
             return
 
@@ -246,7 +258,7 @@ async def _cli_agent_stream(
         agent_messages.append({"role": "user", "content": f"Tool result:\n{output}"})
 
     final_text = "Reached maximum steps without completing the task."
-    yield f"data: {final_text}\n\n"
+    yield _sse_data(final_text)
     collected["text"] = final_text
 
 
@@ -469,7 +481,7 @@ async def chat_completions(
                     from .video import generate_video_data_url, VideoNotConfigured
                     status = f"🎬 Generating a video of *{vid_prompt}*… (this can take a minute) "
                     full_response += status
-                    yield f"data: {status}\n\n"
+                    yield _sse_data(status)
                     try:
                         result = await generate_video_data_url(vid_prompt)
                         chunk = f"![{vid_prompt}]({result['data_url']})"
@@ -478,7 +490,7 @@ async def chat_completions(
                     except Exception as exc:
                         chunk = f"⚠️ Video generation failed: {exc}"
                     full_response += chunk
-                    yield f"data: {chunk}\n\n"
+                    yield _sse_data(chunk)
                 elif img_prompt:
                     # Text-to-image short-circuit: stream a status note, generate
                     # via Pollinations, then stream the image as a one-line markdown
@@ -486,14 +498,14 @@ async def chat_completions(
                     from .image import generate_image_data_url
                     status = f"🎨 Generating an image of *{img_prompt}*… "
                     full_response += status
-                    yield f"data: {status}\n\n"
+                    yield _sse_data(status)
                     try:
                         result = await generate_image_data_url(img_prompt)
                         chunk = f"![{img_prompt}]({result['data_url']})"
                     except Exception as exc:
                         chunk = f"⚠️ Image generation failed: {exc}"
                     full_response += chunk
-                    yield f"data: {chunk}\n\n"
+                    yield _sse_data(chunk)
                 elif req.cli_session_id:
                     async for sse_chunk in _cli_agent_stream(
                         messages=messages,
@@ -520,7 +532,7 @@ async def chat_completions(
                             yield ": keepalive\n\n"
                         else:
                             full_response += value
-                            yield f"data: {value}\n\n"
+                            yield _sse_data(value)
             finally:
                 latency = int((time.time() - start) * 1000)
                 prompt_tok = usage_info.get("prompt_tokens", 0)

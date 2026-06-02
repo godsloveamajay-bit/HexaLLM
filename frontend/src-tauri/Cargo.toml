@@ -1,6 +1,6 @@
 [package]
 name = "nebulax-ai"
-version = "0.9.0"
+version = "0.9.1"
 description = "NebulaX AI — local AI hub"
 authors = ["NebulaX AI"]
 license = "MIT"
