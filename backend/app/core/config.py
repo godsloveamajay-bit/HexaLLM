@@ -16,6 +16,12 @@ class Settings(BaseSettings):
 
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
+    # Pollinations — image gen stays keyless, but text-to-video needs a free
+    # "seed"-tier key from enter.pollinations.ai (no credit card). Leave blank
+    # to disable in-chat video generation.
+    POLLINATIONS_API_KEY: str = ""
+    VIDEO_MODEL: str = "wan-fast"  # cheapest/fastest free-tier video model
+
     MODELS_DIR: str = "./models"
     DATASETS_DIR: str = "./datasets"
     UPLOADS_DIR: str = "./uploads"

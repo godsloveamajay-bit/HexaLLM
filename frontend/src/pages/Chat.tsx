@@ -260,10 +260,12 @@ function MessageBubble({
           ) : (
             <div className="prose prose-sm">
               <ReactMarkdown
-                // Allow base64 data: image URLs (generated images stream in as
-                // data URLs); keep default sanitization for everything else.
+                // Allow base64 data: image/video URLs (generated media streams in
+                // as data URLs); keep default sanitization for everything else.
                 urlTransform={(url) =>
-                  url.startsWith('data:image/') ? url : defaultUrlTransform(url)
+                  url.startsWith('data:image/') || url.startsWith('data:video/')
+                    ? url
+                    : defaultUrlTransform(url)
                 }
                 components={{
                   code({ className, children }) {
@@ -274,6 +276,20 @@ function MessageBubble({
                       : <code className={className}>{children}</code>
                   },
                   img({ src, alt }) {
+                    // Generated videos arrive via image markdown with a video data
+                    // URL — render them as a real <video> player instead of <img>.
+                    if (typeof src === 'string' && src.startsWith('data:video/')) {
+                      return (
+                        <video
+                          src={src}
+                          controls
+                          loop
+                          playsInline
+                          className="rounded-lg border border-gray-700/60 max-w-full my-2"
+                          style={{ maxHeight: '512px' }}
+                        />
+                      )
+                    }
                     return (
                       <img
                         src={src}

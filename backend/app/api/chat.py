@@ -418,11 +418,15 @@ async def chat_completions(
     _last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
     eff_think = model_router.should_think(eff_model, _last_user)
 
-    # In-chat text-to-image: "generate an image of …" works in ANY chat. Skip when
-    # an image is attached (that's a vision query) or during a CLI agent run.
+    # In-chat text-to-image / text-to-video: "generate an image/video of …" works
+    # in ANY chat. Skip when an image is attached (that's a vision query) or during
+    # a CLI agent run. Video is checked first so "video of …" doesn't match image.
     img_prompt = None
+    vid_prompt = None
     if not images and not req.cli_session_id:
-        img_prompt = model_router.detect_image_request(_last_user)
+        vid_prompt = model_router.detect_video_request(_last_user)
+        if not vid_prompt:
+            img_prompt = model_router.detect_image_request(_last_user)
 
     # User-supplied system_prompt is honored only for variants that opt in
     # (currently nebulax:custom) and for raw Ollama model calls. Other
@@ -457,7 +461,25 @@ async def chat_completions(
                     yield f"event: citations\ndata: {json.dumps(citations)}\n\n"
 
                 collected: Dict = {}
-                if img_prompt:
+                if vid_prompt:
+                    # Text-to-video short-circuit: stream a status note, generate
+                    # via Pollinations, then stream the clip as a one-line markdown
+                    # data URL (rendered as a <video> on the client). No newlines —
+                    # the SSE framing splits on \n\n.
+                    from .video import generate_video_data_url, VideoNotConfigured
+                    status = f"🎬 Generating a video of *{vid_prompt}*… (this can take a minute) "
+                    full_response += status
+                    yield f"data: {status}\n\n"
+                    try:
+                        result = await generate_video_data_url(vid_prompt)
+                        chunk = f"![{vid_prompt}]({result['data_url']})"
+                    except VideoNotConfigured as exc:
+                        chunk = f"⚠️ {exc}"
+                    except Exception as exc:
+                        chunk = f"⚠️ Video generation failed: {exc}"
+                    full_response += chunk
+                    yield f"data: {chunk}\n\n"
+                elif img_prompt:
                     # Text-to-image short-circuit: stream a status note, generate
                     # via Pollinations, then stream the image as a one-line markdown
                     # data URL (no newlines — the SSE framing splits on \n\n).
@@ -530,7 +552,16 @@ async def chat_completions(
 
     # Non-streaming
     full_response = ""
-    if img_prompt:
+    if vid_prompt:
+        from .video import generate_video_data_url, VideoNotConfigured
+        try:
+            result = await generate_video_data_url(vid_prompt)
+            full_response = f"🎬 Generating a video of *{vid_prompt}*… ![{vid_prompt}]({result['data_url']})"
+        except VideoNotConfigured as exc:
+            full_response = f"⚠️ {exc}"
+        except Exception as exc:
+            full_response = f"⚠️ Video generation failed: {exc}"
+    elif img_prompt:
         from .image import generate_image_data_url
         try:
             result = await generate_image_data_url(img_prompt)
