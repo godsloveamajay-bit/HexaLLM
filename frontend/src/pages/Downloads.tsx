@@ -372,6 +372,18 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.10.0',
+    date: '2026-06-03',
+    summary: 'Chat as a guest, a full AI settings panel, on-device voice typing, and smoother streaming.',
+    changes: [
+      { type: 'new',      text: 'Try the chat without an account — guests get a daily free-token allowance' },
+      { type: 'new',      text: 'AI Assistant settings: custom instructions, default model, creativity, max response length, default knowledge base, and a reasoning on/off toggle' },
+      { type: 'new',      text: 'Voice input now uses on-device Whisper transcription — reliable, and works in every browser' },
+      { type: 'improved', text: 'Smoother, steadier text as replies stream in' },
+      { type: 'fixed',    text: 'Sending the first message in a brand-new chat no longer occasionally does nothing' },
+    ],
+  },
+  {
     version: '0.9.1',
     date: '2026-06-02',
     summary: 'Text-to-video in chat, and a fix for collapsed multi-line replies.',
@@ -522,7 +534,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.9.1'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.10.0'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 

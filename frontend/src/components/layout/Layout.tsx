@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Outlet, Link } from 'react-router-dom'
 import Sidebar from './Sidebar'
-import { Menu, Search } from 'lucide-react'
+import { Menu, Search, LogIn } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { useAutoUpdate } from '../../hooks/useAutoUpdate'
 
@@ -57,6 +57,19 @@ export default function Layout() {
                               hover:shadow-primary-900/40 transition-shadow">
                 {user.username?.[0]?.toUpperCase()}
               </div>
+            </Link>
+          </div>
+        )}
+
+        {!user && (
+          <div className="flex items-center gap-2">
+            <Link to="/login" className="hidden sm:flex items-center gap-1.5 px-2.5 py-1 rounded-lg
+                             text-gray-400 hover:text-gray-200 transition-colors text-sm">
+              <LogIn className="w-3.5 h-3.5" />
+              Sign in
+            </Link>
+            <Link to="/register" className="btn-primary py-1.5 px-3 text-sm">
+              Create free account
             </Link>
           </div>
         )}

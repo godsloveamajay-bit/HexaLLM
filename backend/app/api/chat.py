@@ -2,16 +2,17 @@ import asyncio
 import base64
 import io
 import json
+import os
 import re
 import time
 import uuid
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import AsyncIterator, Dict, List, Optional, Tuple
 from ..core.database import get_db
-from ..core.security import get_current_user
+from ..core.security import get_current_user, get_optional_user
 from ..models.user import User
 from ..models.chat import ChatSession, ChatMessage, RequestLog
 from ..models.knowledge import KnowledgeBase, KBChunk
@@ -23,6 +24,45 @@ from ..services.retrieval_service import search as kb_search, format_context
 from ..services import model_router
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# ── Guest (unauthenticated) chat ──────────────────────────────────────────
+# Visitors can try the chat before signing up: unlimited messages, but a soft
+# per-IP daily *token* budget, with all account-bound features (history, memory,
+# KB, attachments, CLI, media gen) disabled. Usage is tallied in-memory (single
+# uvicorn process) and resets at UTC midnight — a deliberately lightweight gate,
+# not a hard security boundary. Tokens are charged after each reply, so the
+# message that crosses the budget still completes; the next one is blocked.
+GUEST_DAILY_TOKENS = int(os.getenv("GUEST_DAILY_TOKENS", "5000"))
+GUEST_DEFAULT_MODEL = os.getenv("GUEST_DEFAULT_MODEL", "nebulax:balanced")
+_guest_usage: Dict[str, Tuple[str, int]] = {}  # ip -> (utc_date, tokens_used_today)
+
+
+def _client_ip(request: Request) -> str:
+    """Real client IP, honoring the nginx/cloudflared X-Forwarded-For header."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+def _guest_tokens_remaining(ip: str) -> int:
+    """Tokens left in this IP's budget today (does not charge anything)."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day, used = _guest_usage.get(ip, (today, 0))
+    if day != today:
+        used = 0
+    return max(0, GUEST_DAILY_TOKENS - used)
+
+
+def _guest_charge_tokens(ip: str, tokens: int) -> int:
+    """Charge tokens against today's guest budget; returns tokens remaining."""
+    today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+    day, used = _guest_usage.get(ip, (today, 0))
+    if day != today:
+        used = 0
+    used += max(0, tokens)
+    _guest_usage[ip] = (today, used)
+    return max(0, GUEST_DAILY_TOKENS - used)
 
 
 async def _stream_with_keepalive(agen, interval: float = 20.0):
@@ -399,11 +439,36 @@ def _resolve_attachment(req: ChatRequest, messages: List[Dict]) -> List[str]:
 @router.post("/completions")
 async def chat_completions(
     req: ChatRequest,
+    request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Optional[User] = Depends(get_optional_user),
 ):
+    # Unauthenticated visitors get a limited trial: a soft per-IP daily cap and
+    # no access to account-bound features. Strip those from the request so the
+    # rest of the handler can stay user-agnostic.
+    is_guest = current_user is None
+    guest_ip: Optional[str] = None
+    guest_remaining: Optional[int] = None
+    if is_guest:
+        guest_ip = _client_ip(request)
+        guest_remaining = _guest_tokens_remaining(guest_ip)
+        if guest_remaining <= 0:
+            raise HTTPException(
+                status_code=429,
+                detail="You've used up today's free guest tokens. "
+                       "Sign in or create a free account to keep chatting.",
+            )
+        req.session_id = None
+        req.system_prompt = None
+        req.knowledge_base_id = None
+        req.cli_session_id = None
+        req.attachment_base64 = req.attachment_type = req.attachment_name = None
+        # Don't let a guest hand-pick an arbitrary/expensive direct model.
+        if not model_router.is_variant(req.model):
+            req.model = GUEST_DEFAULT_MODEL
+
     session = None
-    if req.session_id:
+    if req.session_id and not is_guest:
         session = db.query(ChatSession).filter(
             ChatSession.id == req.session_id, ChatSession.user_id == current_user.id
         ).first()
@@ -414,6 +479,12 @@ async def chat_completions(
 
     # Route nebulax:* variants → concrete Ollama model + variant params.
     eff_model, variant_prompt, eff_temp, eff_ctx, eff_max, route_meta = await _apply_router(req)
+
+    # Personal AI prefs: cap response length when the request didn't ask for a
+    # specific one (the web UI doesn't), so the user's "max response length"
+    # setting applies. API clients that pass max_tokens still win.
+    if not is_guest and current_user.ai_max_tokens and req.max_tokens is None:
+        eff_max = current_user.ai_max_tokens
 
     # If the request carries an image but the routed model can't see, switch to a
     # pulled vision model — so any department transparently handles images.
@@ -429,13 +500,18 @@ async def chat_completions(
     # None for substantive queries / non-reasoning models (model's default).
     _last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
     eff_think = model_router.should_think(eff_model, _last_user)
+    # Personal AI pref: "reasoning off" suppresses chain-of-thought on reasoning
+    # models (deepseek-r1/qwen3). Non-reasoning models are left untouched (passing
+    # think=False to them errors). ai_reasoning None/True = default behaviour.
+    if not is_guest and current_user.ai_reasoning is False and model_router.is_reasoning_model(eff_model):
+        eff_think = False
 
     # In-chat text-to-image / text-to-video: "generate an image/video of …" works
     # in ANY chat. Skip when an image is attached (that's a vision query) or during
     # a CLI agent run. Video is checked first so "video of …" doesn't match image.
     img_prompt = None
     vid_prompt = None
-    if not images and not req.cli_session_id:
+    if not images and not req.cli_session_id and not is_guest:
         vid_prompt = model_router.detect_video_request(_last_user)
         if not vid_prompt:
             img_prompt = model_router.detect_image_request(_last_user)
@@ -448,9 +524,15 @@ async def chat_completions(
         user_supplied_prompt = None
 
     base_system_prompt = model_router.merge_system_prompt(variant_prompt, user_supplied_prompt)
-    # Inject user memories if the session has memory enabled (or always for now)
+    # Personal AI preferences (Settings → AI Assistant): the user's custom
+    # instructions apply to every one of their chats. Guests have no account.
+    if not is_guest and (current_user.ai_instructions or "").strip():
+        ci = current_user.ai_instructions.strip()
+        base_system_prompt = (base_system_prompt or "") + f"\n\n[User's custom instructions — follow these]\n{ci}"
+    # Inject user memories if the session has memory enabled (or always for now).
+    # Guests have no account, so no memory.
     from ..models.memory import UserMemory
-    user_memories = db.query(UserMemory).filter(
+    user_memories = [] if is_guest else db.query(UserMemory).filter(
         UserMemory.user_id == current_user.id
     ).order_by(UserMemory.created_at.desc()).limit(20).all()
     if user_memories:
@@ -467,6 +549,8 @@ async def chat_completions(
             full_response = ""
             usage_info: Dict = {}
             try:
+                if is_guest:
+                    yield f"event: guest\ndata: {json.dumps({'remaining': guest_remaining, 'limit': GUEST_DAILY_TOKENS})}\n\n"
                 if route_meta:
                     yield f"event: route\ndata: {json.dumps(route_meta)}\n\n"
                 if citations:
@@ -549,9 +633,15 @@ async def chat_completions(
                     ))
                     session.updated_at = datetime.now(timezone.utc)
                     db.commit()
-                log_request(db, current_user.id, "/chat/completions", "POST", 200,
-                            model_name=req.model, latency_ms=latency,
-                            prompt_tokens=prompt_tok, completion_tokens=completion_tok)
+                if not is_guest:
+                    log_request(db, current_user.id, "/chat/completions", "POST", 200,
+                                model_name=req.model, latency_ms=latency,
+                                prompt_tokens=prompt_tok, completion_tokens=completion_tok)
+                if is_guest and guest_ip:
+                    # New local (not the closure var) — assigning guest_remaining
+                    # inside generate() would shadow the earlier read above.
+                    rem = _guest_charge_tokens(guest_ip, prompt_tok + completion_tok)
+                    yield f"event: guest\ndata: {json.dumps({'remaining': rem, 'limit': GUEST_DAILY_TOKENS})}\n\n"
                 if usage_info:
                     yield f"event: usage\ndata: {json.dumps({'prompt_tokens': prompt_tok, 'completion_tokens': completion_tok, 'latency_ms': latency})}\n\n"
                 yield "data: [DONE]\n\n"
@@ -581,17 +671,24 @@ async def chat_completions(
         except Exception as exc:
             full_response = f"⚠️ Image generation failed: {exc}"
     else:
-        async for chunk in ollama.chat_stream(eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx, think=eff_think):
+        ns_usage: Dict = {}
+        async for chunk in ollama.chat_stream(eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx, think=eff_think, usage=ns_usage):
             full_response += chunk
+        if is_guest and guest_ip:
+            guest_remaining = _guest_charge_tokens(
+                guest_ip, ns_usage.get("prompt_tokens", 0) + ns_usage.get("completion_tokens", 0)
+            )
 
     latency = int((time.time() - start) * 1000)
-    log_request(db, current_user.id, "/chat/completions", "POST", 200, model_name=req.model, latency_ms=latency)
+    if not is_guest:
+        log_request(db, current_user.id, "/chat/completions", "POST", 200, model_name=req.model, latency_ms=latency)
     return {
         "content": full_response,
         "model": req.model,
         "latency_ms": latency,
         "citations": citations,
         "route": route_meta,
+        "guest_remaining": guest_remaining,
     }
 
 

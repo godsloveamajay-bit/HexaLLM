@@ -24,6 +24,13 @@ class UserOut(BaseModel):
     bio: Optional[str]
     is_admin: bool
     created_at: datetime
+    # AI preferences
+    ai_instructions: Optional[str] = None
+    ai_default_model: Optional[str] = None
+    ai_temperature: Optional[float] = None
+    ai_max_tokens: Optional[int] = None
+    ai_default_kb_id: Optional[int] = None
+    ai_reasoning: Optional[bool] = None
 
     class Config:
         from_attributes = True
@@ -33,6 +40,12 @@ class UserUpdate(BaseModel):
     full_name: Optional[str] = None
     bio: Optional[str] = None
     avatar_url: Optional[str] = None
+    ai_instructions: Optional[str] = None
+    ai_default_model: Optional[str] = None
+    ai_temperature: Optional[float] = None
+    ai_max_tokens: Optional[int] = None
+    ai_default_kb_id: Optional[int] = None
+    ai_reasoning: Optional[bool] = None
 
 
 class PasswordChange(BaseModel):

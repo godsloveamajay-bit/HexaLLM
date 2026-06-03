@@ -68,25 +68,27 @@ export default function App() {
           <Route path="/share/:token"    element={<SharePage />} />
           <Route path="/oauth/callback"  element={<OAuthCallbackPage />} />
 
-          <Route element={<PrivateRoute><AppLayout /></PrivateRoute>}>
+          {/* One layout for everything. Chat is open to guests (limited);
+              every other page is wrapped in PrivateRoute so it stays gated. */}
+          <Route element={<AppLayout />}>
             <Route path="/"           element={<Navigate to="/chat" replace />} />
-            <Route path="/dashboard"  element={<AdminRoute><DashboardPage /></AdminRoute>} />
             <Route path="/chat"       element={<ChatPage />} />
-            <Route path="/image"      element={<ImageGenPage />} />
-            <Route path="/agents"     element={<AgentsPage />} />
-            <Route path="/models"     element={<ModelsPage />} />
-            <Route path="/train"      element={<TrainPage />} />
-            <Route path="/knowledge"  element={<KnowledgePage />} />
-            <Route path="/memory"     element={<MemoryPage />} />
-            <Route path="/personas"   element={<PersonasPage />} />
-            <Route path="/workflows"  element={<WorkflowsPage />} />
-            <Route path="/mcp"        element={<MCPServersPage />} />
-            <Route path="/remote-cli" element={<RemoteCLIPage />} />
-            <Route path="/downloads"  element={<DownloadsPage />} />
-            <Route path="/analytics"  element={<AnalyticsPage />} />
-            <Route path="/logs"       element={<LogsPage />} />
-            <Route path="/api-keys"   element={<ApiKeysPage />} />
-            <Route path="/settings"   element={<SettingsPage />} />
+            <Route path="/dashboard"  element={<PrivateRoute><AdminRoute><DashboardPage /></AdminRoute></PrivateRoute>} />
+            <Route path="/image"      element={<PrivateRoute><ImageGenPage /></PrivateRoute>} />
+            <Route path="/agents"     element={<PrivateRoute><AgentsPage /></PrivateRoute>} />
+            <Route path="/models"     element={<PrivateRoute><ModelsPage /></PrivateRoute>} />
+            <Route path="/train"      element={<PrivateRoute><TrainPage /></PrivateRoute>} />
+            <Route path="/knowledge"  element={<PrivateRoute><KnowledgePage /></PrivateRoute>} />
+            <Route path="/memory"     element={<PrivateRoute><MemoryPage /></PrivateRoute>} />
+            <Route path="/personas"   element={<PrivateRoute><PersonasPage /></PrivateRoute>} />
+            <Route path="/workflows"  element={<PrivateRoute><WorkflowsPage /></PrivateRoute>} />
+            <Route path="/mcp"        element={<PrivateRoute><MCPServersPage /></PrivateRoute>} />
+            <Route path="/remote-cli" element={<PrivateRoute><RemoteCLIPage /></PrivateRoute>} />
+            <Route path="/downloads"  element={<PrivateRoute><DownloadsPage /></PrivateRoute>} />
+            <Route path="/analytics"  element={<PrivateRoute><AnalyticsPage /></PrivateRoute>} />
+            <Route path="/logs"       element={<PrivateRoute><LogsPage /></PrivateRoute>} />
+            <Route path="/api-keys"   element={<PrivateRoute><ApiKeysPage /></PrivateRoute>} />
+            <Route path="/settings"   element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
           </Route>
         </Routes>
       </Suspense>

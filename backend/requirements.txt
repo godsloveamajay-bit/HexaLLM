@@ -31,3 +31,7 @@ duckduckgo-search==7.2.1
 pypdf==5.1.0
 apscheduler>=3.10.4
 trafilatura>=1.12.0
+# Server-side speech-to-text for voice input (CPU, CTranslate2 — no torch needed).
+# Pulls ctranslate2, av (bundles ffmpeg), onnxruntime (VAD). Model downloads on
+# first use to ~/.cache/huggingface.
+faster-whisper==1.2.1

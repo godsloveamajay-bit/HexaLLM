@@ -257,7 +257,9 @@ def change_password(data: PasswordChange, db: Session = Depends(get_db), current
 
 @router.patch("/me", response_model=UserOut)
 def update_me(data: UserUpdate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    for field, value in data.model_dump(exclude_none=True).items():
+    # exclude_unset → only touch fields the client actually sent; this lets a
+    # client clear a field by sending null (proper PATCH semantics).
+    for field, value in data.model_dump(exclude_unset=True).items():
         setattr(current_user, field, value)
     db.commit()
     db.refresh(current_user)

@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Index
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Index, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from ..core.database import Base
@@ -16,6 +16,13 @@ class User(Base):
     full_name = Column(String, nullable=True)
     avatar_url = Column(String, nullable=True)
     bio = Column(Text, nullable=True)
+    # AI preferences (Settings → AI Assistant)
+    ai_instructions = Column(Text, nullable=True)     # injected into every chat's system prompt
+    ai_default_model = Column(String, nullable=True)  # default variant for new chats
+    ai_temperature = Column(Float, nullable=True)     # default response creativity (0–1)
+    ai_max_tokens = Column(Integer, nullable=True)    # max response length (0/null = model default)
+    ai_default_kb_id = Column(Integer, nullable=True) # default knowledge base for new chats
+    ai_reasoning = Column(Boolean, nullable=True)     # show extended thinking (null/true = on)
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

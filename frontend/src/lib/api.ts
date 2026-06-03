@@ -21,7 +21,9 @@ api.interceptors.response.use(
   (error) => {
     const url = error.config?.url ?? ''
     const isAuthEndpoint = url.includes('/auth/')
-    if (error.response?.status === 401 && !isAuthEndpoint) {
+    // Only bounce to /login when an existing session expired — a token-less
+    // guest hitting a protected endpoint should stay where they are.
+    if (error.response?.status === 401 && !isAuthEndpoint && localStorage.getItem('token')) {
       localStorage.removeItem('token')
       localStorage.removeItem('user')
       window.location.href = '/login'

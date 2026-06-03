@@ -1,8 +1,9 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
   LayoutDashboard, MessageSquare, Bot, Cpu, Wand2,
   BarChart3, FileText, Key, LogOut, Settings, BookOpen, X, ImageIcon,
   Brain, Zap, Server, Users, Terminal, Download, Sun, Moon, MonitorSmartphone,
+  LogIn, UserPlus,
 } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { useTheme } from '../../lib/theme'
@@ -47,7 +48,10 @@ export default function Sidebar({ isOpen, onClose }: Props) {
     auto: { icon: Moon, label: 'Dark mode' },
   }[theme]
 
-  const navItems = user?.is_admin ? [...BASE_NAV, ...ADMIN_EXTRA] : BASE_NAV
+  // Guests (not logged in) only get Chat — the rest is account-gated.
+  const navItems = !user
+    ? [{ to: '/chat', icon: MessageSquare, label: 'Chat' }]
+    : user.is_admin ? [...BASE_NAV, ...ADMIN_EXTRA] : BASE_NAV
 
   return (
     <aside
@@ -91,21 +95,36 @@ export default function Sidebar({ isOpen, onClose }: Props) {
           <themeMeta.icon className="w-4 h-4" />
           {themeMeta.label}
         </button>
-        <NavLink
-          to="/settings"
-          onClick={onClose}
-          className={({ isActive }) => clsx('sidebar-link', isActive && 'active')}
-        >
-          <Settings className="w-4 h-4" />
-          Settings
-        </NavLink>
-        <button
-          onClick={() => { logout(); navigate('/login') }}
-          className="sidebar-link w-full text-left text-red-400/80 hover:text-red-400 hover:bg-red-900/10"
-        >
-          <LogOut className="w-4 h-4" />
-          Logout
-        </button>
+        {user ? (
+          <>
+            <NavLink
+              to="/settings"
+              onClick={onClose}
+              className={({ isActive }) => clsx('sidebar-link', isActive && 'active')}
+            >
+              <Settings className="w-4 h-4" />
+              Settings
+            </NavLink>
+            <button
+              onClick={() => { logout(); navigate('/login') }}
+              className="sidebar-link w-full text-left text-red-400/80 hover:text-red-400 hover:bg-red-900/10"
+            >
+              <LogOut className="w-4 h-4" />
+              Logout
+            </button>
+          </>
+        ) : (
+          <>
+            <Link to="/login" onClick={onClose} className="sidebar-link">
+              <LogIn className="w-4 h-4" />
+              Sign in
+            </Link>
+            <Link to="/register" onClick={onClose} className="btn-primary w-full justify-center py-2 mt-1 text-sm">
+              <UserPlus className="w-4 h-4" />
+              Create free account
+            </Link>
+          </>
+        )}
       </div>
 
       {user && (

@@ -10,6 +10,13 @@ interface User {
   bio?: string
   is_admin: boolean
   created_at: string
+  // AI preferences (Settings → AI Assistant)
+  ai_instructions?: string | null
+  ai_default_model?: string | null
+  ai_temperature?: number | null
+  ai_max_tokens?: number | null
+  ai_default_kb_id?: number | null
+  ai_reasoning?: boolean | null
 }
 
 interface AuthState {

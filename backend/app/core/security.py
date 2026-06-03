@@ -72,6 +72,21 @@ def get_current_user(
     return user
 
 
+def get_optional_user(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+):
+    """Like get_current_user, but returns None instead of raising when there are
+    no/invalid credentials. Used for endpoints that allow limited guest access
+    (e.g. chatting before login)."""
+    if not credentials:
+        return None
+    try:
+        return get_current_user(credentials=credentials, db=db)
+    except HTTPException:
+        return None
+
+
 # Alias — OpenAI-compat endpoint accepts same auth (JWT or API key)
 get_api_key_user = get_current_user
 

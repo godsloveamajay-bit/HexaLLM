@@ -16,7 +16,7 @@ from .api import (
     templates as templates_api, memory as memory_api,
     personas as personas_api, workflows as workflows_api,
     openai_compat, mcp as mcp_api, cli_tunnel as cli_tunnel_api,
-    downloads as downloads_api,
+    downloads as downloads_api, transcribe as transcribe_api,
 )
 
 
@@ -43,6 +43,19 @@ def _migrate_db():
             conn.execute(text("ALTER TABLE users ADD COLUMN oauth_provider VARCHAR"))
         if "oauth_id" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN oauth_id VARCHAR"))
+        # AI preferences (Settings → AI Assistant)
+        if "ai_instructions" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN ai_instructions TEXT"))
+        if "ai_default_model" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN ai_default_model VARCHAR"))
+        if "ai_temperature" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN ai_temperature FLOAT"))
+        if "ai_max_tokens" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN ai_max_tokens INTEGER"))
+        if "ai_default_kb_id" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN ai_default_kb_id INTEGER"))
+        if "ai_reasoning" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN ai_reasoning BOOLEAN"))
 
         # Drop the NOT NULL constraint on hashed_password by recreating the table.
         # SQLite cannot ALTER a column constraint, so we use the recommended rename approach.
@@ -150,6 +163,7 @@ app.include_router(mcp_api.router,        prefix="/api/v1")
 app.include_router(openai_compat.router,  prefix="/api/v1")
 app.include_router(cli_tunnel_api.router, prefix="/api/v1")
 app.include_router(downloads_api.router,  prefix="/api/v1")
+app.include_router(transcribe_api.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health")
