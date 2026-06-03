@@ -245,6 +245,21 @@ for dpi, (sq, fg) in android.items():
     written.append(f"{base}/ic_launcher_round.png")
     written.append(save_foreground(f"{base}/ic_launcher_foreground.png", fg))
 
+# --- Capacitor Android (frontend/android/app/src/main/res) — the icons that
+#     actually ship in the APK. Adaptive icon = charcoal background colour
+#     (see values/ic_launcher_background.xml) + the sparkle foreground. ---
+cap_android = {
+    "mdpi": (48, 108), "hdpi": (72, 162), "xhdpi": (96, 216),
+    "xxhdpi": (144, 324), "xxxhdpi": (192, 432),
+}
+for dpi, (sq, fg) in cap_android.items():
+    base = f"android/app/src/main/res/mipmap-{dpi}"
+    written.append(save(TILE, f"{base}/ic_launcher.png", sq))
+    p = os.path.join(ROOT, f"{base}/ic_launcher_round.png")
+    out(TILE_ROUND, sq).save(p)
+    written.append(f"{base}/ic_launcher_round.png")
+    written.append(save_foreground(f"{base}/ic_launcher_foreground.png", fg))
+
 print(f"Wrote {len(written)} icon files:")
 for w in written:
     print("  ", w)

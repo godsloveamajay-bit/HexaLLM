@@ -372,6 +372,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.10.2',
+    date: '2026-06-03',
+    summary: 'The new app icon now ships on Android too.',
+    changes: [
+      { type: 'fixed', text: 'Android app icon now shows the new sparkle — the APK was still bundling the old blue mark' },
+    ],
+  },
+  {
     version: '0.10.1',
     date: '2026-06-03',
     summary: 'A fresh app icon that matches the cosy NebulaX look.',
@@ -542,7 +550,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.10.1'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.10.2'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 
