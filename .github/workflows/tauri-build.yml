@@ -1,5 +1,11 @@
-name: Build Desktop Apps
+name: Build & Release
 
+# A single tag push (v*) drives the whole release:
+#   build-tauri          – desktop installers (macOS / Windows / Linux)
+#   build-android        – signed Android APK
+#   publish-updater-json – latest.json for the in-app auto-updater
+#   publish-cli          – NebulaCode CLI wheel+sdist to PyPI (and the release)
+# One workflow == one release run.
 on:
   push:
     tags:
@@ -7,7 +13,8 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: write   # create the release + upload assets
+  id-token: write   # PyPI trusted-publishing (OIDC) fallback
 
 jobs:
   build-tauri:
@@ -295,3 +302,58 @@ jobs:
 
           gh release upload "$TAG" /tmp/latest.json --clobber --repo "$REPO"
           echo "latest.json uploaded successfully"
+
+  # Build the `nebulacode` CLI and publish it to PyPI on the same tag, then
+  # attach the wheel + sdist to the GitHub Release alongside the installers.
+  # Runs in parallel with the desktop/mobile builds (no dependency).
+  # Auth: repo secret PYPI_API_TOKEN (a `pypi-…` token). Falls back to PyPI
+  # Trusted Publishing via the id-token permission if the secret is absent.
+  publish-cli:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Verify package version matches the tag
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION="$(grep -m1 -E '^version' pyproject.toml | sed -E 's/.*"([^"]+)".*/\1/')"
+          echo "tag=$TAG_VERSION  pyproject=$PKG_VERSION"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag ($TAG_VERSION) does not match pyproject version ($PKG_VERSION)"
+            exit 1
+          fi
+
+      - name: Build wheel + sdist
+        run: |
+          python -m pip install --upgrade build
+          python -m build
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist
+          password: ${{ secrets.PYPI_API_TOKEN }}
+          # Don't fail if this version was already uploaded (e.g. published
+          # manually) — lets CI act as a harmless backstop.
+          skip-existing: true
+
+      - name: Attach artifacts to the GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # The release is normally created by build-tauri; create it if it
+          # isn't there yet so the upload never races to a missing release.
+          gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1 \
+            || gh release create "$TAG" --repo "${{ github.repository }}" \
+                 --title "NebulaX AI $TAG" --notes "" --verify-tag || true
+          gh release upload "$TAG" dist/*.whl dist/*.tar.gz \
+            --clobber --repo "${{ github.repository }}"
