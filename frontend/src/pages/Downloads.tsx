@@ -372,6 +372,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.10.1',
+    date: '2026-06-03',
+    summary: 'A fresh app icon that matches the cosy NebulaX look.',
+    changes: [
+      { type: 'improved', text: 'New app icon — the warm sparkle from the app, across desktop, mobile, and the browser tab' },
+    ],
+  },
+  {
     version: '0.10.0',
     date: '2026-06-03',
     summary: 'Chat as a guest, a full AI settings panel, on-device voice typing, and smoother streaming.',
@@ -534,7 +542,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.10.0'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.10.1'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 
