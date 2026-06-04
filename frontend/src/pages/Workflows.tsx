@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Play, Trash2, Pencil, Loader2, Clock, CheckCircle2, XCircle, Zap, Bot } from 'lucide-react'
 import api from '../lib/api'
+import { chatCapableModels, defaultAgentModel } from '../lib/models'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
@@ -43,7 +44,7 @@ function WorkflowForm({ initial, ollamaModels, onSave, onCancel }: {
     name: initial?.name || '',
     description: initial?.description || '',
     task: initial?.task || '',
-    model: initial?.model || (ollamaModels[0] || 'llama3:8B'),
+    model: initial?.model || defaultAgentModel(ollamaModels) || 'llama3:8b',
     tools: initial?.tools || ['web_search'],
     system_prompt: initial?.system_prompt || '',
     max_steps: initial?.max_steps ?? 10,
@@ -142,7 +143,7 @@ export default function WorkflowsPage() {
       ])
       if (wfRes.status === 'fulfilled') setWorkflows(wfRes.value.data)
       if (modRes.status === 'fulfilled') {
-        const names = modRes.value.data.models?.map((m: any) => m.name) || []
+        const names = chatCapableModels(modRes.value.data.models?.map((m: any) => m.name) || [])
         if (names.length) setOllamaModels(names)
       }
     } finally { setLoading(false) }

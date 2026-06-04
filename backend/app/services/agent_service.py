@@ -37,9 +37,23 @@ FIX_PROMPT = (
 
 # ── JSON extraction ────────────────────────────────────────────────────────
 
+def _strip_think(text: str) -> str:
+    """Remove <think>…</think> reasoning blocks emitted by reasoning models
+    (deepseek-r1, qwen3, …). Their chain-of-thought often contains stray braces
+    and example JSON that derail the parser, and it buries the real answer."""
+    if not text:
+        return ""
+    text = re.sub(r'<think>.*?</think>', '', text, flags=re.DOTALL | re.IGNORECASE)
+    # If only a closing tag survived (opening tag consumed mid-stream), keep
+    # everything after the last one — that's where the real output lives.
+    if '</think>' in text:
+        text = text.rsplit('</think>', 1)[-1]
+    return text.strip()
+
+
 def _extract_json(text: str) -> Optional[dict]:
     """Try several strategies to pull a JSON object out of model output."""
-    text = text.strip()
+    text = _strip_think(text).strip()
 
     # 1. Direct parse
     try:
@@ -263,10 +277,28 @@ async def run_agent(
                 break
 
         if not parsed:
-            # Give up on this step — record it and stop
+            # The model answered in prose instead of the JSON protocol — common
+            # with chat-tuned and reasoning models. Rather than failing with no
+            # output, accept the prose as the final answer (same pragmatic
+            # "direct-prose acceptance" the CLI agent uses).
+            cleaned = _strip_think(last_response).strip()
+            if len(cleaned) >= 2:
+                step = {
+                    "step": step_num,
+                    "thought": "",
+                    "tool": "done",
+                    "input": cleaned,
+                    "output": cleaned,
+                }
+                steps.append(step)
+                if on_step:
+                    await on_step(step)
+                return {"steps": steps, "result": cleaned, "error": None}
+
+            # Truly empty (e.g. repeated timeouts) — record it and stop
             step = {
                 "step": step_num,
-                "thought": f"Model did not return valid JSON after retries. Raw: {last_response[:300]}",
+                "thought": f"Model did not return usable output after retries. Raw: {last_response[:300]}",
                 "tool": None,
                 "input": None,
                 "output": None,
@@ -328,6 +360,36 @@ async def run_agent(
             await on_step(step)
 
         messages.append({"role": "user", "content": f"Tool result:\n{output}"})
+
+    # Ran out of steps without an explicit "done". Don't return nothing —
+    # ask the model for a best-effort answer from what it gathered so the
+    # user always sees output.
+    if steps:
+        try:
+            summary = await asyncio.wait_for(
+                _llm_call(
+                    model,
+                    messages + [{
+                        "role": "user",
+                        "content": (
+                            "You have run out of steps. Using everything gathered above, "
+                            "write the best final answer you can for the original task. "
+                            "Answer in plain prose — no JSON, no tool calls."
+                        ),
+                    }],
+                    persona_prompt or "You are a helpful assistant.",
+                ),
+                timeout=120,
+            )
+            summary = _strip_think(summary).strip()
+        except asyncio.TimeoutError:
+            summary = ""
+        if summary:
+            return {
+                "steps": steps,
+                "result": summary,
+                "error": "Reached the step limit — answer synthesized from partial progress.",
+            }
 
     return {
         "steps": steps,

@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server, Brain, Terminal, ShieldCheck, ShieldAlert } from 'lucide-react'
 import api, { baseURL } from '../lib/api'
+import { chatCapableModels, defaultAgentModel } from '../lib/models'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
@@ -216,8 +217,8 @@ export default function AgentsPage() {
   useEffect(() => {
     api.get('/agents/runs').then(({ data }) => setHistory(data)).catch(() => {})
     api.get('/models/ollama/list').then(({ data }) => {
-      const names = data.models?.map((m: any) => m.name) || []
-      if (names.length) { setOllamaModels(names); setModel(names[0]) }
+      const names = chatCapableModels(data.models?.map((m: any) => m.name) || [])
+      if (names.length) { setOllamaModels(names); setModel(defaultAgentModel(names)) }
     }).catch(() => {})
     api.get('/mcp').then(({ data }) => setMcpServers(data.filter((s: any) => s.tools_cache?.length))).catch(() => {})
     api.get('/agents/sandbox/status').then(({ data }) => setSandboxStatus(data)).catch(() => {})
