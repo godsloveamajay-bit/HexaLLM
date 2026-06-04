@@ -1,19 +1,31 @@
-"""OpenAI-compatible /v1/chat/completions endpoint.
+"""OpenAI-compatible API ("Expose as API").
 
-Allows any OpenAI client to point at NebulaX and use local Ollama models.
+Any OpenAI client can point at NebulaX and talk to a local model. Authenticate
+with a NebulaX API key (nai_…). A key may be *bound* to a saved persona, in
+which case callers automatically get that persona's model, system prompt and
+temperature — the "Expose as API" toggle — without knowing any of it.
+
+Mounted at both `/v1` (clean OpenAI base_url) and `/api/v1/openai` (back-compat).
+Every call meters real token usage against the key and the platform usage ledger.
 """
 import json
 import time
 import uuid
-from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, Request
+from datetime import datetime, timezone
+from typing import List, Optional, Dict
+
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from ..core.security import get_api_key_user
-from ..models.user import User
+from sqlalchemy.orm import Session
+
+from ..core.database import get_db, SessionLocal
+from ..core.security import get_api_key_record
+from ..models.user import APIKey
+from ..models.chat import RequestLog
 from ..services.ollama_service import ollama
 
-router = APIRouter(prefix="/openai", tags=["openai-compat"])
+router = APIRouter(tags=["openai-compat"])
 
 
 class OAIMessage(BaseModel):
@@ -21,94 +33,163 @@ class OAIMessage(BaseModel):
     content: str
 
 
+class OAIStreamOptions(BaseModel):
+    include_usage: bool = False
+
+
 class OAIChatRequest(BaseModel):
-    model: str
+    model: Optional[str] = None
     messages: List[OAIMessage]
     stream: bool = False
-    temperature: Optional[float] = 0.7
+    temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     system: Optional[str] = None
+    stream_options: Optional[OAIStreamOptions] = None
+
+
+def _resolve(key: APIKey, req: OAIChatRequest):
+    """Work out the served model, system prompt and temperature for this call,
+    honouring the key's persona binding (if any) over caller-supplied values."""
+    persona = key.persona if key.persona_id else None
+
+    # Served model: persona's snapshot, else the key's raw model, else caller's.
+    model = key.model_name or (persona.base_model if persona else None) or req.model
+    if not model:
+        raise HTTPException(
+            status_code=400,
+            detail="No model specified. This key isn't bound to a model, so include a 'model' field.",
+        )
+
+    # System prompt: persona identity first, then any caller system text.
+    system_parts: List[str] = []
+    if persona and persona.system_prompt:
+        system_parts.append(persona.system_prompt)
+    convo: List[Dict] = []
+    for m in req.messages:
+        if m.role == "system":
+            system_parts.append(m.content)
+        else:
+            convo.append({"role": m.role, "content": m.content})
+    if req.system:
+        system_parts.append(req.system)
+    system_prompt = "\n\n".join(p for p in system_parts if p)
+
+    if req.temperature is not None:
+        temperature = req.temperature
+    elif persona and persona.temperature is not None:
+        temperature = persona.temperature
+    else:
+        temperature = 0.7
+
+    return model, system_prompt, temperature, convo
+
+
+def _meter(db: Session, key_id: int, user_id: int, model: str, usage: dict, latency_ms: int):
+    """Record usage against the key and the platform ledger (RequestLog)."""
+    pt = int((usage or {}).get("prompt_tokens", 0) or 0)
+    ct = int((usage or {}).get("completion_tokens", 0) or 0)
+    key = db.query(APIKey).filter(APIKey.id == key_id).first()
+    if key:
+        key.request_count = (key.request_count or 0) + 1
+        key.prompt_tokens = (key.prompt_tokens or 0) + pt
+        key.completion_tokens = (key.completion_tokens or 0) + ct
+        key.last_used_at = datetime.now(timezone.utc)
+    db.add(RequestLog(
+        user_id=user_id, endpoint="/v1/chat/completions", method="POST",
+        status_code=200, model_name=model, prompt_tokens=pt,
+        completion_tokens=ct, latency_ms=latency_ms,
+    ))
+    db.commit()
 
 
 @router.post("/chat/completions")
 async def chat_completions(
     req: OAIChatRequest,
-    current_user: User = Depends(get_api_key_user),
+    key: APIKey = Depends(get_api_key_record),
+    db: Session = Depends(get_db),
 ):
-    system_prompt = req.system or ""
-    # Extract system message from messages array if present
-    messages = []
-    for m in req.messages:
-        if m.role == "system" and not system_prompt:
-            system_prompt = m.content
-        else:
-            messages.append({"role": m.role, "content": m.content})
-
-    request_id = f"chatcmpl-{uuid.uuid4().hex[:16]}"
+    model, system_prompt, temperature, messages = _resolve(key, req)
+    request_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
+    key_id, user_id = key.id, key.user_id
+    started = time.monotonic()
 
     if req.stream:
-        async def stream_gen():
-            async for chunk in ollama.chat_stream(
-                req.model, messages,
-                system_prompt=system_prompt,
-                temperature=req.temperature or 0.7,
-            ):
-                delta = {
-                    "id": request_id,
-                    "object": "chat.completion.chunk",
-                    "created": created,
-                    "model": req.model,
-                    "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}],
-                }
-                yield f"data: {json.dumps(delta)}\n\n"
-            done = {
-                "id": request_id,
-                "object": "chat.completion.chunk",
-                "created": created,
-                "model": req.model,
-                "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
-            }
-            yield f"data: {json.dumps(done)}\n\ndata: [DONE]\n\n"
+        include_usage = bool(req.stream_options and req.stream_options.include_usage)
 
-        # Content-Encoding: identity bypasses the GZipMiddleware (which otherwise
-        # buffers the entire SSE stream in the zlib compressor until the model
-        # finishes, causing Cloudflare 524 timeouts on long responses).
+        async def stream_gen():
+            usage: dict = {}
+            try:
+                async for chunk in ollama.chat_stream(
+                    model, messages, system_prompt=system_prompt,
+                    temperature=temperature, max_tokens=req.max_tokens, usage=usage,
+                ):
+                    delta = {
+                        "id": request_id, "object": "chat.completion.chunk",
+                        "created": created, "model": model,
+                        "choices": [{"index": 0, "delta": {"content": chunk}, "finish_reason": None}],
+                    }
+                    yield f"data: {json.dumps(delta)}\n\n"
+                done = {
+                    "id": request_id, "object": "chat.completion.chunk",
+                    "created": created, "model": model,
+                    "choices": [{"index": 0, "delta": {}, "finish_reason": "stop"}],
+                }
+                if include_usage:
+                    pt = int(usage.get("prompt_tokens", 0) or 0)
+                    ct = int(usage.get("completion_tokens", 0) or 0)
+                    done["usage"] = {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct}
+                yield f"data: {json.dumps(done)}\n\n"
+                yield "data: [DONE]\n\n"
+            finally:
+                # Meter even if the client disconnects mid-stream. Own session
+                # because the request-scoped one is gone once streaming starts.
+                meter_db = SessionLocal()
+                try:
+                    _meter(meter_db, key_id, user_id, model, usage,
+                           int((time.monotonic() - started) * 1000))
+                finally:
+                    meter_db.close()
+
+        # Content-Encoding: identity bypasses GZip buffering (Cloudflare 524 fix).
         return StreamingResponse(
-            stream_gen(),
-            media_type="text/event-stream",
-            headers={
-                "Content-Encoding": "identity",
-                "Cache-Control": "no-cache",
-                "X-Accel-Buffering": "no",
-            },
+            stream_gen(), media_type="text/event-stream",
+            headers={"Content-Encoding": "identity", "Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
         )
 
     # Non-streaming
+    usage: dict = {}
     full = ""
     async for chunk in ollama.chat_stream(
-        req.model, messages,
-        system_prompt=system_prompt,
-        temperature=req.temperature or 0.7,
+        model, messages, system_prompt=system_prompt,
+        temperature=temperature, max_tokens=req.max_tokens, usage=usage,
     ):
         full += chunk
 
-    prompt_tokens = sum(len(m.content.split()) for m in req.messages)
-    completion_tokens = len(full.split())
+    pt = int(usage.get("prompt_tokens", 0) or 0)
+    ct = int(usage.get("completion_tokens", 0) or 0)
+    _meter(db, key_id, user_id, model, usage, int((time.monotonic() - started) * 1000))
 
     return {
-        "id": request_id,
-        "object": "chat.completion",
-        "created": created,
-        "model": req.model,
-        "choices": [{
-            "index": 0,
-            "message": {"role": "assistant", "content": full},
-            "finish_reason": "stop",
-        }],
-        "usage": {
-            "prompt_tokens": prompt_tokens,
-            "completion_tokens": completion_tokens,
-            "total_tokens": prompt_tokens + completion_tokens,
-        },
+        "id": request_id, "object": "chat.completion", "created": created, "model": model,
+        "choices": [{"index": 0, "message": {"role": "assistant", "content": full}, "finish_reason": "stop"}],
+        "usage": {"prompt_tokens": pt, "completion_tokens": ct, "total_tokens": pt + ct},
+    }
+
+
+@router.get("/models")
+async def list_models(key: APIKey = Depends(get_api_key_record)):
+    """OpenAI-style model list. A bound key advertises only its served model."""
+    created = int(time.time())
+    if key.model_name:
+        names = [key.model_name]
+    else:
+        try:
+            tags = await ollama.list_models()
+            names = [m.get("name") for m in (tags or []) if m.get("name")]
+        except Exception:
+            names = []
+    return {
+        "object": "list",
+        "data": [{"id": n, "object": "model", "created": created, "owned_by": "nebulax"} for n in names],
     }

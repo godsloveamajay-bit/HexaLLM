@@ -91,6 +91,28 @@ def get_optional_user(
 get_api_key_user = get_current_user
 
 
+def get_api_key_record(
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+):
+    """Return the APIKey row for a request authenticated with an `nai_` key.
+    Used by the public OpenAI-compatible endpoint so it can read the key's
+    bound model/persona and meter usage against it."""
+    from ..models.user import APIKey
+
+    if not credentials or not credentials.credentials.startswith("nai_"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Provide a NebulaX API key (nai_…) as a Bearer token.",
+        )
+    api_key = db.query(APIKey).filter(
+        APIKey.key == credentials.credentials, APIKey.is_active == True
+    ).first()
+    if not api_key:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
+    return api_key
+
+
 def require_admin(current_user=Depends(get_current_user)):
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")

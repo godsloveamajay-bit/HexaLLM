@@ -31,6 +31,18 @@ def _migrate_db():
                 "ON chat_sessions (share_token)"
             ))
 
+        if "api_keys" in inspector.get_table_names():
+            key_cols = {c["name"] for c in inspector.get_columns("api_keys")}
+            for col, ddl in [
+                ("persona_id", "ALTER TABLE api_keys ADD COLUMN persona_id INTEGER"),
+                ("model_name", "ALTER TABLE api_keys ADD COLUMN model_name VARCHAR"),
+                ("request_count", "ALTER TABLE api_keys ADD COLUMN request_count INTEGER DEFAULT 0"),
+                ("prompt_tokens", "ALTER TABLE api_keys ADD COLUMN prompt_tokens INTEGER DEFAULT 0"),
+                ("completion_tokens", "ALTER TABLE api_keys ADD COLUMN completion_tokens INTEGER DEFAULT 0"),
+            ]:
+                if col not in key_cols:
+                    conn.execute(text(ddl))
+
         if "agent_runs" in inspector.get_table_names():
             agent_cols = {c["name"] for c in inspector.get_columns("agent_runs")}
             if "prompt_tokens" not in agent_cols:
@@ -167,7 +179,9 @@ app.include_router(memory_api.router,     prefix="/api/v1")
 app.include_router(personas_api.router,   prefix="/api/v1")
 app.include_router(workflows_api.router,  prefix="/api/v1")
 app.include_router(mcp_api.router,        prefix="/api/v1")
-app.include_router(openai_compat.router,  prefix="/api/v1")
+# OpenAI-compatible API ("Expose as API"): clean /v1 base_url + back-compat path.
+app.include_router(openai_compat.router,  prefix="/v1")
+app.include_router(openai_compat.router,  prefix="/api/v1/openai")
 app.include_router(cli_tunnel_api.router, prefix="/api/v1")
 app.include_router(downloads_api.router,  prefix="/api/v1")
 app.include_router(transcribe_api.router, prefix="/api/v1")

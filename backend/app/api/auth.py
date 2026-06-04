@@ -323,23 +323,44 @@ def reset_password(data: dict, db: Session = Depends(get_db)):
     db.commit()
 
 
+def _key_out(key: APIKey) -> APIKeyOut:
+    out = APIKeyOut.model_validate(key)
+    out.persona_name = key.persona.name if key.persona_id and key.persona else None
+    return out
+
+
 @router.get("/api-keys", response_model=list[APIKeyOut])
 def list_api_keys(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
-    keys = db.query(APIKey).filter(APIKey.user_id == current_user.id).all()
-    return keys
+    keys = db.query(APIKey).filter(APIKey.user_id == current_user.id).order_by(APIKey.created_at.desc()).all()
+    return [_key_out(k) for k in keys]
 
 
 @router.post("/api-keys", response_model=APIKeyOut, status_code=201)
 def create_api_key(data: APIKeyCreate, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
+    from ..models.persona import SavedPersona
+
+    persona_id = None
+    model_name = data.model
+    if data.persona_id is not None:
+        persona = db.query(SavedPersona).filter(
+            SavedPersona.id == data.persona_id, SavedPersona.user_id == current_user.id
+        ).first()
+        if not persona:
+            raise HTTPException(status_code=404, detail="Persona not found")
+        persona_id = persona.id
+        model_name = persona.base_model  # snapshot the served model
+
     key = APIKey(
         user_id=current_user.id,
         name=data.name,
         key=generate_api_key(),
+        persona_id=persona_id,
+        model_name=model_name,
     )
     db.add(key)
     db.commit()
     db.refresh(key)
-    return key
+    return _key_out(key)
 
 
 @router.delete("/api-keys/{key_id}", status_code=204)

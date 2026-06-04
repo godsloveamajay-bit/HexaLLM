@@ -61,6 +61,8 @@ class TokenResponse(BaseModel):
 
 class APIKeyCreate(BaseModel):
     name: str
+    persona_id: Optional[int] = None   # bind to a saved persona ("Expose as API")
+    model: Optional[str] = None        # or expose a raw model directly
 
 
 class APIKeyOut(BaseModel):
@@ -68,6 +70,12 @@ class APIKeyOut(BaseModel):
     name: str
     key: str
     is_active: bool
+    persona_id: Optional[int] = None
+    persona_name: Optional[str] = None
+    model_name: Optional[str] = None
+    request_count: int = 0
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
     created_at: datetime
     last_used_at: Optional[datetime]
 

@@ -50,10 +50,19 @@ class APIKey(Base):
     name = Column(String, nullable=False)
     key = Column(String, unique=True, index=True, nullable=False)
     is_active = Column(Boolean, default=True)
+    # "Expose as API": optionally bind a key to a saved persona so external
+    # callers automatically get that model + system prompt + temperature.
+    persona_id = Column(Integer, ForeignKey("saved_personas.id", ondelete="SET NULL"), nullable=True)
+    model_name = Column(String, nullable=True)   # served model (snapshot of persona.base_model, or a raw model)
+    # Usage metering for billing / dashboards.
+    request_count = Column(Integer, default=0)
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     last_used_at = Column(DateTime(timezone=True), nullable=True)
 
     user = relationship("User", back_populates="api_keys")
+    persona = relationship("SavedPersona")
 
 
 class PasswordResetToken(Base):

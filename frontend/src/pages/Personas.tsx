@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Globe, Lock, Copy, Loader2, Cpu, BookOpen, Brain, Zap, Bot, FlaskConical, Search, Code2, Star } from 'lucide-react'
+import { Plus, Pencil, Trash2, Globe, Lock, Copy, Loader2, Cpu, BookOpen, Brain, Zap, Bot, FlaskConical, Search, Code2, Star, Webhook } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -155,8 +156,8 @@ function PersonaForm({
   )
 }
 
-function PersonaCard({ persona, onEdit, onDelete, onFork, onToggleFavorite, isOwn }: {
-  persona: Persona; onEdit?: () => void; onDelete?: () => void; onFork?: () => void; onToggleFavorite?: () => void; isOwn: boolean
+function PersonaCard({ persona, onEdit, onDelete, onFork, onToggleFavorite, onExpose, isOwn }: {
+  persona: Persona; onEdit?: () => void; onDelete?: () => void; onFork?: () => void; onToggleFavorite?: () => void; onExpose?: () => void; isOwn: boolean
 }) {
   return (
     <div className={clsx('card flex flex-col gap-3', persona.is_favorite && 'ring-1 ring-secondary-500/40')}>
@@ -200,6 +201,7 @@ function PersonaCard({ persona, onEdit, onDelete, onFork, onToggleFavorite, isOw
         <div className="flex gap-1">
           {!isOwn && <button onClick={onFork} className="btn-secondary text-xs py-1 px-2 gap-1"><Copy className="w-3 h-3" />Fork</button>}
           {isOwn && <>
+            <button onClick={onExpose} title="Expose as API" className="btn-secondary text-xs py-1 px-2 gap-1 text-primary-300 hover:text-primary-200"><Webhook className="w-3 h-3" />API</button>
             <button onClick={onEdit} className="btn-secondary text-xs py-1 px-2"><Pencil className="w-3 h-3" /></button>
             <button onClick={onDelete} className="btn-secondary text-xs py-1 px-2 text-red-400 hover:text-red-300"><Trash2 className="w-3 h-3" /></button>
           </>}
@@ -215,6 +217,7 @@ export default function PersonasPage() {
   const [kbs, setKbs] = useState<KnowledgeBase[]>([])
   const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3:8B'])
   const [loading, setLoading] = useState(true)
+  const navigate = useNavigate()
   const [tab, setTab] = useState<'mine' | 'community'>('mine')
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Persona | null>(null)
@@ -327,6 +330,7 @@ export default function PersonasPage() {
                 onEdit={() => { setEditing(p); setShowForm(true) }}
                 onDelete={() => del(p.id)}
                 onToggleFavorite={() => toggleFavorite(p)}
+                onExpose={() => navigate(`/api-keys?expose=${p.id}`)}
               />
             ))}
           </div>
