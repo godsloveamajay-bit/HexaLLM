@@ -48,6 +48,9 @@ class AgentRun(Base):
     steps = Column(JSON, default=list)
     result = Column(Text, nullable=True)
     error = Column(Text, nullable=True)
+    # LLMOps telemetry: total tokens spent across every LLM call in the run.
+    prompt_tokens = Column(Integer, default=0)
+    completion_tokens = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     completed_at = Column(DateTime(timezone=True), nullable=True)
 

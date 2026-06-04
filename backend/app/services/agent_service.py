@@ -1,5 +1,6 @@
 import re
 import json
+import time
 import asyncio
 import subprocess
 import tempfile
@@ -182,12 +183,23 @@ _TOOL_FUNCS = {
 
 # ── Agent loop ─────────────────────────────────────────────────────────────
 
-async def _llm_call(model: str, messages: list, system: str) -> str:
-    """Collect a full response from the streaming LLM."""
+async def _llm_call(model: str, messages: list, system: str, usage: Optional[Dict] = None) -> str:
+    """Collect a full response from the streaming LLM. If `usage` is passed it is
+    populated with prompt_tokens/completion_tokens for the call (LLMOps telemetry)."""
     text = ""
-    async for chunk in ollama.chat_stream(model, messages, system_prompt=system, temperature=0.1):
+    async for chunk in ollama.chat_stream(model, messages, system_prompt=system, temperature=0.1, usage=usage):
         text += chunk
     return text
+
+
+# Substrings that mark a tool output as a failure, so the flow debugger can show
+# the node as ❌ Error rather than a green success.
+_ERROR_MARKERS = ("error:", "timed out", "traceback", "unknown tool", "no results found")
+
+
+def _tool_failed(output: str) -> bool:
+    low = (output or "").lower()
+    return any(m in low for m in _ERROR_MARKERS)
 
 
 async def run_agent(
@@ -241,20 +253,31 @@ async def run_agent(
         {"role": "user", "content": f"Complete this task: {task}"}
     ]
     steps: List[Dict] = []
+    total_usage = {"prompt_tokens": 0, "completion_tokens": 0}
+
+    def _track(call_usage: Dict, step_usage: Dict):
+        for k in ("prompt_tokens", "completion_tokens"):
+            v = int(call_usage.get(k, 0) or 0)
+            step_usage[k] += v
+            total_usage[k] += v
 
     for step_num in range(1, max_steps + 1):
         # ── Get LLM response, retry up to 3× on bad JSON ──────────────────
         parsed: Optional[dict] = None
         last_response = ""
+        step_usage = {"prompt_tokens": 0, "completion_tokens": 0}
+        t_start = time.monotonic()
 
         for attempt in range(3):
+            call_usage: Dict = {}
             try:
                 last_response = await asyncio.wait_for(
-                    _llm_call(model, messages, system),
+                    _llm_call(model, messages, system, call_usage),
                     timeout=120,
                 )
             except asyncio.TimeoutError:
                 last_response = ""
+            _track(call_usage, step_usage)
 
             parsed = _extract_json(last_response)
             if parsed:
@@ -265,16 +288,28 @@ async def run_agent(
                 {"role": "assistant", "content": last_response or "(no response)"},
                 {"role": "user", "content": FIX_PROMPT},
             ]
+            call_usage = {}
             try:
                 last_response = await asyncio.wait_for(
-                    _llm_call(model, fix_messages, system),
+                    _llm_call(model, fix_messages, system, call_usage),
                     timeout=60,
                 )
             except asyncio.TimeoutError:
                 last_response = ""
+            _track(call_usage, step_usage)
             parsed = _extract_json(last_response)
             if parsed:
                 break
+
+        def _telemetry():
+            return {
+                "tokens": {
+                    "prompt": step_usage["prompt_tokens"],
+                    "completion": step_usage["completion_tokens"],
+                    "total": step_usage["prompt_tokens"] + step_usage["completion_tokens"],
+                },
+                "duration_ms": int((time.monotonic() - t_start) * 1000),
+            }
 
         if not parsed:
             # The model answered in prose instead of the JSON protocol — common
@@ -289,11 +324,13 @@ async def run_agent(
                     "tool": "done",
                     "input": cleaned,
                     "output": cleaned,
+                    "status": "completed",
+                    **_telemetry(),
                 }
                 steps.append(step)
                 if on_step:
                     await on_step(step)
-                return {"steps": steps, "result": cleaned, "error": None}
+                return {"steps": steps, "result": cleaned, "error": None, "usage": total_usage}
 
             # Truly empty (e.g. repeated timeouts) — record it and stop
             step = {
@@ -302,6 +339,8 @@ async def run_agent(
                 "tool": None,
                 "input": None,
                 "output": None,
+                "status": "error",
+                **_telemetry(),
             }
             steps.append(step)
             if on_step:
@@ -321,15 +360,18 @@ async def run_agent(
             "tool": tool_name,
             "input": tool_input,
             "output": None,
+            "status": "success",
+            **_telemetry(),
         }
 
         # ── Done ───────────────────────────────────────────────────────────
         if tool_name == "done":
             step["output"] = tool_input
+            step["status"] = "completed"
             steps.append(step)
             if on_step:
                 await on_step(step)
-            return {"steps": steps, "result": tool_input, "error": None}
+            return {"steps": steps, "result": tool_input, "error": None, "usage": total_usage}
 
         # ── Execute tool ───────────────────────────────────────────────────
         if tool_name in tool_funcs and tool_name in available:
@@ -355,6 +397,7 @@ async def run_agent(
             output = f"Unknown tool '{tool_name}'. Available: {known}"
 
         step["output"] = output
+        step["status"] = "error" if _tool_failed(output) else "success"
         steps.append(step)
         if on_step:
             await on_step(step)
@@ -365,6 +408,7 @@ async def run_agent(
     # ask the model for a best-effort answer from what it gathered so the
     # user always sees output.
     if steps:
+        wrap_usage: Dict = {}
         try:
             summary = await asyncio.wait_for(
                 _llm_call(
@@ -378,21 +422,26 @@ async def run_agent(
                         ),
                     }],
                     persona_prompt or "You are a helpful assistant.",
+                    wrap_usage,
                 ),
                 timeout=120,
             )
             summary = _strip_think(summary).strip()
         except asyncio.TimeoutError:
             summary = ""
+        for k in ("prompt_tokens", "completion_tokens"):
+            total_usage[k] += int(wrap_usage.get(k, 0) or 0)
         if summary:
             return {
                 "steps": steps,
                 "result": summary,
                 "error": "Reached the step limit — answer synthesized from partial progress.",
+                "usage": total_usage,
             }
 
     return {
         "steps": steps,
         "result": None,
         "error": "Reached max steps without completing the task.",
+        "usage": total_usage,
     }

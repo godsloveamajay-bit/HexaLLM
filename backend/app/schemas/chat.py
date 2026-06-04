@@ -75,10 +75,13 @@ class AgentStepOut(BaseModel):
 class AgentRunOut(BaseModel):
     id: int
     task: str
+    model_name: str
     status: str
     steps: List[Dict]
     result: Optional[str]
     error: Optional[str]
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
     created_at: datetime
     completed_at: Optional[datetime]
 

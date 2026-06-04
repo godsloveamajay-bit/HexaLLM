@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react'
 import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server, Brain, Terminal, ShieldCheck, ShieldAlert } from 'lucide-react'
 import api, { baseURL } from '../lib/api'
 import { chatCapableModels, defaultAgentModel } from '../lib/models'
+import AgentFlow, { FlowStep } from '../components/AgentFlow'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
@@ -14,11 +15,15 @@ interface Step {
   tool?: string
   input?: string
   output?: string
+  status?: 'success' | 'error' | 'completed' | 'running'
+  tokens?: { prompt: number; completion: number; total: number }
+  duration_ms?: number
 }
 
 interface AgentRun {
   id: number
   task: string
+  model_name?: string
   status: string
   steps: Step[]
   result?: string
@@ -205,6 +210,7 @@ export default function AgentsPage() {
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
   const [selectedMcp, setSelectedMcp] = useState<number[]>([])
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus | null>(null)
+  const [flowView, setFlowView] = useState(true)
   const stepsRef = useRef<HTMLDivElement>(null)
 
   const activePersona = PERSONAS.find((p) => p.id === persona) ?? PERSONAS[0]
@@ -464,17 +470,31 @@ export default function AgentsPage() {
 
         {/* Live output */}
         <div className="card flex flex-col" style={{ minHeight: '500px' }}>
-          <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center justify-between mb-4 gap-3">
             <h2 className="text-base font-semibold text-gray-100">Agent Output</h2>
-            {currentRun && (
-              <span className={clsx('badge', {
-                'bg-yellow-900/40 text-yellow-300': currentRun.status === 'running',
-                'bg-green-900/40 text-green-300': currentRun.status === 'completed',
-                'bg-red-900/40 text-red-300': currentRun.status === 'failed',
-              })}>
-                {currentRun.status}
-              </span>
-            )}
+            <div className="flex items-center gap-2">
+              {currentRun && currentRun.steps.length > 0 && (
+                <div className="flex rounded-lg border border-gray-700 overflow-hidden text-xs">
+                  <button onClick={() => setFlowView(true)}
+                    className={clsx('px-2.5 py-1 transition-colors', flowView ? 'bg-primary-900/50 text-primary-300' : 'text-gray-500 hover:text-gray-300')}>
+                    Flow
+                  </button>
+                  <button onClick={() => setFlowView(false)}
+                    className={clsx('px-2.5 py-1 transition-colors border-l border-gray-700', !flowView ? 'bg-primary-900/50 text-primary-300' : 'text-gray-500 hover:text-gray-300')}>
+                    Steps
+                  </button>
+                </div>
+              )}
+              {currentRun && (
+                <span className={clsx('badge', {
+                  'bg-yellow-900/40 text-yellow-300': currentRun.status === 'running',
+                  'bg-green-900/40 text-green-300': currentRun.status === 'completed',
+                  'bg-red-900/40 text-red-300': currentRun.status === 'failed',
+                })}>
+                  {currentRun.status}
+                </span>
+              )}
+            </div>
           </div>
 
           {!currentRun ? (
@@ -488,7 +508,14 @@ export default function AgentsPage() {
                 <span className="text-gray-500">Task: </span>{currentRun.task}
               </div>
 
-              <ThoughtDrawer steps={currentRun.steps} running={running} />
+              {flowView
+                ? <AgentFlow
+                    steps={currentRun.steps as FlowStep[]}
+                    model={currentRun.model_name || model}
+                    running={running}
+                    error={currentRun.error}
+                  />
+                : <ThoughtDrawer steps={currentRun.steps} running={running} />}
 
               {currentRun.result && (
                 <div className="border border-green-800 rounded-lg p-4 bg-green-900/10">

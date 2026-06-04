@@ -7,7 +7,7 @@ from ..core.database import get_db
 from ..core.security import get_current_user
 from ..models.user import User
 from ..models.workflow import Workflow
-from ..models.chat import AgentRun
+from ..models.chat import AgentRun, RequestLog
 from ..services.agent_service import run_agent
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -150,6 +150,16 @@ async def _run_workflow_bg(workflow_id: int, user_id: int):
         wf.last_error = result.get("error")
         wf.run_count = (wf.run_count or 0) + 1
         wf.last_run_at = datetime.now(timezone.utc)
+        usage = result.get("usage") or {}
+        db.add(RequestLog(
+            user_id=user_id,
+            endpoint="/workflows/run",
+            method="POST",
+            status_code=200 if result.get("result") else 500,
+            model_name=wf.model,
+            prompt_tokens=int(usage.get("prompt_tokens", 0) or 0),
+            completion_tokens=int(usage.get("completion_tokens", 0) or 0),
+        ))
         db.commit()
     except Exception as e:
         wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()

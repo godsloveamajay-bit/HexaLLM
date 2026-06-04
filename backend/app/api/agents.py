@@ -8,7 +8,7 @@ import json
 from ..core.database import get_db, SessionLocal
 from ..core.security import get_current_user
 from ..models.user import User
-from ..models.chat import AgentRun
+from ..models.chat import AgentRun, RequestLog
 from ..models.mcp_server import MCPServer
 from ..schemas.chat import AgentTaskCreate, AgentRunOut
 from ..services.agent_service import run_agent
@@ -30,6 +30,22 @@ def _resolve_mcp_clients(db: Session, server_ids: List[int], user_id: int):
         client.tools_cache = s.tools_cache or []
         clients.append((s.name, client))
     return clients
+
+def _log_agent_usage(db: Session, user_id: int, model: str, usage: dict,
+                     latency_ms: int, status_code: int = 200):
+    """Record an agent run in the platform usage ledger (RequestLog) so its
+    token spend rolls up into Analytics alongside chat usage."""
+    db.add(RequestLog(
+        user_id=user_id,
+        endpoint="/agents/run",
+        method="POST",
+        status_code=status_code,
+        model_name=model,
+        prompt_tokens=int((usage or {}).get("prompt_tokens", 0) or 0),
+        completion_tokens=int((usage or {}).get("completion_tokens", 0) or 0),
+        latency_ms=latency_ms,
+    ))
+
 
 router = APIRouter(prefix="/agents", tags=["agents"])
 
@@ -71,6 +87,8 @@ async def run_agent_task(
         db.commit()
 
     sandbox = Sandbox()
+    started = datetime.now(timezone.utc)
+    usage = {}
     try:
         mcp_clients = _resolve_mcp_clients(db, data.mcp_server_ids, current_user.id)
         result = await run_agent(
@@ -87,6 +105,9 @@ async def run_agent_task(
         agent_run.result = result.get("result")
         agent_run.steps = result.get("steps", [])
         agent_run.error = result.get("error")
+        usage = result.get("usage") or {}
+        agent_run.prompt_tokens = int(usage.get("prompt_tokens", 0) or 0)
+        agent_run.completion_tokens = int(usage.get("completion_tokens", 0) or 0)
     except Exception as e:
         agent_run.status = "failed"
         agent_run.error = str(e)
@@ -94,6 +115,9 @@ async def run_agent_task(
         sandbox.cleanup()
 
     agent_run.completed_at = datetime.now(timezone.utc)
+    latency_ms = int((agent_run.completed_at - started).total_seconds() * 1000)
+    _log_agent_usage(db, current_user.id, data.model, usage, latency_ms,
+                     status_code=200 if agent_run.status == "completed" else 500)
     db.commit()
     db.refresh(agent_run)
     return agent_run
@@ -154,16 +178,22 @@ async def run_agent_stream(
                 sandbox.cleanup()
 
         task = asyncio.create_task(agent_task())
+        started = datetime.now(timezone.utc)
 
         final_status, final_result, final_error = "completed", None, None
+        final_usage: dict = {}
         while True:
             item = await queue.get()
             if "__done__" in item:
                 final_result = item.get("result")
                 final_error = item.get("error")
-                if final_error:
+                final_usage = item.get("usage") or {}
+                # Only a hard failure when there's no usable answer at all — a
+                # synthesized "step limit" answer still counts as completed.
+                if final_error and not final_result:
                     final_status = "failed"
-                yield f"data: {json.dumps({'type': 'done', 'result': final_result, 'error': final_error})}\n\n"
+                total_tok = int(final_usage.get("prompt_tokens", 0) or 0) + int(final_usage.get("completion_tokens", 0) or 0)
+                yield f"data: {json.dumps({'type': 'done', 'result': final_result, 'error': final_error, 'tokens': total_tok})}\n\n"
                 break
             elif "__error__" in item:
                 final_status, final_error = "failed", item["__error__"]
@@ -174,7 +204,7 @@ async def run_agent_stream(
 
         await task
 
-        # Persist the outcome (result + error + steps) so it shows in history.
+        # Persist the outcome (result + error + steps + token usage) for history.
         try:
             run = gen_db.query(AgentRun).filter(AgentRun.id == run_id).first()
             if run:
@@ -182,7 +212,12 @@ async def run_agent_stream(
                 run.result = final_result
                 run.error = final_error
                 run.steps = steps
+                run.prompt_tokens = int(final_usage.get("prompt_tokens", 0) or 0)
+                run.completion_tokens = int(final_usage.get("completion_tokens", 0) or 0)
                 run.completed_at = datetime.now(timezone.utc)
+                latency_ms = int((run.completed_at - started).total_seconds() * 1000)
+                _log_agent_usage(gen_db, user_id, data.model, final_usage, latency_ms,
+                                 status_code=200 if final_status != "failed" else 500)
                 gen_db.commit()
         finally:
             gen_db.close()

@@ -31,6 +31,13 @@ def _migrate_db():
                 "ON chat_sessions (share_token)"
             ))
 
+        if "agent_runs" in inspector.get_table_names():
+            agent_cols = {c["name"] for c in inspector.get_columns("agent_runs")}
+            if "prompt_tokens" not in agent_cols:
+                conn.execute(text("ALTER TABLE agent_runs ADD COLUMN prompt_tokens INTEGER DEFAULT 0"))
+            if "completion_tokens" not in agent_cols:
+                conn.execute(text("ALTER TABLE agent_runs ADD COLUMN completion_tokens INTEGER DEFAULT 0"))
+
         if "saved_personas" in inspector.get_table_names():
             persona_cols = {c["name"] for c in inspector.get_columns("saved_personas")}
             if "is_favorite" not in persona_cols:

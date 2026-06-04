@@ -372,6 +372,19 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.11.0',
+    date: '2026-06-04',
+    summary: 'Agents & workflows actually run now — plus a visual flow debugger that shows every step, its token cost, and exactly where a run broke.',
+    changes: [
+      { type: 'fixed',    text: 'Agents and workflows were producing no output — runs now complete and always return an answer' },
+      { type: 'new',      text: 'Agent Flow Debugger: a visual trace of each run (reasoning → tool → result) with per-step token cost, timing, and the failing step highlighted' },
+      { type: 'improved', text: 'Reasoning models (deepseek-r1, qwen3) and chat models that reply in prose now work as agents instead of stalling' },
+      { type: 'improved', text: 'Agent runs that hit the step limit now synthesise a best-effort answer instead of finishing empty' },
+      { type: 'improved', text: 'The agent/workflow model picker hides models that can’t chat and defaults to a capable one' },
+      { type: 'improved', text: 'Agent & workflow token usage now rolls up into your Analytics totals' },
+    ],
+  },
+  {
     version: '0.10.2',
     date: '2026-06-03',
     summary: 'The new app icon now ships on Android too.',
@@ -550,7 +563,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.10.2'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.11.0'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 
