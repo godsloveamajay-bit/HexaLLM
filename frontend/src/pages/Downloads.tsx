@@ -372,6 +372,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.13.0',
+    date: '2026-06-05',
+    summary: 'Web search in chat — answers grounded in live sources — plus a livelier “thinking” status.',
+    changes: [
+      { type: 'new',      text: 'Web search: toggle “Web” in a chat to ground answers in live results, with clickable source citations (keyless via Wikipedia out of the box; set TAVILY_API_KEY for full web search)' },
+      { type: 'new',      text: 'A status label next to the assistant cycles playful verbs (Thinking, Pondering, Reasoning, Cooking…) and shows “Searching the web” while it searches' },
+      { type: 'improved', text: 'The thinking indicator now appears on every turn, including with reasoning models' },
+    ],
+  },
+  {
     version: '0.12.1',
     date: '2026-06-05',
     summary: 'Chat quality-of-life fixes — scroll, stop, regenerate — plus persona duplication.',
@@ -589,7 +599,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.12.1'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.13.0'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 
