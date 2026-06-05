@@ -19,6 +19,7 @@ class SavedPersona(Base):
     use_memory = Column(Boolean, default=False)
     temperature = Column(Float, default=0.7)
     max_tokens = Column(Integer, nullable=True)
+    personality = Column(JSON, nullable=True)  # Personality Engine sliders {trait: 0..100}
     is_public = Column(Boolean, default=False)
     is_favorite = Column(Boolean, default=False)
     uses = Column(Integer, default=0)

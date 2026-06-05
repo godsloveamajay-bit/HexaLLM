@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional
+from typing import Optional, Dict
 from datetime import datetime
 
 
@@ -31,6 +31,7 @@ class UserOut(BaseModel):
     ai_max_tokens: Optional[int] = None
     ai_default_kb_id: Optional[int] = None
     ai_reasoning: Optional[bool] = None
+    ai_personality: Optional[Dict[str, int]] = None
 
     class Config:
         from_attributes = True
@@ -46,6 +47,7 @@ class UserUpdate(BaseModel):
     ai_max_tokens: Optional[int] = None
     ai_default_kb_id: Optional[int] = None
     ai_reasoning: Optional[bool] = None
+    ai_personality: Optional[Dict[str, int]] = None
 
 
 class PasswordChange(BaseModel):

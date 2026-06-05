@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Index, Float
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Index, Float, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from ..core.database import Base
@@ -23,6 +23,7 @@ class User(Base):
     ai_max_tokens = Column(Integer, nullable=True)    # max response length (0/null = model default)
     ai_default_kb_id = Column(Integer, nullable=True) # default knowledge base for new chats
     ai_reasoning = Column(Boolean, nullable=True)     # show extended thinking (null/true = on)
+    ai_personality = Column(JSON, nullable=True)       # default Personality Engine sliders {trait: 0..100}
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))

@@ -4,10 +4,12 @@ import {
   FileText, Sparkles, Zap, Scale, Brain, Settings2, Menu,
   X, Paperclip, Share2, BookMarked, Clipboard, ClipboardCheck,
   Mic, MicOff, Square, Download, RotateCcw, Search, Terminal,
-  ChevronRight, Wrench, Lock, Sparkle,
+  ChevronRight, Wrench, Lock, Sparkle, SlidersHorizontal,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../store/auth'
+import PersonalitySliders from '../components/PersonalitySliders'
+import { normalizeTraits, isActive as personalityActive, type TraitKey } from '../lib/personality'
 import AiSparkle from '../components/AiSparkle'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
@@ -416,6 +418,10 @@ export default function ChatPage() {
   const [showPersonas, setShowPersonas] = useState(false)
   // Per-message temperature override (applied when a persona is selected).
   const [temperature, setTemperature] = useState<number | null>(typeof user?.ai_temperature === 'number' ? user.ai_temperature : null)
+  // Personality Engine — sliders shaping the model's voice + sampling.
+  const [personality, setPersonality] = useState<Record<TraitKey, number>>(normalizeTraits(user?.ai_personality))
+  const [showPersonality, setShowPersonality] = useState(false)
+  const [savingPersonality, setSavingPersonality] = useState(false)
   const [listening, setListening] = useState(false)     // mic is recording
   const [transcribing, setTranscribing] = useState(false) // uploading → Whisper
   const [cliSessions, setCliSessions] = useState<CliSession[]>([])
@@ -659,7 +665,7 @@ export default function ChatPage() {
       const resp = await fetch(`${baseURL}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null }),
+        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), ...(personalityActive(personality) ? { personality } : {}), knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null }),
         signal: abortRef.current.signal,
       })
 
@@ -898,6 +904,7 @@ export default function ChatPage() {
     setShowSystem(true)
     if (p.knowledge_base_id) setKbId(p.knowledge_base_id)
     setTemperature(typeof p.temperature === 'number' ? p.temperature : null)
+    if (p.personality) setPersonality(normalizeTraits(p.personality))
     setShowPersonas(false)
     toast.success(`Persona "${p.name}" applied`)
     if (p.id) api.post(`/personas/${p.id}/use`).catch(() => {})
@@ -1097,6 +1104,13 @@ export default function ChatPage() {
                   <span className="hidden sm:inline">System</span>
                 </button>
               )}
+              {(model === CUSTOM_VARIANT_ID || !model.startsWith('nebulax:')) && (
+                <button onClick={() => setShowPersonality(!showPersonality)} className="btn-ghost text-xs gap-1 p-1.5 relative" title="Personality">
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Personality</span>
+                  {personalityActive(personality) && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary-400" />}
+                </button>
+              )}
               {showTemplates && (
                 <div className="absolute right-0 top-full mt-1 w-72 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 p-3 space-y-2">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Saved templates</p>
@@ -1168,6 +1182,29 @@ export default function ChatPage() {
           <div className="px-4 py-2 border-b border-gray-800 bg-gray-900/50">
             <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} placeholder="You are a helpful assistant that…" rows={2} className="input text-sm resize-none" />
             <p className="text-xs text-gray-500 mt-1">Custom variant & direct models use this system prompt. Branded variants enforce their own behaviour.</p>
+          </div>
+        )}
+
+        {!isGuest && (model === CUSTOM_VARIANT_ID || !model.startsWith('nebulax:')) && showPersonality && (
+          <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/50">
+            <div className="flex items-center justify-between mb-2">
+              <p className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+                <SlidersHorizontal className="w-3.5 h-3.5 text-primary-400" /> Model Personality
+              </p>
+              <button
+                onClick={async () => {
+                  setSavingPersonality(true)
+                  try { await api.patch('/auth/me', { ai_personality: personality }); toast.success('Saved as your default personality') }
+                  catch { toast.error('Could not save') }
+                  finally { setSavingPersonality(false) }
+                }}
+                disabled={savingPersonality}
+                className="btn-ghost text-xs gap-1 p-1.5 text-gray-400">
+                {savingPersonality ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Save as default
+              </button>
+            </div>
+            <PersonalitySliders value={personality} onChange={setPersonality} />
+            <p className="text-xs text-gray-500 mt-2">Shapes the model's voice and sampling for this chat. Branded variants enforce their own behaviour.</p>
           </div>
         )}
 

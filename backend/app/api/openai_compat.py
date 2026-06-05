@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from ..core.database import get_db, SessionLocal
 from ..core.security import get_api_key_record
+from ..core import personality as personality_engine
 from ..models.user import APIKey
 from ..models.chat import RequestLog
 from ..services.ollama_service import ollama
@@ -74,14 +75,25 @@ def _resolve(key: APIKey, req: OAIChatRequest):
         system_parts.append(req.system)
     system_prompt = "\n\n".join(p for p in system_parts if p)
 
+    # A persona bound to this key carries its Personality Engine settings into
+    # the exposed API: its voice fragment + sampling, unless the caller overrides.
+    pspec = personality_engine.compose(persona.personality) if persona else {"active": False}
+    top_p: Optional[float] = None
+    if pspec.get("active"):
+        if pspec["system_fragment"]:
+            system_prompt = (system_prompt + "\n\n" + pspec["system_fragment"]) if system_prompt else pspec["system_fragment"]
+        top_p = pspec["top_p"]
+
     if req.temperature is not None:
         temperature = req.temperature
+    elif pspec.get("active") and pspec.get("temperature") is not None:
+        temperature = pspec["temperature"]
     elif persona and persona.temperature is not None:
         temperature = persona.temperature
     else:
         temperature = 0.7
 
-    return model, system_prompt, temperature, convo
+    return model, system_prompt, temperature, top_p, convo
 
 
 def _meter(db: Session, key_id: int, user_id: int, model: str, usage: dict, latency_ms: int):
@@ -108,7 +120,7 @@ async def chat_completions(
     key: APIKey = Depends(get_api_key_record),
     db: Session = Depends(get_db),
 ):
-    model, system_prompt, temperature, messages = _resolve(key, req)
+    model, system_prompt, temperature, top_p, messages = _resolve(key, req)
     request_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
     key_id, user_id = key.id, key.user_id
@@ -122,7 +134,7 @@ async def chat_completions(
             try:
                 async for chunk in ollama.chat_stream(
                     model, messages, system_prompt=system_prompt,
-                    temperature=temperature, max_tokens=req.max_tokens, usage=usage,
+                    temperature=temperature, max_tokens=req.max_tokens, usage=usage, top_p=top_p,
                 ):
                     delta = {
                         "id": request_id, "object": "chat.completion.chunk",
@@ -162,7 +174,7 @@ async def chat_completions(
     full = ""
     async for chunk in ollama.chat_stream(
         model, messages, system_prompt=system_prompt,
-        temperature=temperature, max_tokens=req.max_tokens, usage=usage,
+        temperature=temperature, max_tokens=req.max_tokens, usage=usage, top_p=top_p,
     ):
         full += chunk
 

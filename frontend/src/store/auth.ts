@@ -17,6 +17,7 @@ interface User {
   ai_max_tokens?: number | null
   ai_default_kb_id?: number | null
   ai_reasoning?: boolean | null
+  ai_personality?: Record<string, number> | null
 }
 
 interface AuthState {

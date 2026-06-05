@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
-import { Plus, Pencil, Trash2, Globe, Lock, Copy, Loader2, Cpu, BookOpen, Brain, Zap, Bot, FlaskConical, Search, Code2, Star, Webhook } from 'lucide-react'
+import { Plus, Pencil, Trash2, Globe, Lock, Copy, Loader2, Cpu, BookOpen, Brain, Zap, Bot, FlaskConical, Search, Code2, Star, Webhook, SlidersHorizontal } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
+import PersonalitySliders from '../components/PersonalitySliders'
+import { normalizeTraits, isActive as personalityActive, type TraitKey } from '../lib/personality'
 
 interface KnowledgeBase { id: number; name: string }
 interface Persona {
@@ -19,6 +21,7 @@ interface Persona {
   use_memory: boolean
   temperature: number
   max_tokens: number | null
+  personality?: Record<string, number> | null
   is_public: boolean
   is_favorite: boolean
   uses: number
@@ -50,6 +53,7 @@ function PersonaForm({
     knowledge_base_id: initial?.knowledge_base_id ?? null as number | null,
     use_memory: initial?.use_memory ?? false,
     temperature: initial?.temperature ?? 0.7,
+    personality: normalizeTraits(initial?.personality) as Record<TraitKey, number>,
     is_public: initial?.is_public ?? false,
   })
   const [saving, setSaving] = useState(false)
@@ -143,6 +147,17 @@ function PersonaForm({
             <span className="text-sm text-gray-300">Make public</span>
           </label>
         </div>
+      </div>
+
+      <div>
+        <label className="label flex items-center gap-1.5">
+          <SlidersHorizontal className="w-3.5 h-3.5 text-primary-400" /> Personality
+          {personalityActive(form.personality) && <span className="badge bg-primary-900/40 text-primary-300 text-[10px]">active</span>}
+        </label>
+        <div className="bg-gray-900/40 border border-gray-800 rounded-lg p-3">
+          <PersonalitySliders value={form.personality} onChange={(p) => setForm((f) => ({ ...f, personality: p }))} />
+        </div>
+        <p className="text-xs text-gray-600 mt-1">When active, personality drives the model's voice and sampling (overriding the temperature above) everywhere this persona is used — chat, agents, and the exposed API.</p>
       </div>
 
       <div className="flex gap-2 pt-2">

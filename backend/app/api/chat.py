@@ -22,6 +22,7 @@ from ..schemas.chat import (
 from ..services.ollama_service import ollama
 from ..services.retrieval_service import search as kb_search, format_context
 from ..services import model_router
+from ..core import personality as personality_engine
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -148,6 +149,11 @@ STRICT FORMAT — every reply must be ONLY a valid JSON object, no markdown fenc
 
 def _extract_json_chat(text: str) -> Optional[dict]:
     """Pull a JSON object out of model output using 3 fallback strategies."""
+    # Strip reasoning-model <think>…</think> first — its stray braces and example
+    # JSON derail the parser and bury the real tool call (deepseek-r1, qwen3).
+    text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL | re.IGNORECASE)
+    if "</think>" in text:
+        text = text.rsplit("</think>", 1)[-1]
     text = text.strip()
     try:
         return json.loads(text)
@@ -239,6 +245,11 @@ async def _cli_agent_stream(
     tool_list = "\n".join(f"  {k}: {v}" for k, v in _CLI_TOOLS.items())
     augmented_system = (system_prompt or "") + _CLI_TOOLS_PROMPT.format(tools=tool_list)
 
+    # Reasoning models must answer the JSON tool protocol directly — let them
+    # reason for minutes per step on this CPU box and the chain-of-thought also
+    # pollutes the JSON. think=False keeps each step fast and parseable.
+    agent_think = False if model_router.is_reasoning_model(model) else None
+
     agent_messages = list(messages)
     final_text = ""
     fix_prompt = (
@@ -248,7 +259,7 @@ async def _cli_agent_stream(
 
     for _ in range(max_steps):
         raw = ""
-        async for chunk in ollama.chat_stream(model, agent_messages, augmented_system, temperature=0.1):
+        async for chunk in ollama.chat_stream(model, agent_messages, augmented_system, temperature=0.1, think=agent_think):
             raw += chunk
 
         parsed = _extract_json_chat(raw)
@@ -258,7 +269,7 @@ async def _cli_agent_stream(
                 {"role": "user",      "content": fix_prompt},
             ]
             raw2 = ""
-            async for chunk in ollama.chat_stream(model, fix_msgs, augmented_system, temperature=0.1):
+            async for chunk in ollama.chat_stream(model, fix_msgs, augmented_system, temperature=0.1, think=agent_think):
                 raw2 += chunk
             parsed = _extract_json_chat(raw2)
             if not parsed:
@@ -540,6 +551,25 @@ async def chat_completions(
         memory_section = f"\n\n[User Memory — things you know about this user]\n{mem_block}"
         base_system_prompt = (base_system_prompt or "") + memory_section
 
+    # Personality Engine: the request's sliders (or the user's saved default)
+    # shape the model's voice AND sampling. Skipped for guests and for branded
+    # variants that enforce their own voice (same gate as user_supplied_prompt).
+    eff_top_p: Optional[float] = None
+    personality_allowed = not (
+        model_router.is_variant(req.model) and not model_router.allows_user_prompt(req.model)
+    )
+    if not is_guest and personality_allowed:
+        eff_traits = req.personality if req.personality is not None else current_user.ai_personality
+        pspec = personality_engine.compose(eff_traits)
+        if pspec["active"]:
+            if pspec["system_fragment"]:
+                base_system_prompt = (base_system_prompt or "") + "\n\n" + pspec["system_fragment"]
+            if pspec["temperature"] is not None:
+                eff_temp = pspec["temperature"]
+            eff_top_p = pspec["top_p"]
+            if pspec["max_tokens"] and req.max_tokens is None:
+                eff_max = pspec["max_tokens"]
+
     # Build a derived request so _retrieve_kb_context sees the merged prompt.
     req_for_kb = req.model_copy(update={"system_prompt": base_system_prompt})
     system_prompt, citations = await _retrieve_kb_context(db, current_user, req_for_kb)
@@ -591,15 +621,23 @@ async def chat_completions(
                     full_response += chunk
                     yield _sse_data(chunk)
                 elif req.cli_session_id:
-                    async for sse_chunk in _cli_agent_stream(
+                    # The ReAct loop runs the LLM on this (slow, CPU-only) server and
+                    # emits nothing during each generation. Without keepalives,
+                    # Cloudflare 524s the stream after ~100s and the agent appears to
+                    # "do nothing" — so interleave pings like the normal chat path.
+                    cli_agen = _cli_agent_stream(
                         messages=messages,
                         system_prompt=system_prompt,
                         model=eff_model,
                         cli_session_id=req.cli_session_id,
                         user_id=current_user.id,
                         collected=collected,
-                    ):
-                        yield sse_chunk
+                    )
+                    async for kind, value in _stream_with_keepalive(cli_agen, interval=15.0):
+                        if kind == "ping":
+                            yield ": keepalive\n\n"
+                        else:
+                            yield value
                     full_response = collected.get("text", "")
                 else:
                     # Warn the UI if the model must cold-load (slow on this CPU-only
@@ -609,7 +647,7 @@ async def chat_completions(
                         yield f"event: warming\ndata: {json.dumps({'model': eff_model})}\n\n"
                     agen = ollama.chat_stream(
                         eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx,
-                        images=images, usage=usage_info, think=eff_think,
+                        images=images, usage=usage_info, think=eff_think, top_p=eff_top_p,
                     )
                     async for kind, value in _stream_with_keepalive(agen):
                         if kind == "ping":
@@ -672,7 +710,7 @@ async def chat_completions(
             full_response = f"⚠️ Image generation failed: {exc}"
     else:
         ns_usage: Dict = {}
-        async for chunk in ollama.chat_stream(eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx, think=eff_think, usage=ns_usage):
+        async for chunk in ollama.chat_stream(eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx, think=eff_think, usage=ns_usage, top_p=eff_top_p):
             full_response += chunk
         if is_guest and guest_ip:
             guest_remaining = _guest_charge_tokens(

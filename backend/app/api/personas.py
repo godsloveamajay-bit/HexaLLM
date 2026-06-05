@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Dict
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -22,6 +22,7 @@ class PersonaCreate(BaseModel):
     use_memory: bool = False
     temperature: float = 0.7
     max_tokens: Optional[int] = None
+    personality: Optional[Dict[str, int]] = None
     is_public: bool = False
 
 
@@ -36,6 +37,7 @@ class PersonaUpdate(BaseModel):
     use_memory: Optional[bool] = None
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
+    personality: Optional[Dict[str, int]] = None
     is_public: Optional[bool] = None
 
 
@@ -51,6 +53,7 @@ class PersonaOut(BaseModel):
     use_memory: bool
     temperature: float
     max_tokens: Optional[int]
+    personality: Optional[Dict[str, int]] = None
     is_public: bool
     is_favorite: bool = False
     uses: int
@@ -75,6 +78,7 @@ def _serialize(persona: SavedPersona, include_owner: bool = False) -> PersonaOut
         use_memory=persona.use_memory,
         temperature=persona.temperature,
         max_tokens=persona.max_tokens,
+        personality=persona.personality,
         is_public=persona.is_public,
         is_favorite=bool(persona.is_favorite),
         uses=persona.uses,
@@ -209,6 +213,7 @@ def fork_persona(
         use_memory=original.use_memory,
         temperature=original.temperature,
         max_tokens=original.max_tokens,
+        personality=original.personality,
         is_public=False,
     )
     db.add(forked)

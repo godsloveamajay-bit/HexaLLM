@@ -22,6 +22,7 @@ class ChatRequest(BaseModel):
     attachment_type: Optional[str] = None    # "image" | "pdf" | "text"
     attachment_name: Optional[str] = None
     cli_session_id: Optional[str] = None     # nebula daemon session for live tool execution
+    personality: Optional[Dict[str, int]] = None  # Personality Engine sliders (0–100)
 
 
 class ChatSessionCreate(BaseModel):
