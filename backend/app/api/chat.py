@@ -660,9 +660,20 @@ async def chat_completions(
                 prompt_tok = usage_info.get("prompt_tokens", 0)
                 completion_tok = usage_info.get("completion_tokens", 0)
                 if session:
-                    last_user_msg = next((m for m in reversed(req.messages) if m.role == "user"), None)
-                    if last_user_msg:
-                        db.add(ChatMessage(session_id=session.id, role="user", content=last_user_msg.content))
+                    if req.regenerate:
+                        # Re-rolling the last answer: the user turn is already saved,
+                        # so drop the previous assistant message instead of appending
+                        # the user message again (which duplicated it in history).
+                        prev = db.query(ChatMessage).filter(
+                            ChatMessage.session_id == session.id,
+                            ChatMessage.role == "assistant",
+                        ).order_by(ChatMessage.id.desc()).first()
+                        if prev:
+                            db.delete(prev)
+                    else:
+                        last_user_msg = next((m for m in reversed(req.messages) if m.role == "user"), None)
+                        if last_user_msg:
+                            db.add(ChatMessage(session_id=session.id, role="user", content=last_user_msg.content))
                     db.add(ChatMessage(
                         session_id=session.id, role="assistant", content=full_response,
                         latency_ms=latency,

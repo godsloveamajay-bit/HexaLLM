@@ -1,2 +1,2 @@
 """Nebula Code — AI coding assistant for the terminal."""
-__version__ = "0.12.0"
+__version__ = "0.12.1"

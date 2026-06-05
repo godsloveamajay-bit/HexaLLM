@@ -23,6 +23,7 @@ class ChatRequest(BaseModel):
     attachment_name: Optional[str] = None
     cli_session_id: Optional[str] = None     # nebula daemon session for live tool execution
     personality: Optional[Dict[str, int]] = None  # Personality Engine sliders (0–100)
+    regenerate: bool = False                 # re-roll the last answer: replace it in history, don't re-append the user turn
 
 
 class ChatSessionCreate(BaseModel):

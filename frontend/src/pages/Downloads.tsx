@@ -372,6 +372,18 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.12.1',
+    date: '2026-06-05',
+    summary: 'Chat quality-of-life fixes — scroll, stop, regenerate — plus persona duplication.',
+    changes: [
+      { type: 'fixed',    text: 'Chat no longer yanks you back to the bottom while you scroll up to read earlier messages during a reply' },
+      { type: 'new',      text: '“Jump to latest” button appears when you’ve scrolled up during a streaming reply' },
+      { type: 'new',      text: 'Press Esc to stop a generation in progress' },
+      { type: 'fixed',    text: 'Regenerating an answer no longer duplicates the turn in your saved chat history' },
+      { type: 'new',      text: 'Duplicate any of your own personas to tweak a copy (with its personality and settings)' },
+    ],
+  },
+  {
     version: '0.12.0',
     date: '2026-06-05',
     summary: 'A personality engine for your models, a visual knowledge graph, AI-written tools, and a one-click OpenAI-compatible API — plus daemon-chat fixes.',
@@ -577,7 +589,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.12.0'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.12.1'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 

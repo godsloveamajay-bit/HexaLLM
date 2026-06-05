@@ -406,6 +406,7 @@ export default function ChatPage() {
   const [model, setModel] = useState(user?.ai_default_model || 'nebulax:balanced')
   const [sending, setSending] = useState(false)
   const [streamPhase, setStreamPhase] = useState<'idle' | 'thinking' | 'warming' | 'typing'>('idle')
+  const [showJump, setShowJump] = useState(false)
   const [warmingModel, setWarmingModel] = useState<string>('')
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false)
   const [sessionSearch, setSessionSearch] = useState('')
@@ -435,6 +436,8 @@ export default function ChatPage() {
   const [activeCli, setActiveCli] = useState<string>('')
 
   const bottomRef    = useRef<HTMLDivElement>(null)
+  const scrollRef    = useRef<HTMLDivElement>(null)
+  const atBottomRef  = useRef(true)
   const textareaRef  = useRef<HTMLTextAreaElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const mountedRef   = useRef(true)
@@ -503,7 +506,32 @@ export default function ChatPage() {
     try { const { data } = await api.get('/models/ollama/list'); setOllamaModels((data.models || []).map((m: any) => m.name)) } catch {}
   }
 
-  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+  // Auto-scroll to the newest message ONLY when the user is already near the
+  // bottom. Otherwise streaming tokens (which update `messages` constantly) kept
+  // yanking the view down while they tried to read earlier replies.
+  useEffect(() => { if (atBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
+
+  const onMessagesScroll = () => {
+    const el = scrollRef.current
+    if (!el) return
+    const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120
+    atBottomRef.current = near
+    setShowJump(!near)
+  }
+  const jumpToLatest = () => {
+    atBottomRef.current = true
+    setShowJump(false)
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }
+
+  // Esc stops an in-progress generation from anywhere in the chat.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && (streamPhase !== 'idle' || sending)) { abortRef.current?.abort() }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [streamPhase, sending])
 
   useEffect(() => {
     const ta = textareaRef.current; if (!ta) return
@@ -589,7 +617,7 @@ export default function ChatPage() {
   }
 
   // ── Send / regenerate ────────────────────────────────────────────────
-  const doStream = useCallback(async (userMessages: Message[], session: { id: number }, isFirst: boolean) => {
+  const doStream = useCallback(async (userMessages: Message[], session: { id: number }, isFirst: boolean, opts: { regenerate?: boolean } = {}) => {
     const entry: StreamEntry = { content: '', citations: [], route: undefined, usage: undefined, latency_ms: 0, done: false, onComplete: [] }
     liveStreams.set(session.id, entry)
 
@@ -672,7 +700,7 @@ export default function ChatPage() {
       const resp = await fetch(`${baseURL}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), ...(personalityActive(personality) ? { personality } : {}), knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null }),
+        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), ...(personalityActive(personality) ? { personality } : {}), ...(opts.regenerate ? { regenerate: true } : {}), knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null }),
         signal: abortRef.current.signal,
       })
 
@@ -805,7 +833,7 @@ export default function ChatPage() {
     const history = messages.slice(0, userMsgIdx + 1)
     // Replace from that point: keep history up to & including last user msg, add empty assistant slot
     setMessages([...history, { role: 'assistant', content: '' }])
-    await doStream(history, session, false)
+    await doStream(history, session, false, { regenerate: true })
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -1216,7 +1244,8 @@ export default function ChatPage() {
         )}
 
         {/* Messages */}
-        <div className="flex-1 overflow-y-auto px-4 py-4 space-y-5">
+        <div className="flex-1 relative min-h-0">
+        <div ref={scrollRef} onScroll={onMessagesScroll} className="h-full overflow-y-auto px-4 py-4 space-y-5">
           {messages.length === 0 && (
             <div className="flex flex-col items-center justify-center h-full text-gray-600 gap-3">
               <Bot className="w-12 h-12" />
@@ -1261,6 +1290,13 @@ export default function ChatPage() {
           )}
 
           <div ref={bottomRef} />
+        </div>
+          {showJump && (
+            <button onClick={jumpToLatest}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 inline-flex items-center gap-1.5 rounded-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 text-xs py-1.5 px-3 shadow-lg transition-colors">
+              <ChevronDown className="w-3.5 h-3.5" /> Jump to latest
+            </button>
+          )}
         </div>
 
         {/* Attachment preview */}

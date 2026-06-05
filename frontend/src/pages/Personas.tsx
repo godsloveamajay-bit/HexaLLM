@@ -171,8 +171,8 @@ function PersonaForm({
   )
 }
 
-function PersonaCard({ persona, onEdit, onDelete, onFork, onToggleFavorite, onExpose, isOwn }: {
-  persona: Persona; onEdit?: () => void; onDelete?: () => void; onFork?: () => void; onToggleFavorite?: () => void; onExpose?: () => void; isOwn: boolean
+function PersonaCard({ persona, onEdit, onDelete, onFork, onDuplicate, onToggleFavorite, onExpose, isOwn }: {
+  persona: Persona; onEdit?: () => void; onDelete?: () => void; onFork?: () => void; onDuplicate?: () => void; onToggleFavorite?: () => void; onExpose?: () => void; isOwn: boolean
 }) {
   return (
     <div className={clsx('card flex flex-col gap-3', persona.is_favorite && 'ring-1 ring-secondary-500/40')}>
@@ -217,8 +217,9 @@ function PersonaCard({ persona, onEdit, onDelete, onFork, onToggleFavorite, onEx
           {!isOwn && <button onClick={onFork} className="btn-secondary text-xs py-1 px-2 gap-1"><Copy className="w-3 h-3" />Fork</button>}
           {isOwn && <>
             <button onClick={onExpose} title="Expose as API" className="btn-secondary text-xs py-1 px-2 gap-1 text-primary-300 hover:text-primary-200"><Webhook className="w-3 h-3" />API</button>
-            <button onClick={onEdit} className="btn-secondary text-xs py-1 px-2"><Pencil className="w-3 h-3" /></button>
-            <button onClick={onDelete} className="btn-secondary text-xs py-1 px-2 text-red-400 hover:text-red-300"><Trash2 className="w-3 h-3" /></button>
+            <button onClick={onDuplicate} title="Duplicate" className="btn-secondary text-xs py-1 px-2"><Copy className="w-3 h-3" /></button>
+            <button onClick={onEdit} title="Edit" className="btn-secondary text-xs py-1 px-2"><Pencil className="w-3 h-3" /></button>
+            <button onClick={onDelete} title="Delete" className="btn-secondary text-xs py-1 px-2 text-red-400 hover:text-red-300"><Trash2 className="w-3 h-3" /></button>
           </>}
         </div>
       </div>
@@ -293,6 +294,11 @@ export default function PersonasPage() {
     load()
   }
 
+  const duplicate = async (id: number) => {
+    try { await api.post(`/personas/${id}/duplicate`); toast.success('Duplicated'); load() }
+    catch { toast.error('Failed to duplicate') }
+  }
+
   return (
     <div className="p-4 sm:p-6 max-w-6xl mx-auto">
       <div className="mb-6 flex items-start justify-between gap-4">
@@ -344,6 +350,7 @@ export default function PersonasPage() {
               <PersonaCard key={p.id} persona={p} isOwn
                 onEdit={() => { setEditing(p); setShowForm(true) }}
                 onDelete={() => del(p.id)}
+                onDuplicate={() => duplicate(p.id)}
                 onToggleFavorite={() => toggleFavorite(p)}
                 onExpose={() => navigate(`/api-keys?expose=${p.id}`)}
               />

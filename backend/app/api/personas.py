@@ -190,6 +190,39 @@ def delete_persona(
     db.commit()
 
 
+@router.post("/{persona_id}/duplicate", response_model=PersonaOut, status_code=201)
+def duplicate_persona(
+    persona_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Clone one of your own personas so you can tweak a copy."""
+    orig = db.query(SavedPersona).filter(
+        SavedPersona.id == persona_id, SavedPersona.user_id == current_user.id
+    ).first()
+    if not orig:
+        raise HTTPException(status_code=404, detail="Persona not found")
+    dup = SavedPersona(
+        user_id=current_user.id,
+        name=f"{orig.name} (copy)",
+        description=orig.description,
+        emoji=orig.emoji,
+        base_model=orig.base_model,
+        system_prompt=orig.system_prompt,
+        tools=list(orig.tools or []),
+        knowledge_base_id=orig.knowledge_base_id,
+        use_memory=orig.use_memory,
+        temperature=orig.temperature,
+        max_tokens=orig.max_tokens,
+        personality=orig.personality,
+        is_public=False,
+    )
+    db.add(dup)
+    db.commit()
+    db.refresh(dup)
+    return _serialize(dup)
+
+
 @router.post("/{persona_id}/fork", response_model=PersonaOut, status_code=201)
 def fork_persona(
     persona_id: int,

@@ -4,7 +4,7 @@ from typing import Optional
 
 class Settings(BaseSettings):
     APP_NAME: str = "NebulaX AI Platform"
-    VERSION: str = "0.12.0"
+    VERSION: str = "0.12.1"
     DEBUG: bool = False
 
     DATABASE_URL: str = "sqlite:///./nebulaxai.db"
