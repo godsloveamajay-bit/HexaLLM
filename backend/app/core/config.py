@@ -59,6 +59,9 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = True
+        # Ignore .env keys that aren't declared here (e.g. TAVILY_API_KEY, which is
+        # read via os.getenv) instead of crashing startup with extra_forbidden.
+        extra = "ignore"
 
 
 settings = Settings()
