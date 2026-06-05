@@ -372,6 +372,20 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.12.0',
+    date: '2026-06-05',
+    summary: 'A personality engine for your models, a visual knowledge graph, AI-written tools, and a one-click OpenAI-compatible API — plus daemon-chat fixes.',
+    changes: [
+      { type: 'new',      text: 'Model Personality Engine: six sliders (creativity, formality, risk, verbosity, empathy, logic vs intuition) that shape the model’s voice and sampling — in chat, personas, and your exposed API' },
+      { type: 'new',      text: 'Knowledge Graph: an interactive force-directed view of how the AI stores and connects knowledge — bases, documents, chunks and memories, linked by meaning' },
+      { type: 'new',      text: 'AI Tools: the AI writes its own tools (you review, test and approve them); approved tools run sandboxed and are selectable in Agents' },
+      { type: 'new',      text: 'Expose as API: turn any model or persona into an OpenAI-compatible endpoint with a dedicated key and per-key usage metering, on a clean /v1 base URL' },
+      { type: 'fixed',    text: 'Chatting with a connected NebulaCode daemon no longer hangs on “Agent Thinking…” — the stream stays alive and reasoning models parse their tool calls' },
+      { type: 'fixed',    text: 'The thinking indicator now shows on every turn, not just the first' },
+      { type: 'improved', text: 'Docker code sandbox fixed (workspaces moved off the service’s private /tmp), which also repaired agent code execution' },
+    ],
+  },
+  {
     version: '0.11.0',
     date: '2026-06-04',
     summary: 'Agents & workflows actually run now — plus a visual flow debugger that shows every step, its token cost, and exactly where a run broke.',
@@ -563,7 +577,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.11.0'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.12.0'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 
