@@ -15,10 +15,10 @@ interface APIKey {
 }
 interface Persona { id: number; name: string; emoji?: string; base_model: string }
 
-// Public OpenAI-compatible base URL. The clean /v1 path needs an nginx route;
-// /api/v1/openai is always proxied, so we advertise that — it works with any
-// OpenAI client out of the box.
-const apiBase = `${window.location.origin}/api/v1/openai`
+// Public OpenAI-compatible base URL. The clean /v1 path is now proxied by nginx
+// (location /v1/ → :8000), so we advertise the tidy OpenAI-style base. The
+// /api/v1/openai path still works as a back-compat alias.
+const apiBase = `${window.location.origin}/v1`
 
 function snippets(key: string, model: string) {
   const m = model || 'llama3:8b'
