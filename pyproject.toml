@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "nebulacode"
-version = "0.13.0"
+version = "0.13.1"
 summary = "NebulaCode — AI coding assistant for the terminal"
 description = "NebulaCode — AI coding assistant for the terminal"
 readme = "README_CLI.md"

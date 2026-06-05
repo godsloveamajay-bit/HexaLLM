@@ -372,6 +372,14 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.13.1',
+    date: '2026-06-05',
+    summary: 'Stability fix for custom configuration.',
+    changes: [
+      { type: 'fixed', text: 'Backend no longer fails to start when the .env file contains a setting it doesn’t recognise (e.g. adding TAVILY_API_KEY to enable full web search)' },
+    ],
+  },
+  {
     version: '0.13.0',
     date: '2026-06-05',
     summary: 'Web search in chat — answers grounded in live sources — plus a livelier “thinking” status.',
@@ -599,7 +607,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.13.0'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.13.1'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 
