@@ -372,6 +372,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.13.2',
+    date: '2026-06-05',
+    summary: 'Web search actually grounds answers now, and reasoning models get room to think.',
+    changes: [
+      { type: 'fixed',    text: 'With web search on, models no longer insist they “can’t browse” or cite a 2023 cutoff — they now use the live results (with today’s date) and cite sources' },
+      { type: 'improved', text: 'Bigger context window for chat (reasoning models get extra room and a higher output cap) so long chains of thought aren’t cut off mid-reasoning' },
+    ],
+  },
+  {
     version: '0.13.1',
     date: '2026-06-05',
     summary: 'Stability fix for custom configuration.',
@@ -607,7 +616,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.13.1'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.13.2'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 

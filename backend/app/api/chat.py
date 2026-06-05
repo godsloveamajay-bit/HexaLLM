@@ -36,6 +36,14 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # message that crosses the budget still completes; the next one is blocked.
 GUEST_DAILY_TOKENS = int(os.getenv("GUEST_DAILY_TOKENS", "5000"))
 GUEST_DEFAULT_MODEL = os.getenv("GUEST_DEFAULT_MODEL", "nebulax:balanced")
+
+# Context window / output budget. Ollama defaults to a tiny 2048-token context,
+# which truncates long prompts and — most visibly — reasoning models' chain-of-
+# thought ("runs out of space to think"). Give chat a roomier window, and even
+# more room plus a higher output cap for reasoning models. Env-overridable.
+CHAT_NUM_CTX = int(os.getenv("CHAT_NUM_CTX", "8192"))
+REASON_NUM_CTX = int(os.getenv("CHAT_REASON_NUM_CTX", "16384"))
+REASON_MIN_PREDICT = int(os.getenv("CHAT_REASON_MAX_TOKENS", "8192"))
 _guest_usage: Dict[str, Tuple[str, int]] = {}  # ip -> (utc_date, tokens_used_today)
 
 
@@ -518,6 +526,18 @@ async def chat_completions(
     # think=False to them errors). ai_reasoning None/True = default behaviour.
     if not is_guest and current_user.ai_reasoning is False and model_router.is_reasoning_model(eff_model):
         eff_think = False
+
+    # Give the model a usable context window (Ollama's 2048 default truncates long
+    # prompts and reasoning chains). Reasoning models get extra room + a higher
+    # output cap so their chain-of-thought isn't cut off ("room to think"). A
+    # variant that pins its own num_ctx (eff_ctx already set) is left untouched.
+    _reasoning_active = eff_think is not False and model_router.is_reasoning_model(eff_model)
+    if eff_ctx is None:
+        eff_ctx = REASON_NUM_CTX if _reasoning_active else CHAT_NUM_CTX
+    if _reasoning_active and req.max_tokens is None and (eff_max is None or eff_max < REASON_MIN_PREDICT):
+        # Don't let a low response cap (verbosity / "max response length") truncate
+        # the thinking — it counts against the output budget. Explicit API max_tokens still wins.
+        eff_max = REASON_MIN_PREDICT
 
     # In-chat text-to-image / text-to-video: "generate an image/video of …" works
     # in ANY chat. Skip when an image is attached (that's a vision query) or during

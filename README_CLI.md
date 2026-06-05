@@ -17,7 +17,7 @@ pip install nebulacode
 Or from a downloaded wheel:
 
 ```bash
-pip install nebulacode-0.13.1-py3-none-any.whl
+pip install nebulacode-0.13.2-py3-none-any.whl
 ```
 
 ## Requirements
