@@ -3,7 +3,7 @@ import {
   LayoutDashboard, MessageSquare, Bot, Cpu, Wand2,
   BarChart3, FileText, Key, LogOut, Settings, BookOpen, X, ImageIcon,
   Brain, Zap, Server, Users, Terminal, Download, Sun, Moon, MonitorSmartphone,
-  LogIn, UserPlus,
+  LogIn, UserPlus, Wrench, Network,
 } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { useTheme } from '../../lib/theme'
@@ -18,9 +18,11 @@ const BASE_NAV = [
   { to: '/chat',      icon: MessageSquare, label: 'Chat'       },
   { to: '/image',     icon: ImageIcon,     label: 'Image Gen'  },
   { to: '/agents',    icon: Bot,           label: 'Agents'     },
+  { to: '/tools',     icon: Wrench,        label: 'AI Tools'   },
   { to: '/personas',  icon: Users,         label: 'Personas'   },
   { to: '/workflows', icon: Zap,           label: 'Workflows'  },
   { to: '/memory',    icon: Brain,         label: 'Memory'     },
+  { to: '/memory-graph', icon: Network,    label: 'Knowledge Graph' },
   { to: '/mcp',        icon: Server,        label: 'MCP Servers' },
   { to: '/remote-cli', icon: Terminal,      label: 'Remote CLI'  },
   { to: '/downloads', icon: Download,      label: 'Downloads'   },

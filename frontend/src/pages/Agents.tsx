@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server, Brain, Terminal, ShieldCheck, ShieldAlert } from 'lucide-react'
+import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server, Brain, Terminal, ShieldCheck, ShieldAlert, Wrench } from 'lucide-react'
 import api, { baseURL } from '../lib/api'
 import { chatCapableModels, defaultAgentModel } from '../lib/models'
 import AgentFlow, { FlowStep } from '../components/AgentFlow'
@@ -209,6 +209,8 @@ export default function AgentsPage() {
   const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3:8B'])
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
   const [selectedMcp, setSelectedMcp] = useState<number[]>([])
+  const [genTools, setGenTools] = useState<{ id: number; name: string; description: string }[]>([])
+  const [selectedGenTools, setSelectedGenTools] = useState<number[]>([])
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus | null>(null)
   const [flowView, setFlowView] = useState(true)
   const stepsRef = useRef<HTMLDivElement>(null)
@@ -227,6 +229,8 @@ export default function AgentsPage() {
       if (names.length) { setOllamaModels(names); setModel(defaultAgentModel(names)) }
     }).catch(() => {})
     api.get('/mcp').then(({ data }) => setMcpServers(data.filter((s: any) => s.tools_cache?.length))).catch(() => {})
+    api.get('/tools').then(({ data }) =>
+      setGenTools(data.filter((t: any) => t.status === 'approved' && t.enabled))).catch(() => {})
     api.get('/agents/sandbox/status').then(({ data }) => setSandboxStatus(data)).catch(() => {})
   }, [])
 
@@ -257,6 +261,7 @@ export default function AgentsPage() {
           max_steps: maxSteps,
           system_prompt: persona === 'custom' ? (customPrompt || undefined) : activePersona.systemPrompt,
           mcp_server_ids: selectedMcp,
+          generated_tool_ids: selectedGenTools,
         }),
       })
 
@@ -433,6 +438,24 @@ export default function AgentsPage() {
                         )}>
                         {selectedMcp.includes(s.id) && <Check className="w-3 h-3 mr-1" />}
                         {s.name} ({s.tools_cache?.length ?? 0})
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {genTools.length > 0 && (
+                <div>
+                  <label className="label flex items-center gap-1.5"><Wrench className="w-3.5 h-3.5" /> AI Tools</label>
+                  <div className="flex flex-wrap gap-2">
+                    {genTools.map((t) => (
+                      <button key={t.id} type="button" title={t.description}
+                        onClick={() => setSelectedGenTools((prev) => prev.includes(t.id) ? prev.filter((x) => x !== t.id) : [...prev, t.id])}
+                        className={clsx('badge cursor-pointer transition-all font-mono',
+                          selectedGenTools.includes(t.id) ? 'bg-primary-900/60 text-primary-300 border border-primary-700' : 'bg-gray-800 text-gray-500 border border-gray-700'
+                        )}>
+                        {selectedGenTools.includes(t.id) && <Check className="w-3 h-3 mr-1" />}
+                        {t.name}
                       </button>
                     ))}
                   </div>

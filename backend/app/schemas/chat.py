@@ -62,6 +62,7 @@ class AgentTaskCreate(BaseModel):
     max_steps: int = 10
     system_prompt: Optional[str] = None
     mcp_server_ids: List[int] = []
+    generated_tool_ids: List[int] = []
 
 
 class AgentStepOut(BaseModel):

@@ -43,6 +43,8 @@ dist/
 # User data (uploads, datasets) — not source
 backend/data/datasets/
 backend/data/uploads/
+# Sandbox execution workspaces (created at runtime per agent/tool run)
+backend/data/.sandbox/
 
 # Desktop/mobile build artifacts (served at runtime, not source)
 backend/downloads/*.dmg

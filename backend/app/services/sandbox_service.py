@@ -15,6 +15,17 @@ MEMORY_LIMIT = "256m"
 CPUS = "0.5"
 PIDS_LIMIT = "64"
 
+# Where sandbox workspaces live. NOT /tmp: the systemd unit runs with
+# PrivateTmp=yes, which gives the service a private /tmp namespace — but the
+# Docker daemon mounts volumes from the HOST namespace, so a /tmp path the
+# service creates is invisible to `docker run -v` (the file appears missing).
+# A path under the project's data dir (in the unit's ReadWritePaths) is shared
+# with the host namespace, so the bind mount works. Override with NEBULA_SANDBOX_DIR.
+SANDBOX_BASE = os.environ.get(
+    "NEBULA_SANDBOX_DIR",
+    os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "data", ".sandbox")),
+)
+
 
 def _check_docker() -> bool:
     try:
@@ -50,7 +61,8 @@ class Sandbox:
     """
 
     def __init__(self):
-        self.workspace = tempfile.mkdtemp(prefix="nebula_sb_")
+        os.makedirs(SANDBOX_BASE, exist_ok=True)
+        self.workspace = tempfile.mkdtemp(prefix="nebula_sb_", dir=SANDBOX_BASE)
         # world-writable so the nobody user inside Docker can write here
         os.chmod(self.workspace, 0o777)
         self._cleaned = False

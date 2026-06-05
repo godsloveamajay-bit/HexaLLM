@@ -10,10 +10,34 @@ from ..core.security import get_current_user
 from ..models.user import User
 from ..models.chat import AgentRun, RequestLog
 from ..models.mcp_server import MCPServer
+from ..models.tool import GeneratedTool
 from ..schemas.chat import AgentTaskCreate, AgentRunOut
 from ..services.agent_service import run_agent
 from ..services.mcp_service import MCPClient
+from ..services.tool_service import run_generated_tool
 from ..services.sandbox_service import Sandbox, DOCKER_AVAILABLE, DOCKER_IMAGE
+
+
+def _build_dynamic_tools(db: Session, user_id: int, tool_ids: List[int], sandbox):
+    """Load the user's approved+enabled generated tools and wrap each as a
+    sandboxed callable the agent loop can dispatch to."""
+    if not tool_ids:
+        return {}
+    tools = db.query(GeneratedTool).filter(
+        GeneratedTool.id.in_(tool_ids),
+        GeneratedTool.user_id == user_id,
+        GeneratedTool.status == "approved",
+        GeneratedTool.enabled == True,  # noqa: E712
+    ).all()
+    out = {}
+    for t in tools:
+        async def _f(inp, _code=t.code):
+            return await run_generated_tool(_code, inp, sandbox)
+        desc = t.description
+        if t.input_description:
+            desc = f"{desc} Input: {t.input_description}"
+        out[t.name] = {"description": desc, "func": _f}
+    return out
 
 
 def _resolve_mcp_clients(db: Session, server_ids: List[int], user_id: int):
@@ -91,6 +115,7 @@ async def run_agent_task(
     usage = {}
     try:
         mcp_clients = _resolve_mcp_clients(db, data.mcp_server_ids, current_user.id)
+        dynamic_tools = _build_dynamic_tools(db, current_user.id, data.generated_tool_ids, sandbox)
         result = await run_agent(
             task=data.task,
             model=data.model,
@@ -100,6 +125,7 @@ async def run_agent_task(
             persona_prompt=data.system_prompt,
             mcp_clients=mcp_clients,
             sandbox=sandbox,
+            dynamic_tools=dynamic_tools,
         )
         agent_run.status = "completed"
         agent_run.result = result.get("result")
@@ -158,6 +184,7 @@ async def run_agent_stream(
 
         mcp_clients = _resolve_mcp_clients(gen_db, data.mcp_server_ids, user_id)
         sandbox = Sandbox()
+        dynamic_tools = _build_dynamic_tools(gen_db, user_id, data.generated_tool_ids, sandbox)
 
         async def agent_task():
             try:
@@ -170,6 +197,7 @@ async def run_agent_stream(
                     persona_prompt=data.system_prompt,
                     mcp_clients=mcp_clients,
                     sandbox=sandbox,
+                    dynamic_tools=dynamic_tools,
                 )
                 await queue.put({"__done__": True, **result})
             except Exception as e:

@@ -36,6 +36,8 @@ const SettingsPage   = lazy(() => import('./pages/Settings'))
 const KnowledgePage  = lazy(() => import('./pages/Knowledge'))
 const ImageGenPage   = lazy(() => import('./pages/ImageGen'))
 const MemoryPage     = lazy(() => import('./pages/Memory'))
+const MemoryGraphPage = lazy(() => import('./pages/MemoryGraph'))
+const ToolsPage      = lazy(() => import('./pages/Tools'))
 const PersonasPage   = lazy(() => import('./pages/Personas'))
 const WorkflowsPage  = lazy(() => import('./pages/Workflows'))
 const MCPServersPage = lazy(() => import('./pages/MCPServers'))
@@ -80,6 +82,8 @@ export default function App() {
             <Route path="/train"      element={<PrivateRoute><TrainPage /></PrivateRoute>} />
             <Route path="/knowledge"  element={<PrivateRoute><KnowledgePage /></PrivateRoute>} />
             <Route path="/memory"     element={<PrivateRoute><MemoryPage /></PrivateRoute>} />
+            <Route path="/memory-graph" element={<PrivateRoute><MemoryGraphPage /></PrivateRoute>} />
+            <Route path="/tools"      element={<PrivateRoute><ToolsPage /></PrivateRoute>} />
             <Route path="/personas"   element={<PrivateRoute><PersonasPage /></PrivateRoute>} />
             <Route path="/workflows"  element={<PrivateRoute><WorkflowsPage /></PrivateRoute>} />
             <Route path="/mcp"        element={<PrivateRoute><MCPServersPage /></PrivateRoute>} />

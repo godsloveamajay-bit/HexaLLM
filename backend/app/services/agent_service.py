@@ -211,6 +211,7 @@ async def run_agent(
     persona_prompt: Optional[str] = None,
     mcp_clients: Optional[List] = None,   # list of (server_name, MCPClient) tuples
     sandbox=None,                          # Optional[Sandbox] from sandbox_service
+    dynamic_tools: Optional[Dict[str, Dict[str, Any]]] = None,  # name -> {"description", "func"}
 ) -> Dict[str, Any]:
     available = {k: TOOL_DESCRIPTIONS[k] for k in tools if k in TOOL_DESCRIPTIONS}
 
@@ -221,6 +222,12 @@ async def run_agent(
         tool_funcs["bash_exec"] = sandbox.execute_bash
         tool_funcs["write_file"] = sandbox.write_file
         tool_funcs["read_file"] = sandbox.read_file
+
+    # Inject human-approved, AI-generated tools (run sandboxed via their func)
+    if dynamic_tools:
+        for name, spec in dynamic_tools.items():
+            available[name] = spec.get("description", name)
+            tool_funcs[name] = spec["func"]
 
     # Inject MCP tools
     mcp_tool_map: Dict[str, Any] = {}  # "mcp__<server>__<tool>" -> callable

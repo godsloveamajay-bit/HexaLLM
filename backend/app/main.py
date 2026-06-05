@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import inspect, text
 from .core.config import settings
 from .core.database import Base, engine
-from .models import user, model, chat, knowledge, template, memory, persona, workflow, mcp_server  # noqa: F401
+from .models import user, model, chat, knowledge, template, memory, persona, workflow, mcp_server, tool  # noqa: F401
 from .api import (
     auth, models, chat as chat_api, agents, analytics,
     knowledge as knowledge_api, image as image_api, video as video_api,
@@ -17,6 +17,7 @@ from .api import (
     personas as personas_api, workflows as workflows_api,
     openai_compat, mcp as mcp_api, cli_tunnel as cli_tunnel_api,
     downloads as downloads_api, transcribe as transcribe_api,
+    tools as tools_api,
 )
 
 
@@ -185,6 +186,7 @@ app.include_router(openai_compat.router,  prefix="/api/v1/openai")
 app.include_router(cli_tunnel_api.router, prefix="/api/v1")
 app.include_router(downloads_api.router,  prefix="/api/v1")
 app.include_router(transcribe_api.router, prefix="/api/v1")
+app.include_router(tools_api.router,      prefix="/api/v1")
 
 
 @app.get("/api/v1/health")
