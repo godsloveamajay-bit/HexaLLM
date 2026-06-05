@@ -662,6 +662,13 @@ async def chat_completions(
                                 for i, r in enumerate(web_results)
                             ]
                             yield f"event: citations\ndata: {json.dumps(web_cites)}\n\n"
+                        else:
+                            # Search ran but found nothing — tell the model that
+                            # explicitly so it doesn't fall back to "I can't browse".
+                            note = ("(A live web search was run for this question but returned no "
+                                    "usable results. Answer from what you know and tell the user you "
+                                    "couldn't retrieve current web sources — do not claim a knowledge cutoff.)")
+                            sys_for_llm = f"{system_prompt}\n\n{note}" if system_prompt else note
                     # Warn the UI if the model must cold-load (slow on this CPU-only
                     # box) and keep the connection alive past Cloudflare's ~100s 524
                     # window until the first token arrives.

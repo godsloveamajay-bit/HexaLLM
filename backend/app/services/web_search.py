@@ -102,12 +102,22 @@ async def search_web(query: str, max_results: int = 5) -> List[Dict]:
 
 
 def format_context(results: List[Dict]) -> str:
-    """Render results as a numbered context block for the system prompt."""
-    parts = []
-    for i, r in enumerate(results, 1):
-        parts.append(f"[{i}] {r['title']}\n{r['snippet']}\nSource: {r['url']}")
+    """Render results as a numbered context block for the system prompt.
+
+    Worded forcefully on purpose: many local models are trained to insist they
+    "can't browse the internet" and cite a knowledge cutoff. The directive below
+    overrides that prior and grounds them in today's date + the live results.
+    """
+    from datetime import datetime, timezone
+    today = datetime.now(timezone.utc).strftime("%B %d, %Y")
+    parts = [f"[{i}] {r['title']}\n{r['snippet']}\nSource: {r['url']}" for i, r in enumerate(results, 1)]
     return (
-        "Web search results — use these to answer the question and cite sources "
-        "as [1], [2], … where relevant. If they don't contain the answer, say so.\n\n"
-        + "\n\n".join(parts)
+        f"You have been given LIVE web search results, retrieved from the internet just now. "
+        f"Today's date is {today}.\n"
+        "Use these results to answer the question with current, up-to-date information and cite "
+        "sources inline as [1], [2], …\n"
+        "IMPORTANT: You DO have access to these fresh results — do NOT claim you cannot browse the "
+        "internet, and do NOT mention a training-data knowledge cutoff. If the results don't fully "
+        "answer the question, use what they do contain and say what's missing.\n\n"
+        "--- WEB SEARCH RESULTS ---\n" + "\n\n".join(parts) + "\n--- END WEB SEARCH RESULTS ---"
     )
