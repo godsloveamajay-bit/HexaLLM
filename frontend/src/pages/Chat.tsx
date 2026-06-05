@@ -132,8 +132,11 @@ function ChatThoughtDrawer({ steps, reasoning, running }: { steps: StepEvent[]; 
   const hasReasoning = !!(reasoning && reasoning.trim())
 
   useEffect(() => {
-    if (running && !prevRunning.current) setOpen(true)
-    if (!running && prevRunning.current) setOpen(false)
+    // Open whenever a run is active (not only on the false→true edge) so the
+    // reasoning drawer reliably expands on every message, even if the component
+    // instance is reused across turns. Auto-collapse when the run ends.
+    if (running) setOpen(true)
+    else if (prevRunning.current) setOpen(false)
     prevRunning.current = running
   }, [running])
 
@@ -257,7 +260,11 @@ function MessageBubble({
                 Warming up{warmingModel ? ` ${warmingModel}` : ' the model'}… the first response after idle can take up to a minute.
               </span>
             </div>
-          ) : isThinking ? (
+          ) : (isThinking || ((isTyping || isFastStream) && !clean.trim())) ? (
+            // Show the thinking dots until the model produces visible answer text.
+            // Reasoning models stream <think>… first (no clean text yet), which used
+            // to flip the body to an empty cursor — so the "thinking" indicator only
+            // appeared on the first turn. Keep the dots whenever there's no answer yet.
             <div className="flex items-center gap-1.5 py-2">
               {[0, 0.2, 0.4].map((d, i) => (
                 <span key={i} className="w-2 h-2 rounded-full bg-primary-500 typing-dot" style={{ animationDelay: `${d}s` }} />
