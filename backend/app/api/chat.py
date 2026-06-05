@@ -22,6 +22,7 @@ from ..schemas.chat import (
 from ..services.ollama_service import ollama
 from ..services.retrieval_service import search as kb_search, format_context
 from ..services import model_router
+from ..services import web_search as web_search_svc
 from ..core import personality as personality_engine
 
 router = APIRouter(prefix="/chat", tags=["chat"])
@@ -473,6 +474,7 @@ async def chat_completions(
         req.system_prompt = None
         req.knowledge_base_id = None
         req.cli_session_id = None
+        req.web_search = False
         req.attachment_base64 = req.attachment_type = req.attachment_name = None
         # Don't let a guest hand-pick an arbitrary/expensive direct model.
         if not model_router.is_variant(req.model):
@@ -640,13 +642,33 @@ async def chat_completions(
                             yield value
                     full_response = collected.get("text", "")
                 else:
+                    # Web search grounding: search the web for the user's question,
+                    # inject the results into the system prompt, and surface them as
+                    # citations. Emits a "searching" status so the UI can say so.
+                    sys_for_llm = system_prompt
+                    if req.web_search and _last_user.strip():
+                        yield f"event: searching\ndata: {json.dumps({'query': _last_user[:120]})}\n\n"
+                        try:
+                            web_results = await web_search_svc.search_web(_last_user)
+                        except Exception:
+                            web_results = []
+                        if web_results:
+                            block = web_search_svc.format_context(web_results)
+                            sys_for_llm = f"{system_prompt}\n\n{block}" if system_prompt else block
+                            web_cites = [
+                                {"index": i + 1, "chunk_id": f"web-{i}",
+                                 "document_filename": (r["title"] or r["url"])[:80],
+                                 "snippet": r["snippet"][:240], "url": r["url"]}
+                                for i, r in enumerate(web_results)
+                            ]
+                            yield f"event: citations\ndata: {json.dumps(web_cites)}\n\n"
                     # Warn the UI if the model must cold-load (slow on this CPU-only
                     # box) and keep the connection alive past Cloudflare's ~100s 524
                     # window until the first token arrives.
                     if not await ollama.is_loaded(eff_model):
                         yield f"event: warming\ndata: {json.dumps({'model': eff_model})}\n\n"
                     agen = ollama.chat_stream(
-                        eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx,
+                        eff_model, messages, sys_for_llm, eff_temp, eff_max, eff_ctx,
                         images=images, usage=usage_info, think=eff_think, top_p=eff_top_p,
                     )
                     async for kind, value in _stream_with_keepalive(agen):

@@ -4,7 +4,7 @@ import {
   FileText, Sparkles, Zap, Scale, Brain, Settings2, Menu,
   X, Paperclip, Share2, BookMarked, Clipboard, ClipboardCheck,
   Mic, MicOff, Square, Download, RotateCcw, Search, Terminal,
-  ChevronRight, Wrench, Lock, Sparkle, SlidersHorizontal,
+  ChevronRight, Wrench, Lock, Sparkle, SlidersHorizontal, Globe,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../store/auth'
@@ -45,8 +45,8 @@ import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 
 interface Citation {
-  index: number; chunk_id: number; document_id: number
-  document_filename: string; score: number; snippet: string
+  index: number; chunk_id: number | string; document_id?: number
+  document_filename: string; score?: number; snippet: string; url?: string
 }
 interface RouteInfo { variant: string; chosen_model: string; reason: string }
 interface Message {
@@ -207,13 +207,47 @@ function splitThink(content: string): { think: string; clean: string; thinking: 
   return { think: think.trim(), clean: clean.trim(), thinking }
 }
 
+// Playful status verbs cycled next to the avatar while the model works.
+const THINK_VERBS = [
+  'Thinking', 'Pondering', 'Reasoning', 'Cooking', 'Noodling', 'Mulling it over',
+  'Connecting the dots', 'Synthesizing', 'Considering', 'Crunching', 'Brainstorming',
+  'Untangling', 'Percolating', 'Working it out', 'Deliberating',
+]
+
+// Animated dots + a status label. `label` (e.g. "Searching the web") pins the
+// text; otherwise it gently rotates through playful verbs.
+function ThinkingIndicator({ label }: { label?: string }) {
+  const [verb, setVerb] = useState(() => THINK_VERBS[Math.floor(Math.random() * THINK_VERBS.length)])
+  useEffect(() => {
+    if (label) return
+    const id = setInterval(() => {
+      setVerb((v) => {
+        let n = v
+        while (n === v) n = THINK_VERBS[Math.floor(Math.random() * THINK_VERBS.length)]
+        return n
+      })
+    }, 2200)
+    return () => clearInterval(id)
+  }, [label])
+  return (
+    <div className="flex items-center gap-2 py-2">
+      <div className="flex items-center gap-1.5">
+        {[0, 0.2, 0.4].map((d, i) => (
+          <span key={i} className="w-2 h-2 rounded-full bg-primary-500 typing-dot" style={{ animationDelay: `${d}s` }} />
+        ))}
+      </div>
+      <span className="text-sm text-gray-500 fade-in">{label || verb}…</span>
+    </div>
+  )
+}
+
 // ── Message bubble with copy/actions ────────────────────────────────────
 function MessageBubble({
-  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, isCliActive,
+  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, isCliActive, activity,
 }: {
   msg: Message; index: number; isLast: boolean
   isActive: boolean; streamPhase: string; warmingModel?: string; sending: boolean
-  onRegenerate: () => void; isCliActive: boolean
+  onRegenerate: () => void; isCliActive: boolean; activity?: string | null
 }) {
   const [copied, setCopied] = useState(false)
   const isWarming   = streamPhase === 'warming'  && isLast && msg.role === 'assistant'
@@ -261,15 +295,11 @@ function MessageBubble({
               </span>
             </div>
           ) : (isThinking || ((isTyping || isFastStream) && !clean.trim())) ? (
-            // Show the thinking dots until the model produces visible answer text.
-            // Reasoning models stream <think>… first (no clean text yet), which used
-            // to flip the body to an empty cursor — so the "thinking" indicator only
-            // appeared on the first turn. Keep the dots whenever there's no answer yet.
-            <div className="flex items-center gap-1.5 py-2">
-              {[0, 0.2, 0.4].map((d, i) => (
-                <span key={i} className="w-2 h-2 rounded-full bg-primary-500 typing-dot" style={{ animationDelay: `${d}s` }} />
-              ))}
-            </div>
+            // Show the thinking indicator until the model produces visible answer
+            // text. Reasoning models stream <think>… first (no clean text yet), which
+            // used to flip the body to an empty cursor — so this also keeps a status
+            // label showing on every turn, and reflects web search when active.
+            <ThinkingIndicator label={activity === 'searching' ? 'Searching the web' : undefined} />
           ) : (isTyping || isFastStream) ? (
             <p className="whitespace-pre-wrap leading-relaxed text-gray-200 text-sm">
               {clean}<span className="stream-cursor text-primary-500" />
@@ -343,8 +373,15 @@ function MessageBubble({
                   <details key={c.chunk_id} className="text-xs bg-gray-950/60 rounded-md border border-gray-800">
                     <summary className="cursor-pointer px-2.5 py-1.5 text-gray-400 hover:text-gray-200 flex items-center gap-2">
                       <span className="text-primary-400 font-mono">[{c.index}]</span>
-                      <span className="truncate flex-1">{c.document_filename}</span>
-                      <span className="text-gray-600">{c.score.toFixed(3)}</span>
+                      {c.url ? (
+                        <a href={c.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()}
+                          className="truncate flex-1 text-primary-300 hover:underline">{c.document_filename}</a>
+                      ) : (
+                        <span className="truncate flex-1">{c.document_filename}</span>
+                      )}
+                      {typeof c.score === 'number'
+                        ? <span className="text-gray-600">{c.score.toFixed(3)}</span>
+                        : <Globe className="w-3 h-3 text-gray-600 flex-shrink-0" />}
                     </summary>
                     <p className="px-2.5 pb-2 text-gray-400 whitespace-pre-wrap leading-relaxed">
                       {c.snippet}{c.snippet.length >= 240 ? '…' : ''}
@@ -407,6 +444,8 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false)
   const [streamPhase, setStreamPhase] = useState<'idle' | 'thinking' | 'warming' | 'typing'>('idle')
   const [showJump, setShowJump] = useState(false)
+  const [webSearch, setWebSearch] = useState(false)
+  const [streamActivity, setStreamActivity] = useState<string | null>(null)
   const [warmingModel, setWarmingModel] = useState<string>('')
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false)
   const [sessionSearch, setSessionSearch] = useState('')
@@ -661,7 +700,7 @@ export default function ChatPage() {
       finalized = true
       if (!mountedRef.current) return
       setLast({ content: entry.content, citations: entry.citations.length ? entry.citations : undefined, route: entry.route, usage: entry.usage, latency_ms: entry.latency_ms })
-      setSending(false); setStreamPhase('idle'); setWarmingModel('')
+      setSending(false); setStreamPhase('idle'); setWarmingModel(''); setStreamActivity(null)
     }
     const pump = (ts: number) => {
       if (!lastTs) lastTs = ts
@@ -700,7 +739,7 @@ export default function ChatPage() {
       const resp = await fetch(`${baseURL}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), ...(personalityActive(personality) ? { personality } : {}), ...(opts.regenerate ? { regenerate: true } : {}), knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null }),
+        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), ...(personalityActive(personality) ? { personality } : {}), ...(opts.regenerate ? { regenerate: true } : {}), ...(webSearch ? { web_search: true } : {}), knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null }),
         signal: abortRef.current.signal,
       })
 
@@ -714,7 +753,7 @@ export default function ChatPage() {
         errored = true
         liveStreams.delete(session.id)
         entry.done = true
-        if (mountedRef.current) { setMessages(m => m.slice(0, -1)); setSending(false); setStreamPhase('idle') }
+        if (mountedRef.current) { setMessages(m => m.slice(0, -1)); setSending(false); setStreamPhase('idle'); setStreamActivity(null) }
         return
       }
 
@@ -745,6 +784,10 @@ export default function ChatPage() {
             try { const w = JSON.parse(data); setWarmingModel(w.model || '') } catch {}
             setStreamPhase('warming')
           }
+          else if (event === 'searching') {
+            // Web search in progress — drives the "Searching the web" status label.
+            if (mountedRef.current) setStreamActivity('searching')
+          }
           else if (event === 'step') {
             try {
               const step: StepEvent = JSON.parse(data)
@@ -758,7 +801,7 @@ export default function ChatPage() {
             } catch {}
           }
           else if (data !== '[DONE]' && data) {
-            if (firstToken) { firstToken = false; setStreamPhase('typing') }
+            if (firstToken) { firstToken = false; setStreamPhase('typing'); setStreamActivity(null) }
             entry.content += data
             if (mountedRef.current) ensurePump()
           }
@@ -776,7 +819,7 @@ export default function ChatPage() {
       }
       liveStreams.delete(session.id)
       entry.done = true
-      if (mountedRef.current) { setSending(false); setStreamPhase('idle') }
+      if (mountedRef.current) { setSending(false); setStreamPhase('idle'); setStreamActivity(null) }
       return
     } finally {
       entry.done = true
@@ -1104,6 +1147,13 @@ export default function ChatPage() {
             )}
 
             {!isGuest && (<>
+            {/* Web search toggle */}
+            <button onClick={() => setWebSearch(w => !w)} title={webSearch ? 'Web search on' : 'Web search off'}
+              className={clsx('text-xs gap-1 p-1.5 flex-shrink-0 rounded-md inline-flex items-center transition-colors',
+                webSearch ? 'bg-primary-900/40 text-primary-300 border border-primary-700' : 'btn-ghost')}>
+              <Globe className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Web</span>
+            </button>
             {/* Personas */}
             <div className="relative flex items-center flex-shrink-0">
               <button onClick={() => setShowPersonas(!showPersonas)} className="btn-ghost text-xs gap-1 p-1.5" title="Personas">
@@ -1278,6 +1328,7 @@ export default function ChatPage() {
               streamPhase={streamPhase} warmingModel={warmingModel} sending={sending}
               onRegenerate={regenerate}
               isCliActive={!!activeCli && (streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
+              activity={i === messages.length - 1 ? streamActivity : null}
             />
           ))}
 

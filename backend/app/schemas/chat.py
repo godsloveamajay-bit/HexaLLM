@@ -24,6 +24,7 @@ class ChatRequest(BaseModel):
     cli_session_id: Optional[str] = None     # nebula daemon session for live tool execution
     personality: Optional[Dict[str, int]] = None  # Personality Engine sliders (0–100)
     regenerate: bool = False                 # re-roll the last answer: replace it in history, don't re-append the user turn
+    web_search: bool = False                 # ground the answer with live web results
 
 
 class ChatSessionCreate(BaseModel):
