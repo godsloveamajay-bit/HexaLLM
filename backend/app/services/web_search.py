@@ -110,14 +110,15 @@ def format_context(results: List[Dict]) -> str:
     """
     from datetime import datetime, timezone
     today = datetime.now(timezone.utc).strftime("%B %d, %Y")
-    parts = [f"[{i}] {r['title']}\n{r['snippet']}\nSource: {r['url']}" for i, r in enumerate(results, 1)]
+    # Cap each snippet — every injected token is prefill, which is the dominant
+    # latency on CPU. ~280 chars (~70 tokens) keeps the source useful but cheap.
+    parts = [f"[{i}] {r['title']}\n{(r['snippet'] or '')[:280].strip()}\nSource: {r['url']}"
+             for i, r in enumerate(results, 1)]
+    # Kept terse — the whole block is prefill, the dominant cost on CPU — but
+    # still carries the anti-refusal directives (date, "live", no cutoff claim).
     return (
-        f"You have been given LIVE web search results, retrieved from the internet just now. "
-        f"Today's date is {today}.\n"
-        "Use these results to answer the question with current, up-to-date information and cite "
-        "sources inline as [1], [2], …\n"
-        "IMPORTANT: You DO have access to these fresh results — do NOT claim you cannot browse the "
-        "internet, and do NOT mention a training-data knowledge cutoff. If the results don't fully "
-        "answer the question, use what they do contain and say what's missing.\n\n"
-        "--- WEB SEARCH RESULTS ---\n" + "\n\n".join(parts) + "\n--- END WEB SEARCH RESULTS ---"
+        f"LIVE web search results (fetched just now; today is {today}). You CAN browse — "
+        "answer from these, cite inline as [1],[2]; never claim a knowledge cutoff. "
+        "If they fall short, use what's there and say what's missing.\n\n"
+        + "\n\n".join(parts)
     )

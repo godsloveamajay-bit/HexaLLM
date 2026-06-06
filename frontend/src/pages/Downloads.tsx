@@ -372,6 +372,15 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '0.13.3',
+    date: '2026-06-06',
+    summary: 'Web search is dramatically faster and shows live progress instead of looking stuck.',
+    changes: [
+      { type: 'fixed',    text: 'Web search no longer appears to hang — answers come back ~3× faster and a live “Searching the web → Reading sources (m:ss)” timer shows it’s working' },
+      { type: 'improved', text: 'Web-grounded answers are routed to a fast model and use fewer, tighter sources, so the first words arrive much sooner' },
+    ],
+  },
+  {
     version: '0.13.2',
     date: '2026-06-05',
     summary: 'Web search actually grounds answers now, and reasoning models get room to think.',
@@ -616,7 +625,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.13.2'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.13.3'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 

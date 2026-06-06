@@ -44,6 +44,14 @@ GUEST_DEFAULT_MODEL = os.getenv("GUEST_DEFAULT_MODEL", "nebulax:balanced")
 CHAT_NUM_CTX = int(os.getenv("CHAT_NUM_CTX", "8192"))
 REASON_NUM_CTX = int(os.getenv("CHAT_REASON_NUM_CTX", "16384"))
 REASON_MIN_PREDICT = int(os.getenv("CHAT_REASON_MAX_TOKENS", "8192"))
+
+# Web search grounding. CPU prefill on this box is ~2 tok/s, so the sources we
+# inject dominate latency — a big context = minutes of "reading" before the first
+# answer token. Keep the injected set small, route synthesis to a fast small model
+# (extractive Q&A doesn't need a big one), and cap the answer length. All env-tunable.
+WEB_MAX_RESULTS = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "3"))
+WEB_MAX_PREDICT = int(os.getenv("WEB_SEARCH_MAX_TOKENS", "600"))
+WEB_FAST_MODEL = os.getenv("WEB_SEARCH_MODEL", "")  # "" → pick the router's fast model
 _guest_usage: Dict[str, Tuple[str, int]] = {}  # ip -> (utc_date, tokens_used_today)
 
 
@@ -501,6 +509,20 @@ async def chat_completions(
     # Route nebulax:* variants → concrete Ollama model + variant params.
     eff_model, variant_prompt, eff_temp, eff_ctx, eff_max, route_meta = await _apply_router(req)
 
+    # Web-grounded answers are extractive synthesis from sources we inject, so a
+    # small fast model handles them well — and on this CPU box (prefill ~2 tok/s)
+    # it roughly halves the wait. Route web search to the fast model (unless an
+    # image is attached, which needs the vision model). eff_ctx is reset so it's
+    # recomputed for the new model below.
+    web_active = bool(req.web_search) and not is_guest and not images
+    if web_active:
+        _avail = [m.get("name", "") for m in await ollama.list_models()]
+        _fast = WEB_FAST_MODEL or model_router.fast_model_for(_avail)
+        if _fast and _fast != eff_model:
+            eff_model = _fast
+            eff_ctx = None
+            route_meta = {**(route_meta or {"variant": req.model}), "web_model": _fast}
+
     # Personal AI prefs: cap response length when the request didn't ask for a
     # specific one (the web UI doesn't), so the user's "max response length"
     # setting applies. API clients that pass max_tokens still win.
@@ -538,6 +560,11 @@ async def chat_completions(
         # Don't let a low response cap (verbosity / "max response length") truncate
         # the thinking — it counts against the output budget. Explicit API max_tokens still wins.
         eff_max = REASON_MIN_PREDICT
+
+    # Bound web-search answers so generation can't run for minutes on this slow box.
+    # (Explicit API max_tokens still wins.)
+    if web_active and req.max_tokens is None and (eff_max is None or eff_max > WEB_MAX_PREDICT):
+        eff_max = WEB_MAX_PREDICT
 
     # In-chat text-to-image / text-to-video: "generate an image/video of …" works
     # in ANY chat. Skip when an image is attached (that's a vision query) or during
@@ -669,7 +696,7 @@ async def chat_completions(
                     if req.web_search and _last_user.strip():
                         yield f"event: searching\ndata: {json.dumps({'query': _last_user[:120]})}\n\n"
                         try:
-                            web_results = await web_search_svc.search_web(_last_user)
+                            web_results = await web_search_svc.search_web(_last_user, max_results=WEB_MAX_RESULTS)
                         except Exception:
                             web_results = []
                         if web_results:
@@ -682,6 +709,10 @@ async def chat_completions(
                                 for i, r in enumerate(web_results)
                             ]
                             yield f"event: citations\ndata: {json.dumps(web_cites)}\n\n"
+                            # Sources are now in the prompt; the model must "read" them
+                            # (prefill) before answering — slow on CPU. Tell the UI so it
+                            # can show a "Reading sources…" status instead of looking hung.
+                            yield f"event: reading\ndata: {json.dumps({'sources': len(web_cites)})}\n\n"
                         else:
                             # Search ran but found nothing — tell the model that
                             # explicitly so it doesn't fall back to "I can't browse".
@@ -691,8 +722,10 @@ async def chat_completions(
                             sys_for_llm = f"{system_prompt}\n\n{note}" if system_prompt else note
                     # Warn the UI if the model must cold-load (slow on this CPU-only
                     # box) and keep the connection alive past Cloudflare's ~100s 524
-                    # window until the first token arrives.
-                    if not await ollama.is_loaded(eff_model):
+                    # window until the first token arrives. For web search we already
+                    # show a "Reading sources… (timer)" status, so skip the warming
+                    # banner there (it would otherwise mask that more useful label).
+                    if not web_active and not await ollama.is_loaded(eff_model):
                         yield f"event: warming\ndata: {json.dumps({'model': eff_model})}\n\n"
                     agen = ollama.chat_stream(
                         eff_model, messages, sys_for_llm, eff_temp, eff_max, eff_ctx,

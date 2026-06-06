@@ -215,9 +215,13 @@ const THINK_VERBS = [
 ]
 
 // Animated dots + a status label. `label` (e.g. "Searching the web") pins the
-// text; otherwise it gently rotates through playful verbs.
-function ThinkingIndicator({ label }: { label?: string }) {
+// text; otherwise it gently rotates through playful verbs. When `since` (a start
+// timestamp in ms) is given, a live mm:ss counter is appended — on this CPU box
+// web answers take a while to "read" the sources, so showing elapsed time makes
+// it obvious the model is working, not frozen.
+function ThinkingIndicator({ label, since }: { label?: string; since?: number }) {
   const [verb, setVerb] = useState(() => THINK_VERBS[Math.floor(Math.random() * THINK_VERBS.length)])
+  const [elapsed, setElapsed] = useState(0)
   useEffect(() => {
     if (label) return
     const id = setInterval(() => {
@@ -229,6 +233,16 @@ function ThinkingIndicator({ label }: { label?: string }) {
     }, 2200)
     return () => clearInterval(id)
   }, [label])
+  useEffect(() => {
+    if (!since) { setElapsed(0); return }
+    const tick = () => setElapsed(Math.max(0, Math.floor((Date.now() - since) / 1000)))
+    tick()
+    const id = setInterval(tick, 1000)
+    return () => clearInterval(id)
+  }, [since])
+  const mmss = since && elapsed >= 1
+    ? ` ${Math.floor(elapsed / 60)}:${String(elapsed % 60).padStart(2, '0')}`
+    : ''
   return (
     <div className="flex items-center gap-2 py-2">
       <div className="flex items-center gap-1.5">
@@ -236,18 +250,18 @@ function ThinkingIndicator({ label }: { label?: string }) {
           <span key={i} className="w-2 h-2 rounded-full bg-primary-500 typing-dot" style={{ animationDelay: `${d}s` }} />
         ))}
       </div>
-      <span className="text-sm text-gray-500 fade-in">{label || verb}…</span>
+      <span className="text-sm text-gray-500 fade-in">{label || verb}…{mmss && <span className="text-gray-600 tabular-nums">{mmss}</span>}</span>
     </div>
   )
 }
 
 // ── Message bubble with copy/actions ────────────────────────────────────
 function MessageBubble({
-  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, isCliActive, activity,
+  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, isCliActive, activity, activitySince,
 }: {
   msg: Message; index: number; isLast: boolean
   isActive: boolean; streamPhase: string; warmingModel?: string; sending: boolean
-  onRegenerate: () => void; isCliActive: boolean; activity?: string | null
+  onRegenerate: () => void; isCliActive: boolean; activity?: string | null; activitySince?: number | null
 }) {
   const [copied, setCopied] = useState(false)
   const isWarming   = streamPhase === 'warming'  && isLast && msg.role === 'assistant'
@@ -299,7 +313,10 @@ function MessageBubble({
             // text. Reasoning models stream <think>… first (no clean text yet), which
             // used to flip the body to an empty cursor — so this also keeps a status
             // label showing on every turn, and reflects web search when active.
-            <ThinkingIndicator label={activity === 'searching' ? 'Searching the web' : undefined} />
+            <ThinkingIndicator
+              label={activity === 'searching' ? 'Searching the web' : activity === 'reading' ? 'Reading sources' : undefined}
+              since={activitySince ?? undefined}
+            />
           ) : (isTyping || isFastStream) ? (
             <p className="whitespace-pre-wrap leading-relaxed text-gray-200 text-sm">
               {clean}<span className="stream-cursor text-primary-500" />
@@ -446,6 +463,7 @@ export default function ChatPage() {
   const [showJump, setShowJump] = useState(false)
   const [webSearch, setWebSearch] = useState(false)
   const [streamActivity, setStreamActivity] = useState<string | null>(null)
+  const [activitySince, setActivitySince] = useState<number | null>(null)
   const [warmingModel, setWarmingModel] = useState<string>('')
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false)
   const [sessionSearch, setSessionSearch] = useState('')
@@ -700,7 +718,7 @@ export default function ChatPage() {
       finalized = true
       if (!mountedRef.current) return
       setLast({ content: entry.content, citations: entry.citations.length ? entry.citations : undefined, route: entry.route, usage: entry.usage, latency_ms: entry.latency_ms })
-      setSending(false); setStreamPhase('idle'); setWarmingModel(''); setStreamActivity(null)
+      setSending(false); setStreamPhase('idle'); setWarmingModel(''); setStreamActivity(null); setActivitySince(null)
     }
     const pump = (ts: number) => {
       if (!lastTs) lastTs = ts
@@ -753,7 +771,7 @@ export default function ChatPage() {
         errored = true
         liveStreams.delete(session.id)
         entry.done = true
-        if (mountedRef.current) { setMessages(m => m.slice(0, -1)); setSending(false); setStreamPhase('idle'); setStreamActivity(null) }
+        if (mountedRef.current) { setMessages(m => m.slice(0, -1)); setSending(false); setStreamPhase('idle'); setStreamActivity(null); setActivitySince(null) }
         return
       }
 
@@ -786,7 +804,12 @@ export default function ChatPage() {
           }
           else if (event === 'searching') {
             // Web search in progress — drives the "Searching the web" status label.
-            if (mountedRef.current) setStreamActivity('searching')
+            // Start the elapsed timer so the (slow) wait reads as working, not hung.
+            if (mountedRef.current) { setStreamActivity('searching'); setActivitySince(Date.now()) }
+          }
+          else if (event === 'reading') {
+            // Sources fetched; model is now prefilling them (the slow part on CPU).
+            if (mountedRef.current) setStreamActivity('reading')
           }
           else if (event === 'step') {
             try {
@@ -801,7 +824,7 @@ export default function ChatPage() {
             } catch {}
           }
           else if (data !== '[DONE]' && data) {
-            if (firstToken) { firstToken = false; setStreamPhase('typing'); setStreamActivity(null) }
+            if (firstToken) { firstToken = false; setStreamPhase('typing'); setStreamActivity(null); setActivitySince(null) }
             entry.content += data
             if (mountedRef.current) ensurePump()
           }
@@ -819,7 +842,7 @@ export default function ChatPage() {
       }
       liveStreams.delete(session.id)
       entry.done = true
-      if (mountedRef.current) { setSending(false); setStreamPhase('idle'); setStreamActivity(null) }
+      if (mountedRef.current) { setSending(false); setStreamPhase('idle'); setStreamActivity(null); setActivitySince(null) }
       return
     } finally {
       entry.done = true
@@ -1329,6 +1352,7 @@ export default function ChatPage() {
               onRegenerate={regenerate}
               isCliActive={!!activeCli && (streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
               activity={i === messages.length - 1 ? streamActivity : null}
+              activitySince={i === messages.length - 1 ? activitySince : null}
             />
           ))}
 
