@@ -1,4 +1,4 @@
-# Nebula Code
+# NebulaCode
 
 AI coding assistant for the terminal — like Claude Code or Codex, but runs on your own local models via [Ollama](https://ollama.com) or a [NebulaX](https://github.com/godsloveamajay-bit/nebulaxai) instance.
 
