@@ -2,7 +2,7 @@
 
 **NebulaX AI is a platform where you can interact with AI, share and create your own models, run sandboxed workflows and more.**
 
-🌐 Live instance: **[ai.nebualax.co.uk](https://ai.nebualax.co.uk)**
+🌐 Website: **[ai.nebualax.co.uk](https://ai.nebualax.co.uk)**
 
 ## Features
 
