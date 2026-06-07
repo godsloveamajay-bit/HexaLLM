@@ -9,6 +9,8 @@ from ..models.user import User
 from ..models.workflow import Workflow
 from ..models.chat import AgentRun, RequestLog
 from ..services.agent_service import run_agent
+from ..services.ollama_service import ollama
+from ..services import model_router
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
 
@@ -139,9 +141,17 @@ async def _run_workflow_bg(workflow_id: int, user_id: int):
         wf = db.query(Workflow).filter(Workflow.id == workflow_id, Workflow.user_id == user_id).first()
         if not wf:
             return
+        # Resolve a NebulaX variant selection to a concrete model for the run.
+        eff_model = wf.model
+        if model_router.is_variant(wf.model):
+            try:
+                avail = [m["name"] for m in await ollama.list_models()]
+            except Exception:
+                avail = []
+            eff_model = model_router.concrete_for(wf.model, wf.task, avail)
         result = await run_agent(
             task=wf.task,
-            model=wf.model,
+            model=eff_model,
             tools=wf.tools or [],
             max_steps=wf.max_steps,
             persona_prompt=wf.system_prompt,

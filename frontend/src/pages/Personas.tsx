@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react'
 import { Plus, Pencil, Trash2, Globe, Lock, Copy, Loader2, Cpu, BookOpen, Brain, Zap, Bot, FlaskConical, Search, Code2, Star, Webhook, SlidersHorizontal } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
+import { loadModelOptions, defaultModelValue, prettyModel, ModelOption } from '../lib/models'
+import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
@@ -35,10 +37,10 @@ const AVAILABLE_TOOLS = ['web_search', 'code_exec', 'read_file', 'write_file']
 const PRESET_EMOJIS = ['🤖', '🧠', '💼', '🔬', '🎨', '📝', '🛡️', '🚀', '🎓', '💡', '🔧', '🧪']
 
 function PersonaForm({
-  initial, ollamaModels, kbs, onSave, onCancel
+  initial, modelOptions, kbs, onSave, onCancel
 }: {
   initial?: Partial<Persona>
-  ollamaModels: string[]
+  modelOptions: ModelOption[]
   kbs: KnowledgeBase[]
   onSave: (data: any) => void
   onCancel: () => void
@@ -47,7 +49,7 @@ function PersonaForm({
     name: initial?.name || '',
     description: initial?.description || '',
     emoji: initial?.emoji || '🤖',
-    base_model: initial?.base_model || (ollamaModels[0] || 'llama3:8B'),
+    base_model: initial?.base_model || defaultModelValue(modelOptions),
     system_prompt: initial?.system_prompt || '',
     tools: initial?.tools || [],
     knowledge_base_id: initial?.knowledge_base_id ?? null as number | null,
@@ -95,7 +97,7 @@ function PersonaForm({
       <div>
         <label className="label">Base Model</label>
         <select className="input" value={form.base_model} onChange={(e) => setForm((f) => ({ ...f, base_model: e.target.value }))}>
-          {ollamaModels.map((m) => <option key={m} value={m}>{m}</option>)}
+          {modelOptions.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
       </div>
 
@@ -174,6 +176,10 @@ function PersonaForm({
 function PersonaCard({ persona, onEdit, onDelete, onFork, onDuplicate, onToggleFavorite, onExpose, isOwn }: {
   persona: Persona; onEdit?: () => void; onDelete?: () => void; onFork?: () => void; onDuplicate?: () => void; onToggleFavorite?: () => void; onExpose?: () => void; isOwn: boolean
 }) {
+  const { user } = useAuth()
+  // Show the branded variant label; hide raw base names from non-admins.
+  const baseLabel = (user?.is_admin || persona.base_model?.startsWith('nebulax:'))
+    ? prettyModel(persona.base_model) : 'NebulaX model'
   return (
     <div className={clsx('card flex flex-col gap-3', persona.is_favorite && 'ring-1 ring-secondary-500/40')}>
       <div className="flex items-start justify-between gap-2">
@@ -181,7 +187,7 @@ function PersonaCard({ persona, onEdit, onDelete, onFork, onDuplicate, onToggleF
           <span className="text-2xl">{persona.emoji}</span>
           <div>
             <p className="font-semibold text-gray-100">{persona.name}</p>
-            <p className="text-xs text-gray-500 mt-0.5">{persona.base_model}</p>
+            <p className="text-xs text-gray-500 mt-0.5">{baseLabel}</p>
           </div>
         </div>
         <div className="flex items-center gap-1.5">
@@ -228,10 +234,11 @@ function PersonaCard({ persona, onEdit, onDelete, onFork, onDuplicate, onToggleF
 }
 
 export default function PersonasPage() {
+  const { user } = useAuth()
   const [mine, setMine] = useState<Persona[]>([])
   const [community, setCommunity] = useState<Persona[]>([])
   const [kbs, setKbs] = useState<KnowledgeBase[]>([])
-  const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3:8B'])
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
   const [loading, setLoading] = useState(true)
   const navigate = useNavigate()
   const [tab, setTab] = useState<'mine' | 'community'>('mine')
@@ -240,19 +247,16 @@ export default function PersonasPage() {
 
   const load = async () => {
     try {
-      const [mineRes, commRes, kbRes, modelsRes] = await Promise.allSettled([
+      const [mineRes, commRes, kbRes, optsRes] = await Promise.allSettled([
         api.get('/personas'),
         api.get('/personas/community'),
         api.get('/knowledge'),
-        api.get('/models/ollama/list'),
+        loadModelOptions(!!user?.is_admin),
       ])
       if (mineRes.status === 'fulfilled') setMine(mineRes.value.data)
       if (commRes.status === 'fulfilled') setCommunity(commRes.value.data)
       if (kbRes.status === 'fulfilled') setKbs(kbRes.value.data)
-      if (modelsRes.status === 'fulfilled') {
-        const names = modelsRes.value.data.models?.map((m: any) => m.name) || []
-        if (names.length) setOllamaModels(names)
-      }
+      if (optsRes.status === 'fulfilled' && optsRes.value.length) setModelOptions(optsRes.value)
     } finally { setLoading(false) }
   }
 
@@ -316,7 +320,7 @@ export default function PersonasPage() {
           <h2 className="font-semibold text-gray-100 mb-4">{editing ? 'Edit Persona' : 'New Persona'}</h2>
           <PersonaForm
             initial={editing || undefined}
-            ollamaModels={ollamaModels}
+            modelOptions={modelOptions}
             kbs={kbs}
             onSave={save}
             onCancel={() => { setShowForm(false); setEditing(null) }}

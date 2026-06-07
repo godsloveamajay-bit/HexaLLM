@@ -5,6 +5,63 @@
 // images rather than the JSON tool-calling protocol the agent loop relies on.
 // Picking one of those by default is why agent runs used to "do nothing".
 
+import api from './api'
+
+export interface ModelOption { value: string; label: string; group: string }
+
+// Static fallback labels so we can pretty-print a NebulaX variant id even on
+// pages that don't fetch the variant list. Kept in sync with the backend.
+export const VARIANT_LABELS: Record<string, string> = {
+  'nebulax:code': 'NebulaX Code',
+  'nebulax:chat': 'NebulaX Chat',
+  'nebulax:write': 'NebulaX Write',
+  'nebulax:think': 'NebulaX Think',
+  'nebulax:balanced': 'NebulaX Balanced',
+  'nebulax:custom': 'NebulaX Custom',
+  'nebulax:vision': 'NebulaX Vision',
+}
+
+/** Human label for a model value. Variants → branded label; raw ids unchanged. */
+export function prettyModel(value?: string | null): string {
+  if (!value) return ''
+  return VARIANT_LABELS[value] || value
+}
+
+/** Selectable models for the current user.
+ *  Everyone gets the NebulaX variants; admins additionally get the raw Ollama
+ *  models (back-end plumbing). Variants always come first. */
+export async function loadModelOptions(isAdmin: boolean): Promise<ModelOption[]> {
+  const opts: ModelOption[] = []
+  try {
+    const { data } = await api.get('/models/nebulax/variants')
+    for (const v of (data.variants || [])) {
+      if (v.ready === false) continue
+      opts.push({ value: v.id, label: v.label, group: 'NebulaX' })
+    }
+  } catch {}
+  if (isAdmin) {
+    try {
+      const { data } = await api.get('/models/ollama/list')
+      for (const m of chatCapableModels((data.models || []).map((x: any) => x.name))) {
+        opts.push({ value: m, label: m, group: 'Models' })
+      }
+    } catch {}
+  }
+  return opts
+}
+
+/** Sensible default selection: NebulaX Balanced if available, else first. */
+export function defaultModelValue(opts: ModelOption[]): string {
+  return opts.find((o) => o.value === 'nebulax:balanced')?.value || opts[0]?.value || 'nebulax:balanced'
+}
+
+/** Render <option>s for a ModelOption[] grouped by their `group`. */
+export function groupedOptions(opts: ModelOption[]) {
+  const groups: Record<string, ModelOption[]> = {}
+  for (const o of opts) (groups[o.group] ||= []).push(o)
+  return groups
+}
+
 const EMBED_RE = /embed|bge|gte|minilm/i
 const VISION_RE = /vision|llava|moondream/i
 

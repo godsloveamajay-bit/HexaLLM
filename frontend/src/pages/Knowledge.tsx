@@ -4,6 +4,7 @@ import {
   CheckCircle2, AlertCircle, Clock, Globe,
 } from 'lucide-react'
 import api from '../lib/api'
+import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
@@ -68,6 +69,7 @@ function humanBytes(n: number): string {
 }
 
 function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+  const { user } = useAuth()
   const [form, setForm] = useState({
     name: '', description: '', embedding_model: POPULAR_EMBED[0],
     chunk_size: 500, chunk_overlap: 50,
@@ -107,16 +109,18 @@ function CreateModal({ onClose, onCreated }: { onClose: () => void; onCreated: (
             <textarea className="input resize-none" rows={2} value={form.description}
               onChange={(e) => setForm((f) => ({ ...f, description: e.target.value }))} />
           </div>
-          <div>
-            <label className="label">Embedding Model</label>
-            <select className="input" value={form.embedding_model}
-              onChange={(e) => setForm((f) => ({ ...f, embedding_model: e.target.value }))}>
-              {POPULAR_EMBED.map((m) => <option key={m}>{m}</option>)}
-            </select>
-            <p className="text-xs text-gray-500 mt-1">
-              Pull the model in Ollama first: <code className="text-gray-400">ollama pull {form.embedding_model}</code>
-            </p>
-          </div>
+          {user?.is_admin && (
+            <div>
+              <label className="label">Embedding Model</label>
+              <select className="input" value={form.embedding_model}
+                onChange={(e) => setForm((f) => ({ ...f, embedding_model: e.target.value }))}>
+                {POPULAR_EMBED.map((m) => <option key={m}>{m}</option>)}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Pull the model in Ollama first: <code className="text-gray-400">ollama pull {form.embedding_model}</code>
+              </p>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3">
             <div>
               <label className="label">Chunk Size (words)</label>
@@ -146,6 +150,7 @@ function KBDetail({ kb, onChanged, onDelete }: {
   onChanged: () => void
   onDelete: () => void
 }) {
+  const { user } = useAuth()
   const [docs, setDocs] = useState<KBDocument[]>([])
   const [loading, setLoading] = useState(true)
   const [uploading, setUploading] = useState(false)
@@ -246,7 +251,7 @@ function KBDetail({ kb, onChanged, onDelete }: {
             <h2 className="text-lg font-semibold text-gray-100">{kb.name}</h2>
             {kb.description && <p className="text-sm text-gray-400 mt-1">{kb.description}</p>}
             <div className="flex flex-wrap gap-2 mt-3 text-xs">
-              <span className="badge bg-gray-800 text-gray-400">{kb.embedding_model}</span>
+              {user?.is_admin && <span className="badge bg-gray-800 text-gray-400">{kb.embedding_model}</span>}
               <span className="badge bg-gray-800 text-gray-400">{kb.chunk_size}w chunks</span>
               <span className="badge bg-gray-800 text-gray-400">{kb.chunk_overlap}w overlap</span>
               <span className="badge bg-primary-900/30 text-primary-400">

@@ -25,6 +25,7 @@ from ..core import personality as personality_engine
 from ..models.user import APIKey
 from ..models.chat import RequestLog
 from ..services.ollama_service import ollama
+from ..services import model_router
 
 router = APIRouter(tags=["openai-compat"])
 
@@ -121,6 +122,16 @@ async def chat_completions(
     db: Session = Depends(get_db),
 ):
     model, system_prompt, temperature, top_p, messages = _resolve(key, req)
+    # `model` is the advertised id (may be a NebulaX variant); resolve it to a
+    # concrete Ollama model for the actual inference call.
+    concrete = model
+    if model_router.is_variant(model):
+        try:
+            avail = [m["name"] for m in await ollama.list_models()]
+        except Exception:
+            avail = []
+        last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
+        concrete = model_router.concrete_for(model, last_user, avail)
     request_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
     key_id, user_id = key.id, key.user_id
@@ -133,7 +144,7 @@ async def chat_completions(
             usage: dict = {}
             try:
                 async for chunk in ollama.chat_stream(
-                    model, messages, system_prompt=system_prompt,
+                    concrete, messages, system_prompt=system_prompt,
                     temperature=temperature, max_tokens=req.max_tokens, usage=usage, top_p=top_p,
                 ):
                     delta = {
@@ -173,7 +184,7 @@ async def chat_completions(
     usage: dict = {}
     full = ""
     async for chunk in ollama.chat_stream(
-        model, messages, system_prompt=system_prompt,
+        concrete, messages, system_prompt=system_prompt,
         temperature=temperature, max_tokens=req.max_tokens, usage=usage, top_p=top_p,
     ):
         full += chunk
@@ -191,16 +202,15 @@ async def chat_completions(
 
 @router.get("/models")
 async def list_models(key: APIKey = Depends(get_api_key_record)):
-    """OpenAI-style model list. A bound key advertises only its served model."""
+    """OpenAI-style model list. A bound key advertises only its served model;
+    an unbound key advertises the NebulaX models (variants), never raw bases."""
     created = int(time.time())
     if key.model_name:
         names = [key.model_name]
+    elif key.persona_id and key.persona:
+        names = [key.persona.base_model]
     else:
-        try:
-            tags = await ollama.list_models()
-            names = [m.get("name") for m in (tags or []) if m.get("name")]
-        except Exception:
-            names = []
+        names = [v["id"] for v in model_router.public_variants()]
     return {
         "object": "list",
         "data": [{"id": n, "object": "model", "created": created, "owned_by": "nebulax"} for n in names],

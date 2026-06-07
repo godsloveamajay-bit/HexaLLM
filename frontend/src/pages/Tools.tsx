@@ -7,7 +7,8 @@ import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import py from 'react-syntax-highlighter/dist/esm/languages/prism/python'
 import api from '../lib/api'
-import { chatCapableModels, defaultAgentModel } from '../lib/models'
+import { loadModelOptions, defaultModelValue, ModelOption } from '../lib/models'
+import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 
@@ -27,8 +28,9 @@ const STATUS_BADGE: Record<string, string> = {
 }
 
 export default function ToolsPage() {
+  const { user } = useAuth()
   const [tools, setTools] = useState<Tool[]>([])
-  const [models, setModels] = useState<string[]>([])
+  const [models, setModels] = useState<ModelOption[]>([])
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('')
   const [generating, setGenerating] = useState(false)
@@ -36,12 +38,11 @@ export default function ToolsPage() {
   const load = () => api.get('/tools').then(({ data }) => setTools(data)).catch(() => {})
   useEffect(() => {
     load()
-    api.get('/models/ollama/list').then(({ data }) => {
-      const names = chatCapableModels(data.models?.map((m: any) => m.name) || [])
-      setModels(names)
-      setModel(defaultAgentModel(names) || names[0] || '')
+    loadModelOptions(!!user?.is_admin).then((opts) => {
+      setModels(opts)
+      setModel(defaultModelValue(opts))
     }).catch(() => {})
-  }, [])
+  }, [user])
 
   const generate = async () => {
     if (!prompt.trim()) return
@@ -98,7 +99,7 @@ export default function ToolsPage() {
           rows={3} className="input w-full resize-y" />
         <div className="flex items-center justify-between gap-3 mt-3 flex-wrap">
           <select value={model} onChange={(e) => setModel(e.target.value)} className="input max-w-[220px]">
-            {models.map((m) => <option key={m} value={m}>{m}</option>)}
+            {models.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
           <button onClick={generate} disabled={generating || !prompt.trim() || !model} className="btn-primary">
             {generating ? <><Loader2 className="w-4 h-4 animate-spin" /> Writing…</> : <><Sparkles className="w-4 h-4" /> Generate tool</>}

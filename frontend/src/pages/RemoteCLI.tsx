@@ -4,6 +4,7 @@ import {
   ChevronDown, ChevronRight, Globe, Code2, FileText, RefreshCw,
 } from 'lucide-react'
 import api, { baseURL } from '../lib/api'
+import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import ReactMarkdown from 'react-markdown'
@@ -95,6 +96,7 @@ function StepRow({ step }: { step: StepEvent }) {
 const DEFAULT_TOOLS = ['web_search', 'code_exec', 'bash_exec', 'read_file', 'write_file', 'search_files']
 
 export default function RemoteCLIPage() {
+  const { user } = useAuth()
   const [sessions, setSessions] = useState<CliSession[]>([])
   const [loadingSessions, setLoadingSessions] = useState(true)
   const [selectedSession, setSelectedSession] = useState<string>('')
@@ -150,7 +152,8 @@ export default function RemoteCLIPage() {
         },
         body: JSON.stringify({
           task,
-          model,
+          // Non-admins let the connected machine use its own default model.
+          model: user?.is_admin ? model : '',
           session_id: selectedSession || undefined,
           tools: DEFAULT_TOOLS,
         }),
@@ -293,14 +296,16 @@ export default function RemoteCLIPage() {
               <p className="text-xs text-gray-600 mt-1">Ctrl/Cmd + Enter to run</p>
             </div>
 
-            <div>
-              <label className="label">Model</label>
-              <select value={model} onChange={e => setModel(e.target.value)} className="input text-sm">
-                {ollamaModels.length > 0
-                  ? ollamaModels.map(m => <option key={m} value={m}>{m}</option>)
-                  : <option value={model}>{model}</option>}
-              </select>
-            </div>
+            {user?.is_admin && (
+              <div>
+                <label className="label">Model</label>
+                <select value={model} onChange={e => setModel(e.target.value)} className="input text-sm">
+                  {ollamaModels.length > 0
+                    ? ollamaModels.map(m => <option key={m} value={m}>{m}</option>)
+                    : <option value={model}>{model}</option>}
+                </select>
+              </div>
+            )}
 
             {activeSession && (
               <div className="text-xs text-gray-500 bg-gray-800/40 rounded-lg px-3 py-2">

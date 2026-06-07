@@ -239,8 +239,18 @@ async def extract_memories(
         "If there is nothing worth remembering, output []."
     )
     msgs = [{"role": "user", "content": f"Conversation:\n{conversation}"}]
+    # Memory extraction is a cheap throwaway pass — pick a fast model server-side
+    # (resolving a NebulaX variant if one was sent) rather than trusting a raw id.
+    from ..services import model_router
+    extract_model = data.model
+    if model_router.is_variant(extract_model) or not extract_model:
+        avail = [m["name"] for m in await ollama.list_models()]
+        extract_model = (
+            model_router.concrete_for(extract_model, "", avail) if model_router.is_variant(extract_model)
+            else model_router.fast_model_for(avail) or extract_model
+        )
     raw = ""
-    async for chunk in ollama.chat_stream(data.model, msgs, system_prompt=system, temperature=0.1):
+    async for chunk in ollama.chat_stream(extract_model, msgs, system_prompt=system, temperature=0.1):
         raw += chunk
 
     import json, re

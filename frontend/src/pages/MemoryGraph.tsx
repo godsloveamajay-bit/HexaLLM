@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import { Network, RefreshCw, Database, FileText, Boxes, Brain, Info } from 'lucide-react'
 import api from '../lib/api'
+import { useAuth } from '../store/auth'
 import { clsx } from 'clsx'
 
 type NodeType = 'kb' | 'document' | 'chunk' | 'memory'
@@ -25,6 +26,7 @@ const W = 1000
 const H = 680
 
 export default function MemoryGraphPage() {
+  const { user } = useAuth()
   const [data, setData] = useState<GraphResp | null>(null)
   const [loading, setLoading] = useState(true)
   const [threshold, setThreshold] = useState(0.78)
@@ -224,7 +226,7 @@ export default function MemoryGraphPage() {
             <Stat icon={Brain} color={TYPE_META.memory.color} n={stats.memories} label="memories" />
             <span className="text-gray-500">·</span>
             <span><b className="text-gray-200">{stats.semantic_edges}</b> semantic links</span>
-            {stats.embed_model && <span className="text-gray-600 text-xs">via {stats.embed_model}</span>}
+            {user?.is_admin && stats.embed_model && <span className="text-gray-600 text-xs">via {stats.embed_model}</span>}
           </div>
         )}
       </div>

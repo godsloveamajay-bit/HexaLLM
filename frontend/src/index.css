@@ -220,6 +220,16 @@ html, body { transition: background-color .25s ease, color .25s ease; }
   animation: blink 1s ease-in-out infinite;
 }
 
+/* Shimmering status text — gentle motion for the "thinking" verb (replaces the
+   old animated dots) so it reads as working, not frozen. */
+@keyframes shimmer-text {
+  0%, 100% { opacity: 0.45; }
+  50%      { opacity: 1; }
+}
+.shimmer-text {
+  animation: shimmer-text 1.6s ease-in-out infinite;
+}
+
 /* Glass morphism surface */
 .glass {
   background: rgb(var(--g-950) / 0.8);

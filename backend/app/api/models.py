@@ -7,7 +7,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from ..core.database import get_db
-from ..core.security import get_current_user
+from ..core.security import get_current_user, get_optional_user
 from ..core.config import settings
 from ..models.user import User
 from ..models.model import AIModel, TrainingJob
@@ -69,13 +69,20 @@ def create_model(
     if db.query(AIModel).filter(AIModel.slug == slug).first():
         slug = slug + "-1"
 
+    # Non-admins build on NebulaX variants, not raw Ollama bases. Keep the
+    # variant id as the displayed base, but resolve a concrete model behind it
+    # for training/inference. Admins may pass a raw base directly.
+    if not current_user.is_admin and not model_router.is_variant(data.base_model):
+        raise HTTPException(status_code=400, detail="Choose a NebulaX model as the base.")
+    concrete_base = model_router.base_for_training(data.base_model)
+
     model = AIModel(
         owner_id=current_user.id,
         name=data.name,
         slug=slug,
         description=data.description,
         base_model=data.base_model,
-        ollama_model_name=data.base_model,
+        ollama_model_name=concrete_base,
         tags=data.tags,
         is_public=data.is_public,
         parameter_count=data.parameter_count,
@@ -176,6 +183,8 @@ def start_training(
     db.refresh(job)
 
     output_dir = str(Path(settings.MODELS_DIR) / f"ft_{model_id}_{job.id}")
+    # Resolve a NebulaX variant base to a concrete model to fine-tune on.
+    train_base = model_router.base_for_training(model.base_model)
 
     try:
         from celery import Celery
@@ -187,13 +196,13 @@ def start_training(
             from ..services.training_service import run_training_job
             run_training_job(job_id, model_base, dataset_path, config, output_dir)
 
-        task = train_task.delay(job.id, model.base_model, dataset_path, data.config.model_dump(), output_dir)
+        task = train_task.delay(job.id, train_base, dataset_path, data.config.model_dump(), output_dir)
         job.celery_task_id = task.id
         db.commit()
     except Exception:
         # Fall back to background task if Celery/Redis not available
         from ..services.training_service import run_training_job
-        background_tasks.add_task(run_training_job, job.id, model.base_model, dataset_path, data.config.model_dump(), output_dir)
+        background_tasks.add_task(run_training_job, job.id, train_base, dataset_path, data.config.model_dump(), output_dir)
 
     db.refresh(job)
     return job
@@ -223,34 +232,49 @@ def get_training_job(model_id: int, job_id: int, db: Session = Depends(get_db), 
 # ── Ollama passthrough ────────────────────────────────────────────────────────
 
 @router.get("/ollama/list")
-async def ollama_list():
+async def ollama_list(user: Optional[User] = Depends(get_optional_user)):
+    """Raw underlying Ollama models. This is back-end plumbing, so it's only
+    exposed to admins — regular users work with NebulaX variants instead."""
+    if not (user and user.is_admin):
+        return {"models": []}
     models = await ollama.list_models()
     return {"models": models}
 
 
 @router.get("/nebulax/variants")
-async def list_nebulax_variants():
-    """List the NebulaX virtual models and which underlying bases are ready."""
+async def list_nebulax_variants(user: Optional[User] = Depends(get_optional_user)):
+    """List the NebulaX virtual models. Admins additionally see which raw
+    Ollama bases back each variant; regular users only see the branded
+    variant (id, label, description, readiness) with no raw model names."""
     available = {m["name"] for m in await ollama.list_models()}
+    is_admin = bool(user and user.is_admin)
     out = []
     for vid, v in model_router.VARIANTS.items():
         candidates = v.all_candidates()
         ready = [c for c in candidates if c in available]
-        out.append({
+        entry = {
             "id": v.id,
             "label": v.label,
             "description": v.description,
-            "default_model": v.default_model,
-            "candidates": candidates,
-            "available_bases": ready,
             "ready": len(ready) > 0,
-            "missing_bases": [c for c in candidates if c not in available],
-        })
+        }
+        if is_admin:
+            # Raw bases are admin-only — they're the back-end mapping.
+            entry.update({
+                "default_model": v.default_model,
+                "candidates": candidates,
+                "available_bases": ready,
+                "missing_bases": [c for c in candidates if c not in available],
+            })
+        out.append(entry)
     return {"variants": out}
 
 
 @router.post("/ollama/pull")
 async def ollama_pull(body: dict, current_user: User = Depends(get_current_user)):
+    # Pulling raw Ollama models is back-end administration.
+    if not current_user.is_admin:
+        raise HTTPException(status_code=403, detail="Admin access required")
     model_name = body.get("model")
     if not model_name:
         raise HTTPException(status_code=400, detail="model required")

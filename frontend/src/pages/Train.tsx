@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import { Wand2, Upload, Play, RefreshCw, CheckCircle, XCircle, Clock, AlertCircle, Loader2, ChevronDown } from 'lucide-react'
 import api from '../lib/api'
+import { prettyModel } from '../lib/models'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
@@ -129,7 +130,7 @@ export default function TrainPage() {
               <div>
                 <label className="label">Model to Fine-tune</label>
                 <select className="input" value={selectedModel ?? ''} onChange={(e) => setSelectedModel(+e.target.value)}>
-                  {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({m.base_model})</option>)}
+                  {models.map((m) => <option key={m.id} value={m.id}>{m.name} ({prettyModel(m.base_model)})</option>)}
                 </select>
                 {models.length === 0 && (
                   <p className="text-xs text-yellow-400 mt-1.5 flex items-center gap-1">

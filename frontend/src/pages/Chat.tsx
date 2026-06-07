@@ -8,6 +8,7 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../store/auth'
+import { prettyModel } from '../lib/models'
 import PersonalitySliders from '../components/PersonalitySliders'
 import { normalizeTraits, isActive as personalityActive, type TraitKey } from '../lib/personality'
 import AiSparkle from '../components/AiSparkle'
@@ -126,7 +127,7 @@ function CodeBlock({ language, children }: { language?: string; children: string
 }
 
 // ── CLI Thought Drawer ────────────────────────────────────────────────────
-function ChatThoughtDrawer({ steps, reasoning, running }: { steps: StepEvent[]; reasoning?: string; running: boolean }) {
+function ChatThoughtDrawer({ steps, reasoning, running, label = 'Agent Thinking' }: { steps: StepEvent[]; reasoning?: string; running: boolean; label?: string }) {
   const [open, setOpen] = useState(false)
   const prevRunning = useRef(false)
   const hasReasoning = !!(reasoning && reasoning.trim())
@@ -150,7 +151,7 @@ function ChatThoughtDrawer({ steps, reasoning, running }: { steps: StepEvent[]; 
       >
         <Brain className="w-3.5 h-3.5 text-secondary-400 flex-shrink-0" />
         <span className="flex-1 text-left font-medium text-secondary-300">
-          {running ? 'Agent Thinking…' : 'Agent Thinking'}
+          {running ? `${label}…` : label}
         </span>
         {running && (
           <span className="flex gap-0.5">
@@ -245,23 +246,19 @@ function ThinkingIndicator({ label, since }: { label?: string; since?: number })
     : ''
   return (
     <div className="flex items-center gap-2 py-2">
-      <div className="flex items-center gap-1.5">
-        {[0, 0.2, 0.4].map((d, i) => (
-          <span key={i} className="w-2 h-2 rounded-full bg-primary-500 typing-dot" style={{ animationDelay: `${d}s` }} />
-        ))}
-      </div>
-      <span className="text-sm text-gray-500 fade-in">{label || verb}…{mmss && <span className="text-gray-600 tabular-nums">{mmss}</span>}</span>
+      <span className="text-sm text-gray-500 shimmer-text">{label || verb}…{mmss && <span className="text-gray-600 tabular-nums">{mmss}</span>}</span>
     </div>
   )
 }
 
 // ── Message bubble with copy/actions ────────────────────────────────────
 function MessageBubble({
-  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, isCliActive, activity, activitySince,
+  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, isCliActive, activity, activitySince, reasoningPhase,
 }: {
   msg: Message; index: number; isLast: boolean
   isActive: boolean; streamPhase: string; warmingModel?: string; sending: boolean
   onRegenerate: () => void; isCliActive: boolean; activity?: string | null; activitySince?: number | null
+  reasoningPhase?: boolean
 }) {
   const [copied, setCopied] = useState(false)
   const isWarming   = streamPhase === 'warming'  && isLast && msg.role === 'assistant'
@@ -275,6 +272,15 @@ function MessageBubble({
   // the clean answer in the message body.
   const { think, clean, thinking: thinkOpen } = splitThink(msg.content)
   const reasoningStreaming = (isTyping || isFastStream) && thinkOpen
+  // The backend flags a reasoning turn up front so the Thought bubble appears
+  // immediately, before the (slow on CPU) first <think> token streams in.
+  // `reasoningPending` self-resolves: if the model answers directly (no <think>),
+  // visible answer text clears it so the bubble never sticks.
+  const reasoningActive = !!reasoningPhase && isLast && msg.role === 'assistant'
+  const reasoningPending = reasoningActive && !think && !clean.trim()
+  const showDrawer = (msg.steps && msg.steps.length > 0) || isCliActive || !!think || reasoningPending
+  const drawerRunning = isCliActive || reasoningStreaming || reasoningPending
+  const drawerLabel = (isCliActive || (msg.steps && msg.steps.length > 0)) ? 'Agent Thinking' : 'Thinking'
 
   const copyMsg = () => {
     navigator.clipboard.writeText(msg.content).then(() => {
@@ -298,8 +304,8 @@ function MessageBubble({
       {/* Content */}
       {msg.role === 'assistant' ? (
         <div className="max-w-2xl flex-1">
-          {((msg.steps && msg.steps.length > 0) || isCliActive || !!think) && (
-            <ChatThoughtDrawer steps={msg.steps || []} reasoning={think} running={isCliActive || reasoningStreaming} />
+          {showDrawer && (
+            <ChatThoughtDrawer steps={msg.steps || []} reasoning={think} running={drawerRunning} label={drawerLabel} />
           )}
           {isWarming ? (
             <div className="flex items-center gap-2 py-2">
@@ -465,6 +471,9 @@ export default function ChatPage() {
   const [streamActivity, setStreamActivity] = useState<string | null>(null)
   const [activitySince, setActivitySince] = useState<number | null>(null)
   const [warmingModel, setWarmingModel] = useState<string>('')
+  // True once the backend signals a reasoning turn — shows the Thought bubble
+  // immediately, before the (often minute-away on CPU) first <think> token.
+  const [reasoningPhase, setReasoningPhase] = useState(false)
   const [sessionPanelOpen, setSessionPanelOpen] = useState(false)
   const [sessionSearch, setSessionSearch] = useState('')
   const [contentResults, setContentResults] = useState<ContentMatch[] | null>(null)
@@ -680,6 +689,7 @@ export default function ChatPage() {
 
     abortRef.current = new AbortController()
     setSending(true)
+    setReasoningPhase(false)
     setStreamPhase('thinking')
 
     // Typewriter smoothing buffer: tokens arrive in bursts (and slowly, on CPU),
@@ -718,7 +728,7 @@ export default function ChatPage() {
       finalized = true
       if (!mountedRef.current) return
       setLast({ content: entry.content, citations: entry.citations.length ? entry.citations : undefined, route: entry.route, usage: entry.usage, latency_ms: entry.latency_ms })
-      setSending(false); setStreamPhase('idle'); setWarmingModel(''); setStreamActivity(null); setActivitySince(null)
+      setSending(false); setStreamPhase('idle'); setWarmingModel(''); setStreamActivity(null); setActivitySince(null); setReasoningPhase(false)
     }
     const pump = (ts: number) => {
       if (!lastTs) lastTs = ts
@@ -771,7 +781,7 @@ export default function ChatPage() {
         errored = true
         liveStreams.delete(session.id)
         entry.done = true
-        if (mountedRef.current) { setMessages(m => m.slice(0, -1)); setSending(false); setStreamPhase('idle'); setStreamActivity(null); setActivitySince(null) }
+        if (mountedRef.current) { setMessages(m => m.slice(0, -1)); setSending(false); setStreamPhase('idle'); setStreamActivity(null); setActivitySince(null); setReasoningPhase(false) }
         return
       }
 
@@ -799,7 +809,11 @@ export default function ChatPage() {
           else if (event === 'usage') { try { const p = JSON.parse(data); entry.usage = { prompt_tokens: p.prompt_tokens || 0, completion_tokens: p.completion_tokens || 0 }; entry.latency_ms = p.latency_ms || 0 } catch {} }
           else if (event === 'warming') {
             // Model isn't resident yet (cold start) — first token may take a while.
-            try { const w = JSON.parse(data); setWarmingModel(w.model || '') } catch {}
+            // Show the branded variant label; never leak a raw model name to non-admins.
+            try {
+              const w = JSON.parse(data); const m = w.model || ''
+              setWarmingModel((user?.is_admin || m.startsWith('nebulax:')) ? prettyModel(m) : '')
+            } catch {}
             setStreamPhase('warming')
           }
           else if (event === 'searching') {
@@ -810,6 +824,11 @@ export default function ChatPage() {
           else if (event === 'reading') {
             // Sources fetched; model is now prefilling them (the slow part on CPU).
             if (mountedRef.current) setStreamActivity('reading')
+          }
+          else if (event === 'reasoning') {
+            // Reasoning turn — surface the Thought bubble right away and start the
+            // elapsed timer so the long prefill reads as working, not frozen.
+            if (mountedRef.current) { setReasoningPhase(true); setActivitySince(Date.now()) }
           }
           else if (event === 'step') {
             try {
@@ -842,7 +861,7 @@ export default function ChatPage() {
       }
       liveStreams.delete(session.id)
       entry.done = true
-      if (mountedRef.current) { setSending(false); setStreamPhase('idle'); setStreamActivity(null); setActivitySince(null) }
+      if (mountedRef.current) { setSending(false); setStreamPhase('idle'); setStreamActivity(null); setActivitySince(null); setReasoningPhase(false) }
       return
     } finally {
       entry.done = true
@@ -1151,7 +1170,7 @@ export default function ChatPage() {
               <optgroup label="NebulaX (smart routing)">
                 {variants.map((v) => <option key={v.id} value={v.id} disabled={!v.ready}>{v.label}{v.ready ? '' : ' (unavailable)'}</option>)}
               </optgroup>
-              {!isGuest && ollamaModels.length > 0 && (
+              {user?.is_admin && ollamaModels.length > 0 && (
                 <optgroup label="Models (direct)">
                   {ollamaModels.map((m) => <option key={m} value={m}>{m}</option>)}
                 </optgroup>
@@ -1353,6 +1372,7 @@ export default function ChatPage() {
               isCliActive={!!activeCli && (streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
               activity={i === messages.length - 1 ? streamActivity : null}
               activitySince={i === messages.length - 1 ? activitySince : null}
+              reasoningPhase={reasoningPhase && i === messages.length - 1}
             />
           ))}
 

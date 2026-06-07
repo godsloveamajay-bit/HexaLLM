@@ -16,6 +16,20 @@ from ..services.agent_service import run_agent
 from ..services.mcp_service import MCPClient
 from ..services.tool_service import run_generated_tool
 from ..services.sandbox_service import Sandbox, DOCKER_AVAILABLE, DOCKER_IMAGE
+from ..services.ollama_service import ollama
+from ..services import model_router
+
+
+async def _resolve_agent_model(model: str, task: str) -> str:
+    """Resolve a NebulaX variant selection to a concrete Ollama model so the
+    agent loop can run it. Non-variant ids pass through unchanged."""
+    if not model_router.is_variant(model):
+        return model
+    try:
+        available = [m["name"] for m in await ollama.list_models()]
+    except Exception:
+        available = []
+    return model_router.concrete_for(model, task, available)
 
 
 def _build_dynamic_tools(db: Session, user_id: int, tool_ids: List[int], sandbox):
@@ -116,9 +130,10 @@ async def run_agent_task(
     try:
         mcp_clients = _resolve_mcp_clients(db, data.mcp_server_ids, current_user.id)
         dynamic_tools = _build_dynamic_tools(db, current_user.id, data.generated_tool_ids, sandbox)
+        eff_model = await _resolve_agent_model(data.model, data.task)
         result = await run_agent(
             task=data.task,
-            model=data.model,
+            model=eff_model,
             tools=data.tools,
             max_steps=data.max_steps,
             on_step=on_step,
@@ -188,9 +203,10 @@ async def run_agent_stream(
 
         async def agent_task():
             try:
+                eff_model = await _resolve_agent_model(data.model, data.task)
                 result = await run_agent(
                     task=data.task,
-                    model=data.model,
+                    model=eff_model,
                     tools=data.tools,
                     max_steps=data.max_steps,
                     on_step=on_step_q,

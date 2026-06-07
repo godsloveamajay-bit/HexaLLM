@@ -55,7 +55,7 @@ export default function PrivacyPolicyPage() {
             </ul>
             <p className="mt-3">
               Your data is never sold, shared with third parties, or used to train AI models on external
-              servers. All inference runs locally via Ollama on the host machine.
+              servers. All inference runs locally on the host machine.
             </p>
           </section>
 

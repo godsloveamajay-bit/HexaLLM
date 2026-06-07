@@ -317,7 +317,7 @@ export default function SettingsPage() {
           <div className="flex items-center justify-between gap-4">
             <div>
               <label className="label mb-0">Extended thinking</label>
-              <p className="text-xs text-gray-500 mt-0.5">Let reasoning models (DeepSeek-R1, Qwen3) show step-by-step thinking. Off = faster, direct answers.</p>
+              <p className="text-xs text-gray-500 mt-0.5">Let the AI show its step-by-step thinking on reasoning tasks. Off = faster, direct answers.</p>
             </div>
             <button
               type="button"

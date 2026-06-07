@@ -68,11 +68,14 @@ def create_knowledge_base(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    # The embedding model is back-end plumbing; non-admins always use the
+    # platform default rather than choosing a raw model.
+    embedding_model = data.embedding_model if current_user.is_admin else "nomic-embed-text"
     kb = KnowledgeBase(
         user_id=current_user.id,
         name=data.name,
         description=data.description,
-        embedding_model=data.embedding_model,
+        embedding_model=embedding_model,
         chunk_size=data.chunk_size,
         chunk_overlap=data.chunk_overlap,
     )

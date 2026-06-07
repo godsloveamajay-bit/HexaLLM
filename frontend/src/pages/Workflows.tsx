@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Plus, Play, Trash2, Pencil, Loader2, Clock, CheckCircle2, XCircle, Zap, Bot } from 'lucide-react'
 import api from '../lib/api'
-import { chatCapableModels, defaultAgentModel } from '../lib/models'
+import { loadModelOptions, defaultModelValue, ModelOption } from '../lib/models'
+import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
@@ -34,9 +35,9 @@ const SCHEDULE_PRESETS = [
   { label: 'Every Monday', value: '0 9 * * 1' },
 ]
 
-function WorkflowForm({ initial, ollamaModels, onSave, onCancel }: {
+function WorkflowForm({ initial, modelOptions, onSave, onCancel }: {
   initial?: Partial<Workflow>
-  ollamaModels: string[]
+  modelOptions: ModelOption[]
   onSave: (data: any) => void
   onCancel: () => void
 }) {
@@ -44,7 +45,7 @@ function WorkflowForm({ initial, ollamaModels, onSave, onCancel }: {
     name: initial?.name || '',
     description: initial?.description || '',
     task: initial?.task || '',
-    model: initial?.model || defaultAgentModel(ollamaModels) || 'llama3:8b',
+    model: initial?.model || defaultModelValue(modelOptions),
     tools: initial?.tools || ['web_search'],
     system_prompt: initial?.system_prompt || '',
     max_steps: initial?.max_steps ?? 10,
@@ -72,7 +73,7 @@ function WorkflowForm({ initial, ollamaModels, onSave, onCancel }: {
         <div>
           <label className="label">Model</label>
           <select className="input" value={form.model} onChange={(e) => setForm((f) => ({ ...f, model: e.target.value }))}>
-            {ollamaModels.map((m) => <option key={m} value={m}>{m}</option>)}
+            {modelOptions.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
           </select>
         </div>
       </div>
@@ -126,9 +127,10 @@ function WorkflowForm({ initial, ollamaModels, onSave, onCancel }: {
 }
 
 export default function WorkflowsPage() {
+  const { user } = useAuth()
   const [workflows, setWorkflows] = useState<Workflow[]>([])
   const [loading, setLoading] = useState(true)
-  const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3:8B'])
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
   const [showForm, setShowForm] = useState(false)
   const [editing, setEditing] = useState<Workflow | null>(null)
   const [running, setRunning] = useState<Set<number>>(new Set())
@@ -137,15 +139,12 @@ export default function WorkflowsPage() {
 
   const load = async () => {
     try {
-      const [wfRes, modRes] = await Promise.allSettled([
+      const [wfRes, opts] = await Promise.allSettled([
         api.get('/workflows'),
-        api.get('/models/ollama/list'),
+        loadModelOptions(!!user?.is_admin),
       ])
       if (wfRes.status === 'fulfilled') setWorkflows(wfRes.value.data)
-      if (modRes.status === 'fulfilled') {
-        const names = chatCapableModels(modRes.value.data.models?.map((m: any) => m.name) || [])
-        if (names.length) setOllamaModels(names)
-      }
+      if (opts.status === 'fulfilled' && opts.value.length) setModelOptions(opts.value)
     } finally { setLoading(false) }
   }
 
@@ -232,7 +231,7 @@ export default function WorkflowsPage() {
           <h2 className="font-semibold text-gray-100 mb-4">{editing ? 'Edit Workflow' : 'New Workflow'}</h2>
           <WorkflowForm
             initial={editing || undefined}
-            ollamaModels={ollamaModels}
+            modelOptions={modelOptions}
             onSave={save}
             onCancel={() => { setShowForm(false); setEditing(null) }}
           />

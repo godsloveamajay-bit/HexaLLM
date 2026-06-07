@@ -183,8 +183,8 @@ function CliCard({ item }: { item: LocalItem }) {
                 <code key={t} className="text-emerald-400 font-mono mr-1">{t}</code>
               ))}
             </li>
-            <li>Works out of the box via <strong>Pollinations</strong> (free cloud) — no Ollama, no API key needed</li>
-            <li>Optionally use <strong>Ollama</strong> for fully local inference, or connect to your <strong>NebulaX</strong> instance</li>
+            <li>Works out of the box in the cloud — no setup, no API key needed</li>
+            <li>Optionally run fully local on your own machine, or connect to your <strong>NebulaX</strong> instance</li>
             <li>Multi-turn memory — remembers context across your session</li>
             <li>Run <code className="text-emerald-400 font-mono">nebula daemon</code> to let the NebulaX web UI send tasks to your machine</li>
           </ul>
@@ -394,7 +394,7 @@ const CHANGELOG: Release[] = [
     date: '2026-06-05',
     summary: 'Stability fix for custom configuration.',
     changes: [
-      { type: 'fixed', text: 'Backend no longer fails to start when the .env file contains a setting it doesn’t recognise (e.g. adding TAVILY_API_KEY to enable full web search)' },
+      { type: 'fixed', text: 'No longer fails to start when the configuration contains a setting it doesn’t recognise' },
     ],
   },
   {
@@ -402,7 +402,7 @@ const CHANGELOG: Release[] = [
     date: '2026-06-05',
     summary: 'Web search in chat — answers grounded in live sources — plus a livelier “thinking” status.',
     changes: [
-      { type: 'new',      text: 'Web search: toggle “Web” in a chat to ground answers in live results, with clickable source citations (keyless via Wikipedia out of the box; set TAVILY_API_KEY for full web search)' },
+      { type: 'new',      text: 'Web search: toggle “Web” in a chat to ground answers in live results, with clickable source citations' },
       { type: 'new',      text: 'A status label next to the assistant cycles playful verbs (Thinking, Pondering, Reasoning, Cooking…) and shows “Searching the web” while it searches' },
       { type: 'improved', text: 'The thinking indicator now appears on every turn, including with reasoning models' },
     ],
@@ -440,7 +440,7 @@ const CHANGELOG: Release[] = [
     changes: [
       { type: 'fixed',    text: 'Agents and workflows were producing no output — runs now complete and always return an answer' },
       { type: 'new',      text: 'Agent Flow Debugger: a visual trace of each run (reasoning → tool → result) with per-step token cost, timing, and the failing step highlighted' },
-      { type: 'improved', text: 'Reasoning models (deepseek-r1, qwen3) and chat models that reply in prose now work as agents instead of stalling' },
+      { type: 'improved', text: 'Reasoning models and chat models that reply in prose now work as agents instead of stalling' },
       { type: 'improved', text: 'Agent runs that hit the step limit now synthesise a best-effort answer instead of finishing empty' },
       { type: 'improved', text: 'The agent/workflow model picker hides models that can’t chat and defaults to a capable one' },
       { type: 'improved', text: 'Agent & workflow token usage now rolls up into your Analytics totals' },
@@ -511,17 +511,17 @@ const CHANGELOG: Release[] = [
   {
     version: '0.7.0',
     date: '2026-05-26',
-    summary: 'Works out of the box — no Ollama or API key required.',
+    summary: 'Works out of the box — no setup or API key required.',
     changes: [
-      { type: 'new',      text: 'Pollinations free cloud backend — start chatting with zero setup' },
-      { type: 'new',      text: 'Smart backend priority: NebulaX › Ollama (if running) › Pollinations' },
+      { type: 'new',      text: 'Free cloud inference — start chatting with zero setup' },
+      { type: 'new',      text: 'Smart routing — your NebulaX instance or a local runtime when available, otherwise the free cloud' },
       { type: 'new',      text: 'web_search tool — search the web via DuckDuckGo, no API key' },
       { type: 'new',      text: 'fetch_url tool — download and read any URL as plain text' },
       { type: 'new',      text: 'git_run tool — run git commands (status, diff, log, commit…)' },
       { type: 'new',      text: 'ssh_run tool — run commands on remote hosts over SSH' },
-      { type: 'improved', text: 'Welcome panel shows active backend in distinct colour' },
-      { type: 'improved', text: '/help updated with backend switching and tool summary' },
-      { type: 'improved', text: 'nebula set backend <pollinations|ollama|auto> to pin a backend' },
+      { type: 'improved', text: 'Welcome panel shows where inference is running in a distinct colour' },
+      { type: 'improved', text: '/help updated with runtime switching and tool summary' },
+      { type: 'improved', text: 'Pin where the CLI runs inference — cloud, local, or auto' },
     ],
   },
   {

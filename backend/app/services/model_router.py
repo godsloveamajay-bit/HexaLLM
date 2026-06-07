@@ -133,9 +133,12 @@ class Variant:
 _CODING = "Qwen2.5-Coder:7B"          # default coder (fast, ~1.7 tok/s)
 _CODING_HEAVY = "Qwen2.5-Coder:14B"   # hard refactors/architecture (~0.85 tok/s)
 _CHAT = "qwen2.5:7B"                   # general chat (refreshed from openchat:7B)
-_THINKING = "deepseek-r1:latest"      # default reasoner (8B distill, CPU sweet spot)
-_THINKING_DEEP = "deepseek-r1:14B"    # escalated reasoning on explicit deep cues
-_THINKING_DEEPEST = "deepseek-r1:32b" # strongest; opt-in only (direct selection, ~0.45 tok/s)
+_THINKING = "deepseek-r1:1.5b"        # default reasoner — the ONLY CPU-viable one:
+                                      # ~5s to first token & streams its <think> fast.
+                                      # Bigger distills (8B 135s TTFT, 14B never finishes)
+                                      # are unusable here, so we don't auto-route to them.
+_THINKING_DEEP = "deepseek-r1:1.5b"   # no heavy escalation on a CPU-only box
+_THINKING_DEEPEST = "deepseek-r1:32b" # opt-in direct only (never auto-routed)
 _GENERAL = "llama3.1:8b"              # writing/general (refreshed from llama3:8B)
 _LARGE = "qwen3:14B"                  # balanced default + universal fallback
 _FAST = "llama3.2:3b"                # snappy 3B for titles / quick replies (~4 tok/s)
@@ -146,6 +149,17 @@ _LLAMA3 = "llama3:8b"
 
 # Models that emit a separate chain-of-thought (reasoning) stream.
 _REASONING_MODELS = ("deepseek-r1", "qwen3")
+
+# Reasoners small enough to actually think within seconds on this CPU-only box.
+# Only these get chain-of-thought forced ON (so the Thought bubble fills fast);
+# heavier reasoners are suppressed to keep everyday chat responsive.
+_FAST_REASONERS = ("deepseek-r1:1.5b",)
+
+
+def is_fast_reasoner(model: str) -> bool:
+    """True for a reasoning model light enough to think quickly on CPU."""
+    m = (model or "").lower()
+    return any(f.lower() in m for f in _FAST_REASONERS)
 
 # Trivial social inputs — greetings, acknowledgements, sign-offs — that don't
 # warrant a reasoning pass. A message qualifies only if it is composed ENTIRELY
@@ -295,7 +309,7 @@ VARIANTS: Dict[str, Variant] = {
     "nebulax:code": Variant(
         id="nebulax:code",
         label="NebulaX Code",
-        description="Coding and maths. Big refactors → Qwen2.5-Coder:14B, pure proofs → DeepSeek-R1, everyday code → Qwen2.5-Coder:7B.",
+        description="Coding and maths. Scales from quick snippets to big refactors and step-by-step proofs.",
         default_model=_CODING,
         routes=[
             RoutedModel(_CODING_HEAVY, "code_heavy"),  # refactors, architecture, big implementations
@@ -357,7 +371,7 @@ VARIANTS: Dict[str, Variant] = {
     "nebulax:think": Variant(
         id="nebulax:think",
         label="NebulaX Think",
-        description="Deep analysis, research, strategy, and complex problem solving. Escalates to DeepSeek-R1:14B on explicit deep-reasoning requests.",
+        description="Deep analysis, research, strategy, and complex problem solving. Digs deeper when you ask for rigour.",
         default_model=_THINKING,
         routes=[
             RoutedModel(_THINKING_DEEP, "reasoning_deep"),  # "rigorous", "in depth", very long prompts
@@ -370,11 +384,10 @@ VARIANTS: Dict[str, Variant] = {
             "End every response with a clear, actionable conclusion."
         ),
         temperature=0.4,
-        num_ctx=16384,
-        # deepseek-r1's chain-of-thought is verbose and shares this budget with
-        # the answer (reasoning streams to the Thought Drawer, answer to the body).
-        # Keep it generous so a long reasoning pass doesn't truncate the answer.
-        num_predict=8192,
+        # Sized for the 1.5b reasoner: a smaller context/output keeps prefill snappy
+        # on CPU while leaving room for the <think> stream plus the answer.
+        num_ctx=8192,
+        num_predict=4096,
         fallbacks=[_THINKING, _LARGE, _GENERAL],
     ),
 
@@ -457,6 +470,35 @@ def is_variant(model_id: str) -> bool:
 
 def get_variant(model_id: str) -> Optional[Variant]:
     return VARIANTS.get(model_id)
+
+
+def public_variants() -> List[Dict[str, str]]:
+    """The variants as the UI should advertise them — id, label and a
+    description with NO underlying Ollama model names. Safe to show to any
+    user (the concrete bases are an admin/back-end concern)."""
+    return [{"id": v.id, "label": v.label, "description": v.description} for v in VARIANTS.values()]
+
+
+def concrete_for(model_id: str, user_text: str, available_models: List[str]) -> str:
+    """Resolve a model selection to a concrete Ollama model.
+
+    If `model_id` is a NebulaX variant, route it (using `user_text` as the
+    prompt hint) to the best available base. Non-variant ids pass through
+    unchanged. Used by the agent / OpenAI-compat paths so a user can pick a
+    variant anywhere, not just in chat."""
+    if not is_variant(model_id):
+        return model_id
+    return route(model_id, user_text or "", available_models).chosen_model
+
+
+def base_for_training(model_id: str) -> str:
+    """Resolve a model selection to a single concrete base for fine-tuning.
+
+    Variants route across several models per request, but training needs one
+    fixed base — use the variant's default model. Non-variant ids pass
+    through unchanged."""
+    v = get_variant(model_id)
+    return v.default_model if v else model_id
 
 
 # ── routing ──────────────────────────────────────────────────────────────────

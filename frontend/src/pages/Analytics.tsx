@@ -4,10 +4,30 @@ import {
 } from 'recharts'
 import { TrendingUp, Zap, Clock, AlertTriangle } from 'lucide-react'
 import api from '../lib/api'
+import { useAuth } from '../store/auth'
+import { prettyModel } from '../lib/models'
 
 const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444']
 
+// Non-admins never see raw model names: collapse each row to its NebulaX
+// variant label (or "Other" for legacy raw rows) and re-aggregate.
+function maskModelUsage(rows: any[]): any[] {
+  const agg: Record<string, any> = {}
+  for (const r of rows) {
+    const name = r.model?.startsWith('nebulax:') ? prettyModel(r.model) : 'Other'
+    const a = agg[name] || (agg[name] = { model: name, requests: 0, _latSum: 0 })
+    a.requests += r.requests || 0
+    a._latSum += (r.avg_latency_ms || 0) * (r.requests || 0)
+  }
+  return Object.values(agg).map((a: any) => ({
+    model: a.model,
+    requests: a.requests,
+    avg_latency_ms: a.requests ? Math.round(a._latSum / a.requests) : 0,
+  }))
+}
+
 export default function AnalyticsPage() {
+  const { user } = useAuth()
   const [daily, setDaily] = useState<any[]>([])
   const [modelUsage, setModelUsage] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -18,9 +38,9 @@ export default function AnalyticsPage() {
       api.get('/analytics/models/usage'),
     ]).then(([d, m]) => {
       setDaily(d.data)
-      setModelUsage(m.data)
+      setModelUsage(user?.is_admin ? m.data : maskModelUsage(m.data))
     }).finally(() => setLoading(false))
-  }, [])
+  }, [user])
 
   const totalTokens = daily.reduce((s, d) => s + (d.tokens || 0), 0)
   const totalRequests = daily.reduce((s, d) => s + (d.requests || 0), 0)

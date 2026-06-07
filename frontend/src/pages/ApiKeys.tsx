@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Key, Plus, Trash2, Copy, Check, AlertTriangle, Activity, Boxes, Terminal } from 'lucide-react'
 import api from '../lib/api'
-import { chatCapableModels } from '../lib/models'
+import { loadModelOptions, prettyModel, ModelOption } from '../lib/models'
+import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import { format } from 'date-fns'
 import { clsx } from 'clsx'
@@ -21,7 +22,7 @@ interface Persona { id: number; name: string; emoji?: string; base_model: string
 const apiBase = `${window.location.origin}/v1`
 
 function snippets(key: string, model: string) {
-  const m = model || 'llama3:8b'
+  const m = model || 'nebulax:balanced'
   return {
     curl: `curl ${apiBase}/chat/completions \\
   -H "Authorization: Bearer ${key}" \\
@@ -62,9 +63,10 @@ function CodeBlock({ code }: { code: string }) {
 }
 
 export default function ApiKeysPage() {
+  const { user } = useAuth()
   const [keys, setKeys] = useState<APIKey[]>([])
   const [personas, setPersonas] = useState<Persona[]>([])
-  const [models, setModels] = useState<string[]>([])
+  const [models, setModels] = useState<ModelOption[]>([])
   const [name, setName] = useState('')
   const [expose, setExpose] = useState('')          // '' | persona:<id> | model:<name>
   const [creating, setCreating] = useState(false)
@@ -76,8 +78,7 @@ export default function ApiKeysPage() {
   useEffect(() => {
     load()
     api.get('/personas').then(({ data }) => setPersonas(data)).catch(() => {})
-    api.get('/models/ollama/list').then(({ data }) =>
-      setModels(chatCapableModels(data.models?.map((m: any) => m.name) || []))).catch(() => {})
+    loadModelOptions(!!user?.is_admin).then(setModels).catch(() => {})
   }, [])
 
   // Deep-link from the Personas page: /api-keys?expose=<personaId>
@@ -91,7 +92,7 @@ export default function ApiKeysPage() {
     }
   }, [personas])
 
-  const newKeyModel = useMemo(() => newKey?.model_name || models[0] || 'llama3:8b', [newKey, models])
+  const newKeyModel = useMemo(() => newKey?.model_name || models[0]?.value || 'nebulax:balanced', [newKey, models])
 
   const createKey = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -122,7 +123,7 @@ export default function ApiKeysPage() {
   const copy = async (s: string) => { await navigator.clipboard.writeText(s); toast.success('Copied') }
   const mask = (key: string) => key.slice(0, 7) + '••••••••' + key.slice(-4)
   const exposesLabel = (k: APIKey) =>
-    k.persona_name ? `${k.persona_name}` : k.model_name ? k.model_name : 'Any model'
+    k.persona_name ? `${k.persona_name}` : k.model_name ? prettyModel(k.model_name) : 'Any model'
 
   return (
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
@@ -146,7 +147,7 @@ export default function ApiKeysPage() {
               <div className="flex items-center gap-2 mb-2 text-xs">
                 <span className="text-gray-500">Endpoint:</span>
                 <code className="text-gray-300 font-mono">{apiBase}</code>
-                {newKey.model_name && <span className="badge bg-gray-800 text-gray-400 ml-1">model: {newKey.model_name}</span>}
+                {newKey.model_name && <span className="badge bg-gray-800 text-gray-400 ml-1">model: {prettyModel(newKey.model_name)}</span>}
               </div>
               <div className="flex gap-1 mb-2">
                 {(['python', 'js', 'curl'] as const).map((t) => (
@@ -181,8 +182,8 @@ export default function ApiKeysPage() {
                 </optgroup>
               )}
               {models.length > 0 && (
-                <optgroup label="Models">
-                  {models.map((m) => <option key={m} value={`model:${m}`}>{m}</option>)}
+                <optgroup label={user?.is_admin ? 'Models' : 'NebulaX'}>
+                  {models.map((m) => <option key={m.value} value={`model:${m.value}`}>{m.label}</option>)}
                 </optgroup>
               )}
             </select>

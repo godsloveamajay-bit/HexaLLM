@@ -5,8 +5,15 @@ from sqlalchemy.orm import Session
 from datetime import datetime, timezone
 from ..core.database import get_db
 from ..core.security import get_current_user
+from ..services import model_router
 from ..models.user import User
 from ..models.persona import SavedPersona
+
+
+def _check_base_model(model: Optional[str], user: User):
+    """Non-admins build personas on NebulaX variants, not raw Ollama bases."""
+    if model and not user.is_admin and not model_router.is_variant(model):
+        raise HTTPException(status_code=400, detail="Choose a NebulaX model as the base.")
 
 router = APIRouter(prefix="/personas", tags=["personas"])
 
@@ -114,6 +121,7 @@ def create_persona(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    _check_base_model(data.base_model, current_user)
     persona = SavedPersona(user_id=current_user.id, **data.model_dump())
     db.add(persona)
     db.commit()
@@ -133,6 +141,7 @@ def update_persona(
     ).first()
     if not persona:
         raise HTTPException(status_code=404, detail="Persona not found")
+    _check_base_model(data.base_model, current_user)
     for k, v in data.model_dump(exclude_none=True).items():
         setattr(persona, k, v)
     persona.updated_at = datetime.now(timezone.utc)

@@ -91,7 +91,17 @@ async def generate(
             GeneratedTool.user_id == current_user.id
         ).all()
     ]
-    gen = await generate_tool(data.model, data.prompt, existing)
+    # Resolve a NebulaX variant selection to a concrete model for generation.
+    from ..services import model_router
+    from ..services.ollama_service import ollama
+    gen_model = data.model
+    if model_router.is_variant(gen_model):
+        try:
+            avail = [m["name"] for m in await ollama.list_models()]
+        except Exception:
+            avail = []
+        gen_model = model_router.concrete_for(gen_model, data.prompt, avail)
+    gen = await generate_tool(gen_model, data.prompt, existing)
     if gen.get("error"):
         raise HTTPException(status_code=422, detail=f"Could not generate a valid tool: {gen['error']}")
 

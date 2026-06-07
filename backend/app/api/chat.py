@@ -549,11 +549,20 @@ async def chat_completions(
     if not is_guest and current_user.ai_reasoning is False and model_router.is_reasoning_model(eff_model):
         eff_think = False
 
+    # Decide chain-of-thought per the CPU reality (skip if already forced off by a
+    # trivial msg / the user's reasoning pref). Force it ON only for the small fast
+    # reasoner (deepseek-r1:1.5b → NebulaX Think), where <think> streams in seconds.
+    # SUPPRESS it on heavy reasoners (qwen3:14B behind Balanced, larger deepseeks):
+    # a forced pass there takes minutes to the first token and can burn the whole
+    # budget thinking — the "warming forever, no answer" the user hit.
+    if eff_think is None and model_router.is_reasoning_model(eff_model):
+        eff_think = model_router.is_fast_reasoner(eff_model)
+
     # Give the model a usable context window (Ollama's 2048 default truncates long
-    # prompts and reasoning chains). Reasoning models get extra room + a higher
-    # output cap so their chain-of-thought isn't cut off ("room to think"). A
-    # variant that pins its own num_ctx (eff_ctx already set) is left untouched.
-    _reasoning_active = eff_think is not False and model_router.is_reasoning_model(eff_model)
+    # prompts and reasoning chains). Reasoning turns get extra room + a higher
+    # output cap so the chain-of-thought isn't cut off. A variant that pins its
+    # own num_ctx (eff_ctx already set) is left untouched.
+    _reasoning_active = eff_think is True and model_router.is_reasoning_model(eff_model)
     if eff_ctx is None:
         eff_ctx = REASON_NUM_CTX if _reasoning_active else CHAT_NUM_CTX
     if _reasoning_active and req.max_tokens is None and (eff_max is None or eff_max < REASON_MIN_PREDICT):
@@ -726,7 +735,14 @@ async def chat_completions(
                     # show a "Reading sources… (timer)" status, so skip the warming
                     # banner there (it would otherwise mask that more useful label).
                     if not web_active and not await ollama.is_loaded(eff_model):
-                        yield f"event: warming\ndata: {json.dumps({'model': eff_model})}\n\n"
+                        # Report the user-facing model (the variant the user picked),
+                        # not the concrete base — raw model names are admin-only.
+                        yield f"event: warming\ndata: {json.dumps({'model': req.model})}\n\n"
+                    # Signal a reasoning turn up front so the UI can show the Thought
+                    # bubble immediately — on CPU the first <think> token can be 1-2 min
+                    # away (prefill), and waiting for it left the drawer hidden.
+                    if not web_active and _reasoning_active:
+                        yield f"event: reasoning\ndata: {json.dumps({'active': True})}\n\n"
                     agen = ollama.chat_stream(
                         eff_model, messages, sys_for_llm, eff_temp, eff_max, eff_ctx,
                         images=images, usage=usage_info, think=eff_think, top_p=eff_top_p,

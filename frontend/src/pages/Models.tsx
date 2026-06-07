@@ -3,6 +3,7 @@ import { Plus, Search, Download, Heart, Cpu, User, Globe, Lock, Trash2, X, Loade
 import api from '../lib/api'
 import toast from 'react-hot-toast'
 import { useAuth } from '../store/auth'
+import { loadModelOptions, prettyModel, defaultModelValue, ModelOption } from '../lib/models'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
 
@@ -15,6 +16,9 @@ interface Model {
 const POPULAR_BASES = ['qwen3:14B', 'llama3:8B', 'openchat:7B', 'Qwen2.5-Coder:7B', 'deepseek-r1:latest', 'mistral:7b', 'gemma2:2b', 'phi3:mini']
 
 function ModelCard({ model, onDelete, onLike, isOwner }: { model: Model; onDelete: () => void; onLike: () => void; isOwner: boolean }) {
+  const { user } = useAuth()
+  // Branded variant label; raw base names are hidden from non-admins.
+  const showBase = user?.is_admin || model.base_model?.startsWith('nebulax:')
   return (
     <div className="card hover:border-gray-700 transition-all fade-in">
       <div className="flex items-start justify-between gap-3 mb-3">
@@ -40,7 +44,7 @@ function ModelCard({ model, onDelete, onLike, isOwner }: { model: Model; onDelet
       {model.description && <p className="text-sm text-gray-400 mb-3 line-clamp-2">{model.description}</p>}
 
       <div className="flex flex-wrap gap-1.5 mb-3">
-        <span className="badge bg-gray-800 text-gray-400">{model.base_model}</span>
+        <span className="badge bg-gray-800 text-gray-400">{showBase ? prettyModel(model.base_model) : 'NebulaX model'}</span>
         {model.parameter_count && <span className="badge bg-gray-800 text-gray-400">{model.parameter_count}</span>}
         {model.tags.slice(0, 3).map((t) => <span key={t} className="badge bg-primary-900/30 text-primary-400">{t}</span>)}
       </div>
@@ -71,10 +75,19 @@ export default function ModelsPage() {
   const [showCreate, setShowCreate] = useState(false)
   const [loading, setLoading] = useState(true)
   const [pullingModel, setPullingModel] = useState('')
+  const [variantOpts, setVariantOpts] = useState<ModelOption[]>([])
   const [form, setForm] = useState({
     name: '', description: '', base_model: POPULAR_BASES[0],
     tags: '', is_public: true, parameter_count: '', system_prompt: '', license: 'MIT',
   })
+
+  // Non-admins build on NebulaX variants, not raw bases.
+  useEffect(() => {
+    loadModelOptions(false).then((opts) => {
+      setVariantOpts(opts)
+      if (!user?.is_admin) setForm((f) => ({ ...f, base_model: defaultModelValue(opts) }))
+    }).catch(() => {})
+  }, [user])
 
   const load = async () => {
     setLoading(true)
@@ -130,18 +143,20 @@ export default function ModelsPage() {
         </button>
       </div>
 
-      {/* Ollama pull */}
-      <div className="card mb-6 flex items-center gap-3">
-        <Download className="w-5 h-5 text-primary-400 flex-shrink-0" />
-        <input
-          value={pullingModel}
-          onChange={(e) => setPullingModel(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && pullModel()}
-          placeholder="Pull an Ollama model (e.g. llama3:8B)"
-          className="input flex-1"
-        />
-        <button onClick={pullModel} disabled={!pullingModel.trim()} className="btn-secondary flex-shrink-0">Pull</button>
-      </div>
+      {/* Ollama pull — admin-only back-end operation */}
+      {user?.is_admin && (
+        <div className="card mb-6 flex items-center gap-3">
+          <Download className="w-5 h-5 text-primary-400 flex-shrink-0" />
+          <input
+            value={pullingModel}
+            onChange={(e) => setPullingModel(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && pullModel()}
+            placeholder="Pull an Ollama model (e.g. llama3:8B)"
+            className="input flex-1"
+          />
+          <button onClick={pullModel} disabled={!pullingModel.trim()} className="btn-secondary flex-shrink-0">Pull</button>
+        </div>
+      )}
 
       {/* Tabs + search */}
       <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-6">
@@ -199,22 +214,34 @@ export default function ModelsPage() {
               </div>
               <div>
                 <label className="label">Base Model *</label>
-                <select
-                  className="input"
-                  value={POPULAR_BASES.includes(form.base_model) ? form.base_model : 'custom'}
-                  onChange={(e) => setForm((f) => ({ ...f, base_model: e.target.value === 'custom' ? '' : e.target.value }))}
-                >
-                  {POPULAR_BASES.map((b) => <option key={b} value={b}>{b}</option>)}
-                  <option value="custom">custom (type below)</option>
-                </select>
-                {!POPULAR_BASES.includes(form.base_model) && (
-                  <input
-                    className="input mt-2"
-                    placeholder="e.g. llama3.2:1b, mistral:7b-instruct"
+                {user?.is_admin ? (
+                  <>
+                    <select
+                      className="input"
+                      value={POPULAR_BASES.includes(form.base_model) ? form.base_model : 'custom'}
+                      onChange={(e) => setForm((f) => ({ ...f, base_model: e.target.value === 'custom' ? '' : e.target.value }))}
+                    >
+                      {POPULAR_BASES.map((b) => <option key={b} value={b}>{b}</option>)}
+                      <option value="custom">custom (type below)</option>
+                    </select>
+                    {!POPULAR_BASES.includes(form.base_model) && (
+                      <input
+                        className="input mt-2"
+                        placeholder="e.g. llama3.2:1b, mistral:7b-instruct"
+                        value={form.base_model}
+                        required
+                        onChange={(e) => setForm((f) => ({ ...f, base_model: e.target.value }))}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <select
+                    className="input"
                     value={form.base_model}
-                    required
                     onChange={(e) => setForm((f) => ({ ...f, base_model: e.target.value }))}
-                  />
+                  >
+                    {variantOpts.map((v) => <option key={v.value} value={v.value}>{v.label}</option>)}
+                  </select>
                 )}
               </div>
               <div>

@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server, Brain, Terminal, ShieldCheck, ShieldAlert, Wrench } from 'lucide-react'
 import api, { baseURL } from '../lib/api'
-import { chatCapableModels, defaultAgentModel } from '../lib/models'
+import { loadModelOptions, defaultModelValue, ModelOption } from '../lib/models'
+import { useAuth } from '../store/auth'
 import AgentFlow, { FlowStep } from '../components/AgentFlow'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -197,8 +198,9 @@ function ThoughtDrawer({ steps, running }: { steps: Step[]; running: boolean }) 
 }
 
 export default function AgentsPage() {
+  const { user } = useAuth()
   const [task, setTask] = useState('')
-  const [model, setModel] = useState('llama3:8B')
+  const [model, setModel] = useState('nebulax:balanced')
   const [persona, setPersona] = useState<string>('research')
   const [selectedTools, setSelectedTools] = useState(PERSONAS[0].tools)
   const [customPrompt, setCustomPrompt] = useState('')
@@ -206,7 +208,7 @@ export default function AgentsPage() {
   const [running, setRunning] = useState(false)
   const [currentRun, setCurrentRun] = useState<AgentRun | null>(null)
   const [history, setHistory] = useState<AgentRun[]>([])
-  const [ollamaModels, setOllamaModels] = useState<string[]>(['llama3:8B'])
+  const [modelOptions, setModelOptions] = useState<ModelOption[]>([])
   const [mcpServers, setMcpServers] = useState<MCPServer[]>([])
   const [selectedMcp, setSelectedMcp] = useState<number[]>([])
   const [genTools, setGenTools] = useState<{ id: number; name: string; description: string }[]>([])
@@ -224,9 +226,8 @@ export default function AgentsPage() {
 
   useEffect(() => {
     api.get('/agents/runs').then(({ data }) => setHistory(data)).catch(() => {})
-    api.get('/models/ollama/list').then(({ data }) => {
-      const names = chatCapableModels(data.models?.map((m: any) => m.name) || [])
-      if (names.length) { setOllamaModels(names); setModel(defaultAgentModel(names)) }
+    loadModelOptions(!!user?.is_admin).then((opts) => {
+      if (opts.length) { setModelOptions(opts); setModel(defaultModelValue(opts)) }
     }).catch(() => {})
     api.get('/mcp').then(({ data }) => setMcpServers(data.filter((s: any) => s.tools_cache?.length))).catch(() => {})
     api.get('/tools').then(({ data }) =>
@@ -371,7 +372,7 @@ export default function AgentsPage() {
               <div>
                 <label className="label">Model</label>
                 <select value={model} onChange={(e) => setModel(e.target.value)} className="input">
-                  {ollamaModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                  {modelOptions.map((m) => <option key={m.value} value={m.value}>{m.label}</option>)}
                 </select>
               </div>
 
