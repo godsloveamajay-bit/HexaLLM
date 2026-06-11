@@ -38,7 +38,7 @@ export function applyTheme(t: Theme) {
   } catch {}
   // keep the mobile status-bar colour in sync with the surface
   const meta = document.querySelector('meta[name="theme-color"]')
-  if (meta) meta.setAttribute('content', resolved === 'light' ? '#fbf7f3' : '#1f1611')
+  if (meta) meta.setAttribute('content', resolved === 'light' ? '#f8f8fc' : '#121626')
 }
 
 /**

@@ -1,25 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="32" height="32">
   <defs>
-    <!-- identical sweep to the streaming AI sparkle (components/AiSparkle.tsx) -->
-    <linearGradient id="spark" x1="0" y1="0" x2="0.45" y2="1">
-      <stop offset="0%" stop-color="#ffd5a6"/>
-      <stop offset="35%" stop-color="#fb923c"/>
-      <stop offset="70%" stop-color="#f9518f"/>
-      <stop offset="100%" stop-color="#ef3b6b"/>
+    <linearGradient id="sparkGrad" x1="0" y1="0" x2="0.45" y2="1">
+      <stop offset="0%" stop-color="#22d3ee"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#a855f7"/>
     </linearGradient>
-    <radialGradient id="glow" cx="50%" cy="50%" r="50%">
-      <stop offset="0%" stop-color="#fb923c" stop-opacity="0.5"/>
-      <stop offset="100%" stop-color="#fb923c" stop-opacity="0"/>
-    </radialGradient>
   </defs>
-  <!-- warm charcoal tile, reads well on light or dark -->
-  <rect width="512" height="512" rx="120" fill="#1f1611"/>
-  <!-- soft cosy glow -->
-  <circle cx="224" cy="256" r="190" fill="url(#glow)"/>
-  <!-- main four-point sparkle (star(14,16,10) scaled ×16) -->
-  <path d="M224 96 Q249.6 230.4 384 256 Q249.6 281.6 224 416 Q198.4 281.6 64 256 Q198.4 230.4 224 96 Z" fill="url(#spark)"/>
-  <!-- companion sparkle, top-right (star(26,7,3.2)) -->
-  <path d="M416 60.8 Q424.2 103.8 467.2 112 Q424.2 120.2 416 163.2 Q407.8 120.2 364.8 112 Q407.8 103.8 416 60.8 Z" fill="url(#spark)"/>
-  <!-- companion sparkle, bottom-left (star(5,27,2.1)) -->
-  <path d="M80 398.4 Q85.4 426.6 113.6 432 Q85.4 437.4 80 465.6 Q74.6 437.4 46.4 432 Q74.6 426.6 80 398.4 Z" fill="url(#spark)" opacity="0.85"/>
+  <path d="M16 4 Q18.5 12 28 16 Q18.5 20 16 28 Q13.5 20 4 16 Q13.5 12 16 4 Z" fill="url(#sparkGrad)"/>
+  <path d="M28 2 Q29.5 5.5 33 6 Q29.5 7 28 10.5 Q26.5 7 23 6 Q26.5 5.5 28 2 Z" fill="url(#sparkGrad)"/>
+  <path d="M4 27 Q5.5 30 9 30.5 Q5.5 31 4 34 Q2.5 31 0 30.5 Q3.5 30 4 27 Z" fill="url(#sparkGrad)" opacity="0.85"/>
 </svg>

@@ -34,7 +34,7 @@ def list_models(
         q = db.query(AIModel)
     else:
         q = db.query(AIModel).filter(
-            (AIModel.is_public == True) | (AIModel.owner_id == current_user.id)
+            (AIModel.is_public) | (AIModel.owner_id == current_user.id)
         )
     if search:
         q = q.filter(AIModel.name.ilike(f"%{search}%"))

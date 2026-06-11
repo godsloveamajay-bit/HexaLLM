@@ -143,6 +143,7 @@ _GENERAL = "llama3.1:8b"              # writing/general (refreshed from llama3:8
 _LARGE = "qwen3:14B"                  # balanced default + universal fallback
 _FAST = "llama3.2:3b"                # snappy 3B for titles / quick replies (~4 tok/s)
 _VISION = "llama3.2-vision:11b"      # image understanding (new capability)
+_MATH = "qwen2-math:7b"             # math-tuned for equations, proofs, step-by-step
 # Legacy models kept installed as safety fallbacks during/after the refresh:
 _OPENCHAT = "openchat:7B"
 _LLAMA3 = "llama3:8b"
@@ -451,6 +452,26 @@ VARIANTS: Dict[str, Variant] = {
         # No text-only fallback: vision needs a vision model. If _VISION isn't
         # pulled the router raises a clear "pull one of: …" error.
         fallbacks=[],
+    ),
+
+    # ── 8. Math ─────────────────────────────────────────────────────────────
+    "nebulax:math": Variant(
+        id="nebulax:math",
+        label="NebulaX Math",
+        description="Math-tuned model for equations, proofs, step-by-step problem solving, and data analysis.",
+        default_model=_MATH,
+        routes=[],
+        system_prompt=(
+            "You are NebulaX Math, a specialised mathematics assistant. "
+            "Solve problems step by step with clear reasoning. Use LaTeX notation "
+            "for equations and mathematical expressions. Explain concepts thoroughly "
+            "and show all working. If the problem involves code, use appropriate "
+            "code blocks. For proofs, show each logical step."
+        ),
+        temperature=0.3,
+        num_ctx=8192,
+        num_predict=4096,
+        fallbacks=[_LARGE, _GENERAL, _CHAT],
     ),
 }
 

@@ -15,7 +15,7 @@ from ..core.database import get_db
 from ..core.security import get_current_user, get_optional_user
 from ..models.user import User
 from ..models.chat import ChatSession, ChatMessage, RequestLog
-from ..models.knowledge import KnowledgeBase, KBChunk
+from ..models.knowledge import KnowledgeBase
 from ..schemas.chat import (
     ChatRequest, ChatSessionCreate, ChatSessionOut, ChatMessageOut,
 )
@@ -418,7 +418,7 @@ async def _apply_router(req: ChatRequest):
     return (
         decision.chosen_model,
         decision.system_prompt,
-        decision.temperature,
+        req.temperature if req.temperature is not None else decision.temperature,
         decision.num_ctx,
         decision.num_predict if req.max_tokens is None else req.max_tokens,
         {
@@ -495,6 +495,10 @@ async def chat_completions(
         # Don't let a guest hand-pick an arbitrary/expensive direct model.
         if not model_router.is_variant(req.model):
             req.model = GUEST_DEFAULT_MODEL
+
+    if not is_guest:
+        from ..services.billing_enforcement import check_chat_limit
+        check_chat_limit(db, current_user, client_ip=_client_ip(request))
 
     session = None
     if req.session_id and not is_guest:
@@ -585,12 +589,7 @@ async def chat_completions(
         if not vid_prompt:
             img_prompt = model_router.detect_image_request(_last_user)
 
-    # User-supplied system_prompt is honored only for variants that opt in
-    # (currently nebulax:custom) and for raw Ollama model calls. Other
-    # NebulaX variants enforce their branded voice.
     user_supplied_prompt = req.system_prompt
-    if model_router.is_variant(req.model) and not model_router.allows_user_prompt(req.model):
-        user_supplied_prompt = None
 
     base_system_prompt = model_router.merge_system_prompt(variant_prompt, user_supplied_prompt)
     # Personal AI preferences (Settings → AI Assistant): the user's custom
@@ -609,14 +608,8 @@ async def chat_completions(
         memory_section = f"\n\n[User Memory — things you know about this user]\n{mem_block}"
         base_system_prompt = (base_system_prompt or "") + memory_section
 
-    # Personality Engine: the request's sliders (or the user's saved default)
-    # shape the model's voice AND sampling. Skipped for guests and for branded
-    # variants that enforce their own voice (same gate as user_supplied_prompt).
     eff_top_p: Optional[float] = None
-    personality_allowed = not (
-        model_router.is_variant(req.model) and not model_router.allows_user_prompt(req.model)
-    )
-    if not is_guest and personality_allowed:
+    if not is_guest:
         eff_traits = req.personality if req.personality is not None else current_user.ai_personality
         pspec = personality_engine.compose(eff_traits)
         if pspec["active"]:
@@ -1053,3 +1046,34 @@ def get_shared_session(token: str, db: Session = Depends(get_db)):
             for m in session.messages
         ],
     }
+
+
+@router.post("/greeting")
+async def generate_greeting(
+    request: Request,
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    prompt = (
+        "Generate exactly one short welcome greeting for the AI assistant NebulaX. "
+        "One sentence only. Warm, unique, creative. Vary it each time. "
+        "Do not include multiple options or any extra text — just the single greeting."
+    )
+
+    try:
+        greeting = await ollama.generate(
+            model="llama3.2:3b",
+            prompt=prompt,
+            temperature=0.8,
+        )
+        greeting = greeting.strip().strip('"').strip("'")
+        # Take only the first sentence if the model still gives multiple
+        idx = greeting.find('.')
+        if idx != -1:
+            greeting = greeting[:idx+1]
+        greeting = greeting.strip()
+        if not greeting:
+            greeting = "What can I help with?"
+    except Exception:
+        greeting = "What can I help with?"
+
+    return {"greeting": greeting}

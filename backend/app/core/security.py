@@ -47,7 +47,7 @@ def get_current_user(
 
     # Check if it's an API key
     if token.startswith("nai_"):
-        api_key = db.query(APIKey).filter(APIKey.key == token, APIKey.is_active == True).first()
+        api_key = db.query(APIKey).filter(APIKey.key == token, APIKey.is_active).first()
         if not api_key:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
         api_key.last_used_at = datetime.now(timezone.utc)
@@ -106,7 +106,7 @@ def get_api_key_record(
             detail="Provide a NebulaX API key (nai_…) as a Bearer token.",
         )
     api_key = db.query(APIKey).filter(
-        APIKey.key == credentials.credentials, APIKey.is_active == True
+        APIKey.key == credentials.credentials, APIKey.is_active
     ).first()
     if not api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")

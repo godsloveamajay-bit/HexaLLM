@@ -1,0 +1,110 @@
+version: "3.9"
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://nebulaxai:nebulaxai@db:5432/nebulaxai
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - SECRET_KEY=${SECRET_KEY}
+      - APP_URL=https://ai.nebualax.co.uk
+    volumes:
+      - ./data/models:/app/models
+      - ./data/datasets:/app/datasets
+      - ./data/uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - nebulaxai-network
+
+  worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.worker worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://nebulaxai:nebulaxai@db:5432/nebulaxai
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_BASE_URL=http://ollama:11434
+    volumes:
+      - ./data/models:/app/models
+      - ./data/datasets:/app/datasets
+    depends_on:
+      - redis
+      - db
+    restart: unless-stopped
+    networks:
+      - nebulaxai-network
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      - VITE_API_URL=https://ai.nebualax.co.uk
+    depends_on:
+      - backend
+    restart: unless-stopped
+    networks:
+      - nebulaxai-network
+
+  cloudflared:
+    image: cloudflare/cloudflared:latest
+    command: tunnel --no-autoupdate run --token ${CLOUDFLARE_TUNNEL_TOKEN}
+    environment:
+      - CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
+    restart: unless-stopped
+    networks:
+      - nebulaxai-network
+    depends_on:
+      - frontend
+      - backend
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=nebulaxai
+      - POSTGRES_PASSWORD=nebulaxai
+      - POSTGRES_DB=nebulaxai
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U nebulaxai"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - nebulaxai-network
+
+  redis:
+    image: redis:7-alpine
+    volumes:
+      - redisdata:/data
+    restart: unless-stopped
+    networks:
+      - nebulaxai-network
+
+  ollama:
+    image: ollama/ollama:latest
+    volumes:
+      - ollama_models:/root/.ollama
+    restart: unless-stopped
+    networks:
+      - nebulaxai-network
+
+volumes:
+  pgdata:
+  redisdata:
+  ollama_models:
+
+networks:
+  nebulaxai-network:
+    driver: bridge

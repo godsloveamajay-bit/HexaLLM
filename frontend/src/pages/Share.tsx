@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Bot, User, Sparkle, Loader2, AlertCircle } from 'lucide-react'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
+import remarkMath from 'remark-math'
+import remarkGfm from 'remark-gfm'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import js from 'react-syntax-highlighter/dist/esm/languages/prism/javascript'
@@ -110,6 +114,8 @@ export default function SharePage() {
                   ) : (
                     <div className="max-w-2xl text-sm text-gray-200 pt-1 prose prose-sm">
                       <ReactMarkdown
+                        remarkPlugins={[remarkMath, remarkGfm]}
+                        rehypePlugins={[rehypeKatex]}
                         urlTransform={(url) =>
                           url.startsWith('data:image/') || url.startsWith('data:video/')
                             ? url

@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr
-from typing import Optional, Dict
+from typing import Optional, Dict, List
 from datetime import datetime
 
 
@@ -13,6 +13,27 @@ class UserRegister(BaseModel):
 class UserLogin(BaseModel):
     email: EmailStr
     password: str
+
+
+class PlanBrief(BaseModel):
+    id: int
+    name: str
+    slug: str
+
+    class Config:
+        from_attributes = True
+
+
+class SubscriptionBrief(BaseModel):
+    id: int
+    plan: Optional[PlanBrief]
+    status: str
+    interval: str
+    current_period_end: Optional[datetime]
+    cancel_at_period_end: bool
+
+    class Config:
+        from_attributes = True
 
 
 class UserOut(BaseModel):
@@ -32,6 +53,9 @@ class UserOut(BaseModel):
     ai_default_kb_id: Optional[int] = None
     ai_reasoning: Optional[bool] = None
     ai_personality: Optional[Dict[str, int]] = None
+    # Billing
+    plan_id: Optional[int] = None
+    subscription: Optional[SubscriptionBrief] = None
 
     class Config:
         from_attributes = True

@@ -32,7 +32,10 @@ const TrainPage      = lazy(() => import('./pages/Train'))
 const AnalyticsPage  = lazy(() => import('./pages/Analytics'))
 const LogsPage       = lazy(() => import('./pages/Logs'))
 const ApiKeysPage    = lazy(() => import('./pages/ApiKeys'))
+const AdminPage      = lazy(() => import('./pages/Admin'))
 const SettingsPage   = lazy(() => import('./pages/Settings'))
+const PricingPage    = lazy(() => import('./pages/Pricing'))
+const BillingPage    = lazy(() => import('./pages/Billing'))
 const KnowledgePage  = lazy(() => import('./pages/Knowledge'))
 const ImageGenPage   = lazy(() => import('./pages/ImageGen'))
 const MemoryPage     = lazy(() => import('./pages/Memory'))
@@ -69,12 +72,14 @@ export default function App() {
           <Route path="/reset-password"  element={<ResetPage />} />
           <Route path="/share/:token"    element={<SharePage />} />
           <Route path="/oauth/callback"  element={<OAuthCallbackPage />} />
+          <Route path="/pricing"        element={<PricingPage />} />
 
           {/* One layout for everything. Chat is open to guests (limited);
               every other page is wrapped in PrivateRoute so it stays gated. */}
           <Route element={<AppLayout />}>
             <Route path="/"           element={<Navigate to="/chat" replace />} />
             <Route path="/chat"       element={<ChatPage />} />
+            <Route path="/admin"      element={<PrivateRoute><AdminRoute><AdminPage /></AdminRoute></PrivateRoute>} />
             <Route path="/dashboard"  element={<PrivateRoute><AdminRoute><DashboardPage /></AdminRoute></PrivateRoute>} />
             <Route path="/image"      element={<PrivateRoute><ImageGenPage /></PrivateRoute>} />
             <Route path="/agents"     element={<PrivateRoute><AgentsPage /></PrivateRoute>} />
@@ -90,9 +95,10 @@ export default function App() {
             <Route path="/remote-cli" element={<PrivateRoute><RemoteCLIPage /></PrivateRoute>} />
             <Route path="/downloads"  element={<PrivateRoute><DownloadsPage /></PrivateRoute>} />
             <Route path="/analytics"  element={<PrivateRoute><AnalyticsPage /></PrivateRoute>} />
-            <Route path="/logs"       element={<PrivateRoute><LogsPage /></PrivateRoute>} />
+            <Route path="/logs"       element={<PrivateRoute><AdminRoute><LogsPage /></AdminRoute></PrivateRoute>} />
             <Route path="/api-keys"   element={<PrivateRoute><ApiKeysPage /></PrivateRoute>} />
             <Route path="/settings"   element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
+            <Route path="/billing"    element={<PrivateRoute><BillingPage /></PrivateRoute>} />
           </Route>
         </Routes>
       </Suspense>

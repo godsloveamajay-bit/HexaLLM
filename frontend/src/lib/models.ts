@@ -19,6 +19,7 @@ export const VARIANT_LABELS: Record<string, string> = {
   'nebulax:balanced': 'NebulaX Balanced',
   'nebulax:custom': 'NebulaX Custom',
   'nebulax:vision': 'NebulaX Vision',
+  'nebulax:math': 'NebulaX Math',
 }
 
 /** Human label for a model value. Variants → branded label; raw ids unchanged. */

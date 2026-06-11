@@ -1,10 +1,9 @@
 import os
 import shutil
-import tempfile
 from pathlib import Path
-from typing import List, Optional
+from typing import List
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -65,9 +64,12 @@ def list_knowledge_bases(
 @router.post("", response_model=KnowledgeBaseOut, status_code=201)
 def create_knowledge_base(
     data: KnowledgeBaseCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from ..services.billing_enforcement import check_kb_limit
+    check_kb_limit(db, current_user, client_ip=request.client.host if request.client else None)
     # The embedding model is back-end plumbing; non-admins always use the
     # platform default rather than choosing a raw model.
     embedding_model = data.embedding_model if current_user.is_admin else "nomic-embed-text"

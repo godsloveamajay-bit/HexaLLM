@@ -6,7 +6,7 @@ from ..core.database import get_db
 from ..core.security import get_current_user
 from ..models.user import User
 from ..models.chat import RequestLog, ChatSession, AgentRun
-from ..models.model import AIModel, TrainingJob
+from ..models.model import AIModel
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -111,16 +111,16 @@ def get_logs(
         "total": total,
         "logs": [
             {
-                "id": l.id,
-                "endpoint": l.endpoint,
-                "method": l.method,
-                "status_code": l.status_code,
-                "model": l.model_name,
-                "prompt_tokens": l.prompt_tokens,
-                "completion_tokens": l.completion_tokens,
-                "latency_ms": l.latency_ms,
-                "created_at": l.created_at.isoformat(),
+                "id": log_entry.id,
+                "endpoint": log_entry.endpoint,
+                "method": log_entry.method,
+                "status_code": log_entry.status_code,
+                "model": log_entry.model_name,
+                "prompt_tokens": log_entry.prompt_tokens,
+                "completion_tokens": log_entry.completion_tokens,
+                "latency_ms": log_entry.latency_ms,
+                "created_at": log_entry.created_at.isoformat(),
             }
-            for l in logs
+            for log_entry in logs
         ],
     }

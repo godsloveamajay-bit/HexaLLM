@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Index, Float, JSON
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Float, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from ..core.database import Base
@@ -26,6 +26,9 @@ class User(Base):
     ai_personality = Column(JSON, nullable=True)       # default Personality Engine sliders {trait: 0..100}
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    # Billing / plan
+    plan_id = Column(Integer, ForeignKey("plans.id"), nullable=True)
+    paypal_customer_id = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
@@ -41,6 +44,7 @@ class User(Base):
     personas = relationship("SavedPersona", back_populates="user", cascade="all, delete-orphan")
     workflows = relationship("Workflow", back_populates="user", cascade="all, delete-orphan")
     mcp_servers = relationship("MCPServer", back_populates="user", cascade="all, delete-orphan")
+    subscription = relationship("Subscription", back_populates="user", uselist=False, cascade="all, delete-orphan")
 
 
 class APIKey(Base):

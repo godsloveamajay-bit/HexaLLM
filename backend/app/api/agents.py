@@ -1,6 +1,6 @@
 import asyncio
 from datetime import datetime, timezone
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from typing import List
@@ -60,7 +60,7 @@ def _resolve_mcp_clients(db: Session, server_ids: List[int], user_id: int):
     servers = db.query(MCPServer).filter(
         MCPServer.id.in_(server_ids),
         MCPServer.user_id == user_id,
-        MCPServer.is_active == True,
+        MCPServer.is_active,
     ).all()
     clients = []
     for s in servers:
@@ -106,9 +106,13 @@ def sandbox_status():
 @router.post("/run", response_model=AgentRunOut, status_code=201)
 async def run_agent_task(
     data: AgentTaskCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from ..services.billing_enforcement import check_agent_limit
+    check_agent_limit(db, current_user, client_ip=request.client.host if request.client else None)
+
     agent_run = AgentRun(
         user_id=current_user.id,
         model_name=data.model,
@@ -167,6 +171,7 @@ async def run_agent_task(
 @router.post("/run/stream")
 async def run_agent_stream(
     data: AgentTaskCreate,
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -176,6 +181,8 @@ async def run_agent_stream(
     # which point `db`/`current_user` are detached — so it must use its own
     # session and these captured ids, never the request objects.
     user_id = current_user.id
+    from ..services.billing_enforcement import check_agent_limit
+    check_agent_limit(db, current_user, client_ip=request.client.host if request.client else None)
     agent_run = AgentRun(
         user_id=user_id,
         model_name=data.model,

@@ -1,8 +1,8 @@
 import { useId } from 'react'
 
 /**
- * Animated "AI" sparkle — a four-point twinkling star with a warm
- * orange→pink gradient that slowly rotates while its points breathe in and
+ * Animated "AI" sparkle — a four-point twinkling star with a
+ * cyan→purple gradient that slowly rotates while its points breathe in and
  * out, flanked by two little companion sparkles that pop on a stagger.
  *
  * When `active` it runs the full twinkle (used while the assistant is
@@ -52,10 +52,9 @@ export default function AiSparkle({
     >
       <defs>
         <linearGradient id={grad} x1="0" y1="0" x2="0.45" y2="1">
-          <stop offset="0%" stopColor="#ffd5a6" />
-          <stop offset="35%" stopColor="#fb923c" />
-          <stop offset="70%" stopColor="#f9518f" />
-          <stop offset="100%" stopColor="#ef3b6b" />
+          <stop offset="0%" stopColor="#22d3ee" />
+          <stop offset="50%" stopColor="#6366f1" />
+          <stop offset="100%" stopColor="#a855f7" />
         </linearGradient>
         <filter id={glow} x="-70%" y="-70%" width="240%" height="240%">
           <feGaussianBlur stdDeviation={active ? 1.1 : 0.6} result="b" />

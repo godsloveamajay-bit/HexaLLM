@@ -3,7 +3,6 @@ Fine-tuning service using Hugging Face PEFT (LoRA/QLoRA).
 Runs as a Celery background task.
 """
 import os
-import json
 import logging
 from datetime import datetime, timezone
 from pathlib import Path

@@ -1,9 +1,11 @@
 import asyncio
+import json
 import secrets
 import socket
 import sys
 import time
 import webbrowser
+from datetime import datetime
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
 from typing import Optional
@@ -40,6 +42,9 @@ HELP_TEXT = """
 [bold]Commands[/]
   [cyan]/clear[/]           Clear conversation memory and screen
   [cyan]/context[/]         Show conversation history
+  [cyan]/history[/]         Show last N turns (e.g. /history 5)
+  [cyan]/save[/]            Save session as JSON file
+  [cyan]/system[/]          Show backend and model configuration
   [cyan]/model NAME[/]      Switch model for this session
   [cyan]/kb[/]              List NebulaX knowledge bases (when connected)
   [cyan]/use-kb ID[/]       Attach a KB — adds search_kb tool to this session
@@ -96,18 +101,27 @@ def _build_kb_tool(nx_client, kb_id: int):
 async def _pick_backend(cfg):
     """
     Return (backend, backend_label, nx_client_or_None) using priority:
-      1. NebulaX  — if token is saved and valid
+      1. NebulaX  — if backend is explicitly set to "nebulax" OR (auto AND token is valid)
       2. Ollama   — if cfg.backend == "ollama" OR (auto AND Ollama is reachable)
       3. Pollinations — free cloud fallback, no setup needed
     """
     from .nebulax import NebulaXClient, PollinationsClient
 
     # 1. NebulaX
+    want_nebulax = cfg.backend == "nebulax"
     nx = _make_nebulax_client(cfg)
     if nx:
         nx_user = await NebulaXClient.verify(cfg.nebulax_url, cfg.nebulax_token)
         if nx_user:
+            # Try to get or create an API key for LLM calls
+            await nx.get_or_create_api_key()
             return nx, f"NebulaX  {cfg.nebulax_url}", nx, nx_user
+        # If explicitly requested but token invalid, fail fast
+        if want_nebulax:
+            console.print("[red]NebulaX backend requested but token is expired or invalid.[/]")
+            console.print("[yellow]Run[/] [cyan]nebula login <URL>[/] [yellow]to reconnect.[/]")
+            sys.exit(1)
+        # Otherwise, if auto, continue to fallback backends
         console.print("[yellow]NebulaX token expired — run[/] [cyan]nebula login URL[/] [yellow]to reconnect.[/]")
 
     # 2. Ollama
@@ -172,11 +186,16 @@ async def _interactive(cfg) -> None:
     )
 
     # connectivity / model check (skip for Pollinations — no model list endpoint needed)
+    # Also skip for NebulaX since it uses cloud models, not local Ollama
     if not isinstance(backend, PollinationsClient):
         try:
             models = await backend.list_models()
             if not models:
-                console.print("[yellow]Warning:[/] No models found.")
+                # NebulaX doesn't require local models
+                if nx:
+                    pass  # This is expected for NebulaX cloud backend
+                else:
+                    console.print("[yellow]Warning:[/] No models found.")
             elif cfg.model not in models:
                 console.print(
                     f"[yellow]Note:[/] '{cfg.model}' not found. "
@@ -257,9 +276,57 @@ async def _interactive(cfg) -> None:
                 console.print(f"[{color}]{msg['role']}:[/] {preview}")
             continue
 
+        if low.startswith("/history"):
+            # /history or /history 5 (show last N turns)
+            parts = user_input.split()
+            n = int(parts[1]) if len(parts) > 1 else 10
+            if not agent.history:
+                print_info("No conversation history yet.")
+            else:
+                turns = agent.history[-n*2:] if len(agent.history) > n*2 else agent.history
+                for msg in turns:
+                    color = "cyan" if msg["role"] == "user" else "green"
+                    preview = msg["content"][:150].replace("\n", " ")
+                    console.print(f"[{color}]{msg['role']}:[/] {preview}")
+                console.print(f"\n[dim]Showing last {len(turns)//2} turns[/]")
+            continue
+
+        if low == "/save":
+            # Save session as JSON
+            try:
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                filename = f"session_{timestamp}.json"
+                session_data = {
+                    "timestamp": datetime.now().isoformat(),
+                    "model": agent.model,
+                    "backend": backend_label,
+                    "turns": len(agent.history) // 2,
+                    "history": agent.history,
+                    "cwd": str(Path.cwd()),
+                }
+                Path(filename).write_text(json.dumps(session_data, indent=2))
+                console.print(f"[green]✓[/] Session saved to [cyan]{filename}[/]")
+            except Exception as e:
+                print_error(f"Failed to save session: {e}")
+            continue
+
         if low == "/tools":
             for name, desc in active_tool_descs.items():
                 console.print(f"  [cyan]{name}[/]  [dim]{desc}[/]")
+            continue
+
+        if low == "/system":
+            console.print(
+                f"[cyan]NebulaCode System[/]\n"
+                f"  Model     [bold]{agent.model}[/]\n"
+                f"  Backend   {backend_label}\n"
+                f"  Max steps {agent.max_steps}\n"
+                f"  Temp      {agent.temperature}\n"
+                f"  Turns     {len(agent.history) // 2}\n"
+                f"  CWD       {Path.cwd()}\n"
+            )
+            if active_kb_id:
+                console.print(f"  KB        KB#{active_kb_id} (search_kb enabled)")
             continue
 
         if low == "/kb":
@@ -413,7 +480,7 @@ async def _google_login(url: str) -> None:
     server = HTTPServer(("localhost", port), _Handler)
     server.timeout = 1
 
-    console.print(f"\n[dim]Opening browser for Google sign-in…[/]")
+    console.print("\n[dim]Opening browser for Google sign-in…[/]")
     webbrowser.open(auth_url)
     console.print("[dim]Waiting for authentication (120 s timeout)…  Ctrl-C to cancel.[/]\n")
 

@@ -2,10 +2,12 @@ import random
 import base64
 import urllib.parse
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel
 from typing import Optional
+from sqlalchemy.orm import Session
 from ..core.security import get_current_user
+from ..core.database import get_db
 from ..models.user import User
 
 router = APIRouter(prefix="/image", tags=["image"])
@@ -88,8 +90,13 @@ class ImageRequest(BaseModel):
 @router.post("/generate")
 async def generate_image(
     req: ImageRequest,
+    request: Request,
+    db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from ..services.billing_enforcement import check_image_gen
+    check_image_gen(db, current_user, client_ip=request.client.host if request.client else None)
+
     final_prompt = req.prompt
     if req.enhance_prompt:
         final_prompt = await _enhance_prompt(req.prompt)

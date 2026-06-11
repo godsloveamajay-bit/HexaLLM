@@ -253,7 +253,8 @@ async def extract_memories(
     async for chunk in ollama.chat_stream(extract_model, msgs, system_prompt=system, temperature=0.1):
         raw += chunk
 
-    import json, re
+    import json
+    import re
     try:
         facts = json.loads(raw.strip())
     except Exception:

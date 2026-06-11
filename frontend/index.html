@@ -2,10 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/logo.svg?v=3" />
-    <link rel="icon" type="image/x-icon" href="/favicon.ico?v=3" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/fav.png" id="favicon" />
+    <link rel="shortcut icon" href="/favicon.ico" />
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#1f1611" />
+    <meta name="theme-color" content="#121626" />
     <!-- Apply saved theme before paint to avoid a flash. Default: dark.
          'auto' follows the OS colour-scheme. -->
     <script>
@@ -25,15 +26,21 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="NebulaX AI" />
-    <link rel="apple-touch-icon" href="/pwa-192.png" />
-    <link rel="apple-touch-icon" sizes="152x152" href="/pwa-152.png" />
-    <link rel="apple-touch-icon" sizes="144x144" href="/pwa-144.png" />
     <title>NebulaX AI Platform</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <script src="https://www.paypal.com/sdk/js?client-id=sb&vault=true&intent=subscription" data-sdk-integration-source="button-factory"></script>
   </head>
   <body>
+    <script>
+      // Force Chrome to update its favicon DB by busting cache with a timestamp
+      (function(){
+        var c='?t='+Date.now();
+        var l=document.getElementById('favicon');
+        if(l)l.href='/fav.png'+c;
+      })();
+    </script>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

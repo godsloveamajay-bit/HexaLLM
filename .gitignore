@@ -56,3 +56,4 @@ backend/downloads/*.AppImage
 # Python caches
 __pycache__/
 *.pyc
+hello_world.py

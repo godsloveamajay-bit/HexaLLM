@@ -7,7 +7,7 @@ from ..core.database import get_db
 from ..core.security import get_current_user
 from ..models.user import User
 from ..models.workflow import Workflow
-from ..models.chat import AgentRun, RequestLog
+from ..models.chat import RequestLog
 from ..services.agent_service import run_agent
 from ..services.ollama_service import ollama
 from ..services import model_router

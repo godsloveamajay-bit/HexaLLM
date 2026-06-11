@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -274,14 +274,14 @@ def forgot_password(request: Request, data: dict, background_tasks: BackgroundTa
     if not email:
         raise HTTPException(status_code=422, detail="Email required")
 
-    user = db.query(User).filter(User.email == email, User.is_active == True).first()
+    user = db.query(User).filter(User.email == email, User.is_active).first()
     if not user:
         return {"detail": "If that email is registered you'll receive a reset link shortly."}
 
     # Invalidate old tokens for this user
     db.query(PasswordResetToken).filter(
         PasswordResetToken.user_id == user.id,
-        PasswordResetToken.used == False,
+        not PasswordResetToken.used,
     ).update({"used": True})
 
     token = secrets.token_urlsafe(32)
@@ -306,7 +306,7 @@ def reset_password(data: dict, db: Session = Depends(get_db)):
 
     record = db.query(PasswordResetToken).filter(
         PasswordResetToken.token == token_str,
-        PasswordResetToken.used == False,
+        not PasswordResetToken.used,
     ).first()
 
     if not record:

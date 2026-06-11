@@ -232,7 +232,6 @@ async def run_agent(
     # Inject MCP tools
     mcp_tool_map: Dict[str, Any] = {}  # "mcp__<server>__<tool>" -> callable
     if mcp_clients:
-        from .mcp_service import MCPClient as _MCPClient
         for server_name, client in mcp_clients:
             if client.tools_cache:
                 for t in client.tools_cache:

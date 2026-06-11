@@ -13,19 +13,55 @@ import httpx
 
 
 class NebulaXClient:
-    def __init__(self, base_url: str, token: str) -> None:
+    def __init__(self, base_url: str, token: str, api_key: Optional[str] = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
-        self._h = {
+        self.api_key = api_key
+        self._h_user = {
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
         }
+    
+    def _headers_for_llm(self) -> Dict[str, str]:
+        """Return headers for LLM API calls (uses API key if available, else user token)."""
+        if self.api_key:
+            return {
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+            }
+        return self._h_user
+
+    async def get_or_create_api_key(self) -> Optional[str]:
+        """Get an existing API key or create one for CLI use."""
+        try:
+            async with httpx.AsyncClient(timeout=10) as c:
+                # Try to get existing keys
+                r = await c.get(f"{self.base_url}/api/v1/auth/api-keys", headers=self._h_user)
+                r.raise_for_status()
+                keys = r.json()
+                
+                # Use first active key if available
+                for key in keys:
+                    if key.get("is_active"):
+                        self.api_key = key.get("key")
+                        return self.api_key
+                
+                # Create a new key if none exist
+                payload = {"name": "NebulaCode CLI"}
+                r = await c.post(f"{self.base_url}/api/v1/auth/api-keys", json=payload, headers=self._h_user)
+                r.raise_for_status()
+                key_data = r.json()
+                self.api_key = key_data.get("key")
+                return self.api_key
+        except Exception as e:
+            print(f"Warning: Could not get/create API key: {e}")
+            return None
 
     # ── LLM ─────────────────────────────────────────────────────────────────
 
     async def list_models(self) -> List[str]:
         async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(f"{self.base_url}/api/v1/models/ollama/list", headers=self._h)
+            r = await c.get(f"{self.base_url}/api/v1/models/ollama/list", headers=self._h_user)
             r.raise_for_status()
             return [m["name"] for m in r.json().get("models", [])]
 
@@ -58,7 +94,7 @@ class NebulaXClient:
                 "POST",
                 f"{self.base_url}/api/v1/openai/chat/completions",
                 json=payload,
-                headers=self._h,
+                headers=self._headers_for_llm(),
             ) as r:
                 r.raise_for_status()
                 async for line in r.aiter_lines():
@@ -91,7 +127,7 @@ class NebulaXClient:
 
     def list_kbs_sync(self) -> List[Dict]:
         with httpx.Client(timeout=10) as c:
-            r = c.get(f"{self.base_url}/api/v1/knowledge", headers=self._h)
+            r = c.get(f"{self.base_url}/api/v1/knowledge", headers=self._h_user)
             r.raise_for_status()
             return r.json()
 
@@ -100,7 +136,7 @@ class NebulaXClient:
             r = c.post(
                 f"{self.base_url}/api/v1/knowledge/{kb_id}/query",
                 json={"query": query, "top_k": top_k},
-                headers=self._h,
+                headers=self._h_user,
             )
             r.raise_for_status()
             data = r.json()
@@ -140,7 +176,7 @@ class NebulaXClient:
                 r = c.post(
                     f"{self.base_url}/api/v1/agents/run",
                     json=payload,
-                    headers=self._h,
+                    headers=self._h_user,
                 )
                 r.raise_for_status()
                 return r.json().get("id")

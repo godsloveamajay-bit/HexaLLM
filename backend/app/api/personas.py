@@ -111,7 +111,7 @@ def list_community_personas(
     current_user: User = Depends(get_current_user),
 ):
     return [_serialize(p, include_owner=True) for p in db.query(SavedPersona).filter(
-        SavedPersona.is_public == True
+        SavedPersona.is_public
     ).order_by(SavedPersona.uses.desc()).limit(50).all()]
 
 
@@ -239,7 +239,7 @@ def fork_persona(
     current_user: User = Depends(get_current_user),
 ):
     original = db.query(SavedPersona).filter(
-        SavedPersona.id == persona_id, SavedPersona.is_public == True
+        SavedPersona.id == persona_id, SavedPersona.is_public
     ).first()
     if not original:
         raise HTTPException(status_code=404, detail="Persona not found or not public")

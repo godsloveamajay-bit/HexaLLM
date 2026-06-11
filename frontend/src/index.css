@@ -2,41 +2,47 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Theme tokens. The gray, primary, secondary, and energy scales
-   (tailwind.config.js) resolve to these CSS variables. Default = a warm
-   "sunset" palette tuned to the AI sparkle: a warm charcoal canvas, medium
-   orange primary actions, gold system signals, and deep-orange high-energy
-   accents — the warm end of the sparkle's orange-to-pink sweep. Values are
-   space-separated RGB so Tailwind's alpha modifier (e.g. bg-gray-800/60) keeps
-   working. */
+/* ─────────────────────────────────────────────────────────────────────────────
+   Aurora Theme: Modern AI Platform with Glassmorphism
+   Dark Mode: Deep space blues/purples with electric cyan accents
+   Light Mode: Clean whites with vibrant gradient accents
+   ─────────────────────────────────────────────────────────────────────────────*/
+
 :root {
   color-scheme: dark;
-  --g-50: 250 247 244;  --g-100: 242 236 231; --g-200: 224 214 206; --g-300: 198 183 173;
-  --g-400: 165 146 135; --g-500: 128 110 100; --g-600: 94 76 66;    --g-700: 66 51 43;
-  --g-800: 46 34 28;    --g-850: 38 28 22;    --g-900: 31 22 17;     --g-925: 25 17 13;
-  --g-950: 19 13 10;
-  --p-50: 255 247 237;  --p-100: 255 234 213; --p-200: 254 211 170; --p-300: 253 180 116;
-  --p-400: 251 146 60;  --p-500: 249 115 22;  --p-600: 234 88 12;   --p-700: 194 65 12;
-  --p-800: 154 52 18;   --p-900: 124 45 18;   --p-950: 67 20 7;
-  --s-50: 255 251 235;  --s-100: 254 243 199; --s-200: 253 230 138; --s-300: 252 211 77;
-  --s-400: 251 191 36;  --s-500: 245 158 11;  --s-600: 217 119 6;   --s-700: 180 83 9;
-  --s-800: 146 64 14;   --s-900: 120 53 15;   --s-950: 69 26 3;
-  --e-50: 255 247 237;  --e-100: 255 237 213; --e-200: 254 215 170; --e-300: 253 186 116;
-  --e-400: 251 146 60;  --e-500: 249 115 22;  --e-600: 234 88 12;   --e-700: 194 65 12;
-  --e-800: 154 52 18;   --e-900: 124 45 18;   --e-950: 67 20 7;
-}
-:root.light {
-  color-scheme: light;
-  /* Light mode: warm cream canvas, same sunset accents with inverted luminance. */
-  --g-50: 31 22 17;     --g-100: 46 34 28;    --g-200: 66 51 43;    --g-300: 94 76 66;
-  --g-400: 128 110 100; --g-500: 165 146 135; --g-600: 198 183 173; --g-700: 224 214 206;
-  --g-800: 240 232 225; --g-850: 247 241 235; --g-900: 250 246 241; --g-925: 252 249 245;
-  --g-950: 251 247 243;
-  --p-300: 194 65 12;   --p-400: 234 88 12;   --p-500: 249 115 22;
-  --s-300: 180 83 9;    --s-400: 217 119 6;   --s-500: 245 158 11;
+  /* Neutrals: Deep space grays with cool undertones */
+  --g-50: 248 248 252;   --g-100: 241 242 248;  --g-200: 226 229 240;  --g-300: 201 207 225;
+  --g-400: 165 173 200;  --g-500: 128 137 166;  --g-600: 93 104 136;   --g-700: 65 74 105;
+  --g-800: 45 52 79;     --g-850: 37 43 68;     --g-900: 29 35 56;     --g-925: 23 28 46;
+  --g-950: 18 22 38;
+  /* Primary: Electric Cyan (modern AI) */
+  --p-50: 236 254 255;   --p-100: 207 250 254;  --p-200: 165 243 252;  --p-300: 103 232 249;
+  --p-400: 34 211 238;   --p-500: 6 182 212;    --p-600: 8 145 178;    --p-700: 14 116 144;
+  --p-800: 21 94 116;    --p-900: 30 58 138;    --p-950: 16 32 77;
+  /* Secondary: Purple/Violet (depth) */
+  --s-50: 250 245 255;   --s-100: 243 232 255;  --s-200: 233 213 255;  --s-300: 216 180 254;
+  --s-400: 192 132 250;  --s-500: 168 85 247;   --s-600: 147 51 234;   --s-700: 126 34 206;
+  --s-800: 109 40 217;   --s-900: 88 28 135;    --s-950: 59 7 100;
+  /* Energy/Accent: Pink/Magenta (highlights) */
+  --e-50: 255 240 245;   --e-100: 255 228 230;  --e-200: 254 205 211;  --e-300: 249 168 212;
+  --e-400: 244 114 182;  --e-500: 236 72 153;   --e-600: 219 39 119;   --e-700: 190 24 93;
+  --e-800: 162 28 87;    --e-900: 131 24 67;    --e-950: 80 7 48;
 }
 
-html, body { transition: background-color .25s ease, color .25s ease; }
+:root.light {
+  color-scheme: light;
+  /* Light mode: Inverted for readability */
+  --g-50: 18 22 38;      --g-100: 29 35 56;     --g-200: 45 52 79;     --g-300: 65 74 105;
+  --g-400: 93 104 136;   --g-500: 128 137 166;  --g-600: 165 173 200;  --g-700: 201 207 225;
+  --g-800: 226 229 240;  --g-850: 241 242 248;  --g-900: 248 248 252;  --g-925: 251 251 254;
+  --g-950: 254 254 255;
+  /* Keep bright primaries same brightness */
+  --p-300: 6 182 212;    --p-400: 34 211 238;   --p-500: 103 232 249;
+  --s-300: 168 85 247;   --s-400: 192 132 250;  --s-500: 216 180 254;
+  --e-300: 236 72 153;   --e-400: 244 114 182;  --e-500: 249 168 212;
+}
+
+html, body { transition: background-color 0.3s ease, color 0.3s ease; }
 
 @layer base {
   html {
@@ -47,6 +53,11 @@ html, body { transition: background-color .25s ease, color .25s ease; }
     @apply bg-gray-950 text-gray-100 font-sans;
     overflow-x: hidden;
     min-height: 100dvh;
+    background: linear-gradient(135deg, rgb(var(--g-950)) 0%, rgb(var(--g-900)) 100%);
+  }
+  body.light {
+    @apply bg-gray-50 text-gray-950;
+    background: linear-gradient(135deg, rgb(var(--g-50)) 0%, rgb(var(--g-100)) 100%);
   }
   * {
     box-sizing: border-box;
@@ -57,62 +68,125 @@ html, body { transition: background-color .25s ease, color .25s ease; }
 }
 
 @layer components {
+  /* Glassmorphism Card */
   .card {
-    @apply bg-gray-900 border border-gray-700/60 rounded-2xl p-5 shadow-sm;
+    @apply bg-gray-900/50 backdrop-blur-xl border border-gray-700/30 rounded-2xl p-5 shadow-lg
+           transition-all duration-300;
+    background: rgba(45, 52, 79, 0.4);
+    backdrop-filter: blur(20px);
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 
+                inset 0 1px 1px rgba(255, 255, 255, 0.1);
   }
+  .card:hover {
+    @apply border-primary-500/30 shadow-xl;
+    box-shadow: 0 8px 32px rgba(6, 182, 212, 0.15),
+                inset 0 1px 1px rgba(255, 255, 255, 0.15);
+  }
+  
   .card-sm {
-    @apply bg-gray-900 border border-gray-700/60 rounded-xl p-4 shadow-sm;
+    @apply bg-gray-900/50 backdrop-blur-lg border border-gray-700/30 rounded-xl p-4 shadow-md
+           transition-all duration-300;
+    background: rgba(45, 52, 79, 0.4);
+    backdrop-filter: blur(16px);
   }
+  
+  .card.light {
+    @apply bg-white/70 text-gray-950 border-gray-300/30;
+    background: rgba(255, 255, 255, 0.7);
+  }
+  
+  /* Enhanced Buttons */
   .btn {
-    @apply inline-flex items-center gap-2 px-4 py-2 rounded-xl font-medium text-sm
-           transition-all duration-150 disabled:opacity-40 disabled:cursor-not-allowed
-           active:scale-[0.98];
+    @apply inline-flex items-center gap-2 px-4 py-2 rounded-lg font-medium text-sm
+           transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed
+           active:scale-95 relative overflow-hidden;
   }
+  
   .btn-primary {
-    @apply btn bg-primary-600 hover:bg-primary-500 active:bg-primary-700
-           text-white shadow-sm shadow-primary-900/30 ring-1 ring-primary-400/20;
+    @apply btn bg-gradient-to-br from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500
+           text-white shadow-lg shadow-primary-500/30 ring-1 ring-primary-400/30;
   }
+  
   .btn-secondary {
-    @apply btn bg-gray-800 hover:bg-gray-700 text-gray-200
-           border border-gray-700/60;
+    @apply btn bg-gray-800/60 hover:bg-gray-700/70 text-gray-200 border border-gray-700/60
+           shadow-md shadow-gray-900/20;
   }
+  
   .btn-ghost {
-    @apply btn hover:bg-gray-800/70 text-gray-400 hover:text-gray-200;
+    @apply btn hover:bg-gray-800/50 text-gray-400 hover:text-gray-100 transition-all;
   }
+  
   .btn-danger {
-    @apply btn bg-red-900/30 hover:bg-red-800/50 text-red-400
-           border border-red-800/40;
+    @apply btn bg-red-900/40 hover:bg-red-800/60 text-red-400 border border-red-800/40
+           shadow-lg shadow-red-900/20;
   }
+  
+  /* Enhanced Inputs */
   .input {
-    @apply w-full bg-gray-800/60 border border-gray-700/60 rounded-xl px-4 py-2.5
+    @apply w-full bg-gray-800/40 border border-gray-700/40 rounded-lg px-4 py-2.5
            text-sm text-gray-100 placeholder-gray-500
            focus:outline-none focus:ring-2 focus:ring-primary-500/50 focus:border-primary-500/50
-           transition-all;
+           focus:bg-gray-800/60 transition-all duration-200
+           backdrop-blur-sm;
   }
+  
+  .input.light {
+    @apply bg-white/70 border-gray-300/40 text-gray-950 placeholder-gray-400
+           focus:bg-white focus:ring-primary-400/50;
+  }
+  
   .label {
     @apply block text-xs font-semibold text-gray-400 mb-1.5 uppercase tracking-wide;
   }
+  
+  .label.light {
+    @apply text-gray-600;
+  }
+  
   .badge {
-    @apply inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-medium;
+    @apply inline-flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-medium
+           bg-primary-500/10 text-primary-400 ring-1 ring-primary-500/30
+           transition-all duration-200;
   }
+  
+  /* Enhanced Sidebar Link */
   .sidebar-link {
-    @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium
-           text-gray-400 hover:text-gray-100 hover:bg-gray-800/60 transition-all;
+    @apply flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium
+           text-gray-400 hover:text-gray-100 hover:bg-gray-800/40 transition-all duration-200;
   }
+  
   .sidebar-link.active {
-    @apply bg-primary-600/10 text-primary-400 ring-1 ring-primary-500/20;
+    @apply bg-primary-600/10 text-primary-300 ring-1 ring-primary-500/20;
   }
-  /* Mobile bottom nav tab */
+  
+  /* Mobile Tab Link */
   .tab-link {
     @apply flex flex-col items-center gap-0.5 py-2 px-1 text-[10px] font-medium
-           transition-colors duration-150;
+           transition-all duration-200;
   }
+  
   .tab-link.active {
     @apply text-primary-400;
   }
+  
   .tab-link:not(.active) {
     @apply text-gray-500;
   }
+}
+
+/* Scrollbar - elegant and minimal */
+::-webkit-scrollbar { 
+  width: 6px; 
+  height: 6px; 
+}
+::-webkit-scrollbar-track { 
+  @apply bg-transparent; 
+}
+::-webkit-scrollbar-thumb { 
+  @apply bg-primary-500/20 rounded-full transition-all;
+}
+::-webkit-scrollbar-thumb:hover { 
+  @apply bg-primary-500/40;
 }
 
 /* Scrollbar */
@@ -240,3 +314,8 @@ html, body { transition: background-color .25s ease, color .25s ease; }
 /* Safe area padding helpers */
 .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
 .pt-safe { padding-top: env(safe-area-inset-top); }
+
+/* KaTeX sizing inside chat prose */
+.prose .katex { font-size: 1.05em; }
+.prose .katex-display { margin: 0.75em 0; overflow-x: auto; overflow-y: hidden; }
+.prose .katex-display > .katex { font-size: 1.1em; }

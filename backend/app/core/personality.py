@@ -93,7 +93,7 @@ def compose(traits: Optional[Dict]) -> Dict:
 
     fragment = ""
     if lines:
-        fragment = "[Personality — adopt this voice and behaviour]\n" + "\n".join(f"- {l}" for l in lines)
+        fragment = "[Personality — adopt this voice and behaviour]\n" + "\n".join(f"- {line}" for line in lines)
 
     # Sampling. creativity drives temperature, risk nudges it and sets top_p.
     temperature = round(_clamp(0.15 + (t["creativity"] / 100) * 1.0 + (t["risk"] - 50) / 250, 0.05, 1.3), 2)

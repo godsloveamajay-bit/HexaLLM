@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Any, Dict
+from typing import Optional, List, Dict
 from datetime import datetime
 
 
@@ -13,7 +13,7 @@ class ChatRequest(BaseModel):
     messages: List[ChatMessageIn]
     system_prompt: Optional[str] = None
     session_id: Optional[int] = None
-    temperature: float = 0.7
+    temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     stream: bool = True
     knowledge_base_id: Optional[int] = None

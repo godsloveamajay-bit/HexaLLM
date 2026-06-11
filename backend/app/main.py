@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import inspect, text
 from .core.config import settings
 from .core.database import Base, engine
-from .models import user, model, chat, knowledge, template, memory, persona, workflow, mcp_server, tool  # noqa: F401
+from .models import user, model, chat, knowledge, template, memory, persona, workflow, mcp_server, tool, billing, ip_whitelist  # noqa: F401
 from .api import (
     auth, models, chat as chat_api, agents, analytics,
     knowledge as knowledge_api, image as image_api, video as video_api,
@@ -17,7 +17,8 @@ from .api import (
     personas as personas_api, workflows as workflows_api,
     openai_compat, mcp as mcp_api, cli_tunnel as cli_tunnel_api,
     downloads as downloads_api, transcribe as transcribe_api,
-    tools as tools_api,
+    tools as tools_api, billing as billing_api,
+    admin as admin_api,
 )
 
 
@@ -117,6 +118,13 @@ def _migrate_db():
             conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_id ON users (id)"))
             conn.execute(text("PRAGMA foreign_keys = ON"))
 
+        # Billing tables — created by Base.metadata.create_all, but add user cols
+        user_cols = {c["name"] for c in inspector.get_columns("users")}
+        if "plan_id" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN plan_id INTEGER"))
+        if "paypal_customer_id" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN paypal_customer_id VARCHAR"))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -191,6 +199,8 @@ app.include_router(cli_tunnel_api.router, prefix="/api/v1")
 app.include_router(downloads_api.router,  prefix="/api/v1")
 app.include_router(transcribe_api.router, prefix="/api/v1")
 app.include_router(tools_api.router,      prefix="/api/v1")
+app.include_router(billing_api.router,    prefix="/api/v1")
+app.include_router(admin_api.router,      prefix="/api/v1")
 
 
 @app.get("/api/v1/health")

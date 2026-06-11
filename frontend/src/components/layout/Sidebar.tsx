@@ -34,8 +34,8 @@ const BASE_NAV = [
 ]
 
 const ADMIN_EXTRA = [
-  { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-  { to: '/logs',      icon: FileText,         label: 'Logs'      },
+  { to: '/admin',     icon: LayoutDashboard, label: 'Admin'    },
+  { to: '/logs',      icon: FileText,         label: 'Logs'     },
 ]
 
 export default function Sidebar({ isOpen, onClose }: Props) {

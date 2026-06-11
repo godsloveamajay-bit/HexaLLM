@@ -1,8 +1,14 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import path from 'path'
 
 export default defineConfig({
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, 'src'),
+    },
+  },
   plugins: [
     react(),
     VitePWA({
@@ -12,8 +18,8 @@ export default defineConfig({
         name: 'NebulaX AI Platform',
         short_name: 'NebulaX AI',
         description: 'Open-source AI hub — chat, agents, image gen, and more',
-        theme_color: '#1f1611',
-        background_color: '#1f1611',
+        theme_color: '#121626',
+        background_color: '#121626',
         display: 'standalone',
         orientation: 'portrait-primary',
         scope: '/',
@@ -30,23 +36,10 @@ export default defineConfig({
         ],
       },
       workbox: {
-        // 'html' is required: workbox's SPA navigateFallback binds a handler to
-        // 'index.html', so it must be in the precache manifest or every load
-        // throws "non-precached-url: index.html".
         globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2,webmanifest}'],
         cleanupOutdatedCaches: true,
-        // Never serve the SPA shell for API requests (let them hit the network).
+        navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//],
-        runtimeCaching: [
-          {
-            urlPattern: /^https?:\/\/.*\/api\/v1\/(models|analytics)/,
-            handler: 'NetworkFirst',
-            options: {
-              cacheName: 'api-cache',
-              expiration: { maxEntries: 50, maxAgeSeconds: 300 },
-            },
-          },
-        ],
       },
     }),
   ],

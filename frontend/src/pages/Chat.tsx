@@ -4,7 +4,7 @@ import {
   FileText, Sparkles, Zap, Scale, Brain, Settings2, Menu,
   X, Paperclip, Share2, BookMarked, Clipboard, ClipboardCheck,
   Mic, MicOff, Square, Download, RotateCcw, Search, Terminal,
-  ChevronRight, Wrench, Lock, Sparkle, SlidersHorizontal, Globe,
+  ChevronRight, Wrench, Lock, Sparkle, SlidersHorizontal, Globe, Sigma,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../store/auth'
@@ -13,6 +13,10 @@ import PersonalitySliders from '../components/PersonalitySliders'
 import { normalizeTraits, isActive as personalityActive, type TraitKey } from '../lib/personality'
 import AiSparkle from '../components/AiSparkle'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
+import remarkMath from 'remark-math'
+import remarkGfm from 'remark-gfm'
+import rehypeKatex from 'rehype-katex'
+import 'katex/dist/katex.min.css'
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
 import js from 'react-syntax-highlighter/dist/esm/languages/prism/javascript'
@@ -78,6 +82,7 @@ const VARIANT_ICONS: Record<string, any> = {
   'nebulax:write':    Sparkles,
   'nebulax:think':    Brain,
   'nebulax:custom':   Settings2,
+  'nebulax:math':     Sigma,
 }
 
 const CUSTOM_VARIANT_ID = 'nebulax:custom'
@@ -303,7 +308,7 @@ function MessageBubble({
 
       {/* Content */}
       {msg.role === 'assistant' ? (
-        <div className="max-w-2xl flex-1">
+        <div className="max-w-3xl flex-1">
           {showDrawer && (
             <ChatThoughtDrawer steps={msg.steps || []} reasoning={think} running={drawerRunning} label={drawerLabel} />
           )}
@@ -324,14 +329,30 @@ function MessageBubble({
               since={activitySince ?? undefined}
             />
           ) : (isTyping || isFastStream) ? (
-            <p className="whitespace-pre-wrap leading-relaxed text-gray-200 text-sm">
-              {clean}<span className="stream-cursor text-primary-500" />
-            </p>
-          ) : (
-            <div className="prose prose-sm">
+            <div className="bg-gray-800/30 rounded-xl px-4 py-3 prose prose-sm">
               <ReactMarkdown
-                // Allow base64 data: image/video URLs (generated media streams in
-                // as data URLs); keep default sanitization for everything else.
+                remarkPlugins={[remarkMath, remarkGfm]}
+                rehypePlugins={[rehypeKatex]}
+                components={{
+                  code({ className, children }) {
+                    const code = String(children).replace(/\n$/, '')
+                    return (
+                      <code className={className || 'bg-gray-800 text-primary-300 px-1.5 py-0.5 rounded-md text-[0.85em] font-mono'}>
+                        {children}
+                      </code>
+                    )
+                  },
+                }}
+              >
+                {clean}
+              </ReactMarkdown>
+              <span className="stream-cursor text-primary-500" />
+            </div>
+          ) : (
+            <div className="bg-gray-800/30 rounded-xl px-4 py-3 prose prose-sm">
+              <ReactMarkdown
+                remarkPlugins={[remarkMath, remarkGfm]}
+                rehypePlugins={[rehypeKatex]}
                 urlTransform={(url) =>
                   url.startsWith('data:image/') || url.startsWith('data:video/')
                     ? url
@@ -431,9 +452,9 @@ function MessageBubble({
           )}
         </div>
       ) : (
-        <div className="max-w-2xl">
-          <div className="rounded-2xl px-4 py-3 text-sm bg-primary-600 text-white rounded-tr-none shadow">
-            <p className="whitespace-pre-wrap">{msg.content}</p>
+        <div className="max-w-3xl">
+          <div className="px-1 py-1 text-sm">
+            <p className="whitespace-pre-wrap text-gray-100">{msg.content}</p>
           </div>
           {/* Copy for user message */}
           {msg.content && (
@@ -500,6 +521,8 @@ export default function ChatPage() {
   const [transcribing, setTranscribing] = useState(false) // uploading → Whisper
   const [cliSessions, setCliSessions] = useState<CliSession[]>([])
   const [activeCli, setActiveCli] = useState<string>('')
+  const [greeting, setGreeting] = useState<string | null>(null)
+  const [greetingLoading, setGreetingLoading] = useState(false)
 
   const bottomRef    = useRef<HTMLDivElement>(null)
   const scrollRef    = useRef<HTMLDivElement>(null)
@@ -555,6 +578,24 @@ export default function ChatPage() {
       else if (first) setModel(first.id)
     }
   }, [variants, sessions, user])
+
+  useEffect(() => {
+    if (messages.length > 0) return
+    let cancelled = false
+    setGreetingLoading(true)
+    api.post('/chat/greeting').then(({ data }) => {
+      if (!cancelled) {
+        setGreeting(data.greeting)
+        setGreetingLoading(false)
+      }
+    }).catch(() => {
+      if (!cancelled) {
+        setGreeting('What can I help with?')
+        setGreetingLoading(false)
+      }
+    })
+    return () => { cancelled = true }
+  }, [messages.length === 0])
 
   const loadCliSessions = async () => {
     try { const { data } = await api.get('/cli/sessions'); setCliSessions(data || []) } catch {}
@@ -1177,10 +1218,6 @@ export default function ChatPage() {
               )}
             </select>
 
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-2 py-1 rounded-md bg-primary-900/20 text-primary-300 text-xs font-medium border border-primary-800/40 flex-shrink-0">
-              <Sparkles className="w-3 h-3" />{variants.find((v) => v.id === model)?.label ?? model}
-            </span>
-
             {/* Export */}
             {messages.length > 0 && (
               <button onClick={exportConversation} className="btn-ghost p-1.5 flex-shrink-0" title="Export as Markdown">
@@ -1336,17 +1373,29 @@ export default function ChatPage() {
         )}
 
         {/* Messages */}
-        <div className="flex-1 relative min-h-0">
-        <div ref={scrollRef} onScroll={onMessagesScroll} className="h-full overflow-y-auto px-4 py-4 space-y-5">
-          {messages.length === 0 && (
-            <div className="flex flex-col items-center justify-center h-full text-gray-600 gap-3">
-              <Bot className="w-12 h-12" />
-              <p className="text-lg font-medium text-gray-500">Start a conversation</p>
-              <p className="text-sm text-center max-w-sm">
-                {activeKb ? `Grounded in "${activeKb.name}" — answers cite your documents.` : 'Pick a model and start chatting.'}
-              </p>
+        {messages.length === 0 ? (
+          <div ref={scrollRef} className="flex-1 flex flex-col items-center justify-center px-4">
+            <div className="max-w-lg w-full text-center space-y-4">
+              <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-primary-500/20 to-secondary-500/20 flex items-center justify-center">
+                <AiSparkle size={32} active />
+              </div>
+              <div>
+                {greetingLoading ? (
+                  <div className="flex flex-col items-center justify-center gap-3 py-6">
+                    <span className="inline-block w-5 h-5 border-2 border-gray-600 border-t-primary-400 rounded-full animate-spin" />
+                    <span className="text-sm text-gray-500">Thinking of a greeting…</span>
+                  </div>
+                ) : (
+                  <>
+                    <h1 className="text-2xl font-semibold text-gray-100 leading-relaxed">{greeting}</h1>
+                    <p className="text-sm text-gray-500 mt-3 max-w-md mx-auto">
+                      I'm NebulaX — code, write, analyze, create. Pick a model and start chatting.
+                    </p>
+                  </>
+                )}
+              </div>
               {variants.some(v => v.ready) && (
-                <div className="flex flex-wrap gap-2 mt-2 justify-center">
+                <div className="flex flex-wrap gap-2 justify-center pt-1">
                   {variants.filter(v => v.ready).map(v => {
                     const Icon = VARIANT_ICONS[v.id] || Sparkles
                     return (
@@ -1360,42 +1409,48 @@ export default function ChatPage() {
                 </div>
               )}
             </div>
-          )}
+            <div ref={bottomRef} />
+          </div>
+        ) : (
+          <div className="flex-1 relative min-h-0">
+            <div ref={scrollRef} onScroll={onMessagesScroll} className="h-full overflow-y-auto py-4">
+              <div className="max-w-3xl mx-auto space-y-5 px-4">
+                {messages.map((msg, i) => (
+                  <MessageBubble
+                    key={i} msg={msg} index={i}
+                    isLast={i === messages.length - 1}
+                    isActive={(streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
+                    streamPhase={streamPhase} warmingModel={warmingModel} sending={sending}
+                    onRegenerate={regenerate}
+                    isCliActive={!!activeCli && (streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
+                    activity={i === messages.length - 1 ? streamActivity : null}
+                    activitySince={i === messages.length - 1 ? activitySince : null}
+                    reasoningPhase={reasoningPhase && i === messages.length - 1}
+                  />
+                ))}
 
-          {messages.map((msg, i) => (
-            <MessageBubble
-              key={i} msg={msg} index={i}
-              isLast={i === messages.length - 1}
-              isActive={(streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
-              streamPhase={streamPhase} warmingModel={warmingModel} sending={sending}
-              onRegenerate={regenerate}
-              isCliActive={!!activeCli && (streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
-              activity={i === messages.length - 1 ? streamActivity : null}
-              activitySince={i === messages.length - 1 ? activitySince : null}
-              reasoningPhase={reasoningPhase && i === messages.length - 1}
-            />
-          ))}
+                {isStreaming && (
+                  <div className="flex justify-center">
+                    <button onClick={stopGeneration} className="btn-secondary text-xs gap-1.5 py-1.5">
+                      <Square className="w-3 h-3 fill-current" />Stop generating
+                    </button>
+                  </div>
+                )}
 
-          {isStreaming && (
-            <div className="flex justify-center">
-              <button onClick={stopGeneration} className="btn-secondary text-xs gap-1.5 py-1.5">
-                <Square className="w-3 h-3 fill-current" />Stop generating
-              </button>
+                <div ref={bottomRef} />
+              </div>
             </div>
-          )}
-
-          <div ref={bottomRef} />
-        </div>
-          {showJump && (
-            <button onClick={jumpToLatest}
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 inline-flex items-center gap-1.5 rounded-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 text-xs py-1.5 px-3 shadow-lg transition-colors">
-              <ChevronDown className="w-3.5 h-3.5" /> Jump to latest
-            </button>
-          )}
-        </div>
+            {showJump && (
+              <button onClick={jumpToLatest}
+                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 inline-flex items-center gap-1.5 rounded-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 text-xs py-1.5 px-3 shadow-lg transition-colors">
+                <ChevronDown className="w-3.5 h-3.5" /> Jump to latest
+              </button>
+            )}
+          </div>
+        )}
 
         {/* Attachment preview */}
-        {attachment && (
+        {attachment && messages.length > 0 && (
           <div className="px-4 py-2 border-t border-gray-800 bg-gray-900/60 flex items-center gap-3">
             {attachment.preview ? <img src={attachment.preview} alt="attachment" className="w-10 h-10 object-cover rounded" /> : <FileText className="w-5 h-5 text-gray-500 flex-shrink-0" />}
             <span className="text-xs text-gray-400 flex-1 truncate">{attachment.name}</span>
@@ -1404,7 +1459,7 @@ export default function ChatPage() {
         )}
 
         {/* Input bar */}
-        <div className="px-4 py-3 border-t border-gray-800 bg-gray-900">
+        <div className={messages.length === 0 ? 'px-4 pb-8 pt-2' : 'px-4 py-3 border-t border-gray-800 bg-gray-900'}>
           {isGuest && guestBlocked ? (
             <div className="max-w-xl mx-auto text-center py-3 px-4 rounded-xl border border-primary-800/50 bg-primary-900/20">
               <Lock className="w-5 h-5 text-primary-400 mx-auto mb-2" />
@@ -1416,7 +1471,7 @@ export default function ChatPage() {
               </div>
             </div>
           ) : (
-          <div className="flex items-end gap-2 max-w-4xl mx-auto">
+          <div className={clsx('flex items-end gap-2 mx-auto', messages.length === 0 ? 'max-w-xl bg-gray-800/40 border border-gray-700/50 rounded-xl px-4 py-3.5 shadow-lg shadow-black/10' : 'max-w-3xl bg-gray-800/30 border border-gray-700/40 rounded-xl px-3 py-2')}>
             <input ref={fileInputRef} type="file" accept="image/*,.pdf,.txt,.md" className="hidden" onChange={handleFile} />
             {!isGuest && (
               <button onClick={() => fileInputRef.current?.click()} className="btn-ghost p-2 flex-shrink-0" title="Attach file or image">
@@ -1428,7 +1483,7 @@ export default function ChatPage() {
             </button>
             <textarea
               ref={textareaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder={listening ? 'Recording… click the mic to stop' : transcribing ? 'Transcribing…' : 'Message… (Enter to send, Shift+Enter for newline)'}
+              placeholder={listening ? 'Recording… click the mic to stop' : transcribing ? 'Transcribing…' : messages.length === 0 ? 'What would you like to know?' : 'Message… (Enter to send, Shift+Enter for newline)'}
               rows={1} style={{ maxHeight: '200px' }} className="input flex-1 resize-none leading-relaxed"
             />
             {isStreaming ? (

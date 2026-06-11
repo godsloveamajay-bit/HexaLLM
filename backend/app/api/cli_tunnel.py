@@ -55,10 +55,10 @@ _registry: Dict[int, Dict[str, _CliSession]] = {}
 def _user_from_token(token: str, db: Session) -> Optional[User]:
     try:
         from ..core.config import settings
-        from jose import jwt, JWTError
+        from jose import jwt
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
         user_id = int(payload["sub"])
-        return db.query(User).filter(User.id == user_id, User.is_active == True).first()
+        return db.query(User).filter(User.id == user_id, User.is_active).first()
     except Exception:
         return None
 

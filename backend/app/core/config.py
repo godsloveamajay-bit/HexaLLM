@@ -1,5 +1,4 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
 
 
 class Settings(BaseSettings):
@@ -55,6 +54,12 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = "noreply@nebulaxai.local"
     APP_URL: str = "https://ai.nebualax.co.uk"
+
+    # PayPal — leave blank to disable billing features
+    PAYPAL_CLIENT_ID: str = ""
+    PAYPAL_CLIENT_SECRET: str = ""
+    PAYPAL_WEBHOOK_ID: str = ""
+    PAYPAL_SANDBOX: bool = True
 
     class Config:
         env_file = ".env"

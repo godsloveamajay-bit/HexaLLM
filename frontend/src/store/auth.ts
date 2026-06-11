@@ -1,6 +1,15 @@
 import { create } from 'zustand'
 import api from '../lib/api'
 
+interface SubscriptionBrief {
+  id: number
+  plan?: { id: number; name: string; slug: string }
+  status: string
+  interval: string
+  current_period_end?: string
+  cancel_at_period_end: boolean
+}
+
 interface User {
   id: number
   email: string
@@ -18,6 +27,9 @@ interface User {
   ai_default_kb_id?: number | null
   ai_reasoning?: boolean | null
   ai_personality?: Record<string, number> | null
+  // Billing
+  plan_id?: number | null
+  subscription?: SubscriptionBrief | null
 }
 
 interface AuthState {

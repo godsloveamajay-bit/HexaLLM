@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react'
-import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, ExternalLink, Lock, Palette, Sun, Moon, MonitorSmartphone, Sparkles } from 'lucide-react'
+import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, ExternalLink, Lock, Palette, Sun, Moon, MonitorSmartphone, Sparkles, CreditCard, Zap } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
+import { useNavigate } from 'react-router-dom'
 import { isTauri, isCapacitor } from '../lib/platform'
 import { useTheme, type Theme } from '../lib/theme'
 
@@ -16,6 +17,7 @@ type UpdateStatus = 'idle' | 'checking' | 'found' | 'none'
 
 export default function SettingsPage() {
   const { user, fetchMe } = useAuth()
+  const navigate = useNavigate()
   const [theme, setTheme, resolvedTheme] = useTheme()
   const [form, setForm] = useState({
     full_name: user?.full_name || '',
@@ -434,6 +436,24 @@ export default function SettingsPage() {
             </button>
           </div>
         )}
+      </div>
+
+      {/* Plan / Billing */}
+      <div className="card">
+        <h2 className="font-semibold text-gray-100 mb-4">Plan & Billing</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          {user?.subscription
+            ? "You're on the " + (user.subscription.plan?.name || 'Hyper') + ' plan (' + user.subscription.status + ').'
+            : 'You are on the Free plan.'}
+        </p>
+        <button onClick={() => navigate('/billing')} className="btn-secondary">
+          <CreditCard className="w-4 h-4" />
+          Manage Billing
+        </button>
+        <button onClick={() => navigate('/pricing')} className="btn-secondary ml-2">
+          <Zap className="w-4 h-4" />
+          View Plans
+        </button>
       </div>
 
       {/* Account info */}

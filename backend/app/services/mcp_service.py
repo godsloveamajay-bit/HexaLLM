@@ -3,9 +3,8 @@
 Connects to MCP servers over HTTP/SSE transport and dispatches tool calls.
 Follows the MCP spec: list tools via GET /tools, call via POST /tools/call.
 """
-import asyncio
 import json
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import httpx
 
 
