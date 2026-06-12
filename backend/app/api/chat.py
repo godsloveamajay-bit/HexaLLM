@@ -579,9 +579,9 @@ async def chat_completions(
     if web_active and req.max_tokens is None and (eff_max is None or eff_max > WEB_MAX_PREDICT):
         eff_max = WEB_MAX_PREDICT
 
-    # In-chat text-to-image / text-to-video: "generate an image/video of …" works
+    # In-chat text-to-image: "generate an image of …" works
     # in ANY chat. Skip when an image is attached (that's a vision query) or during
-    # a CLI agent run. Video is checked first so "video of …" doesn't match image.
+    # a CLI agent run.
     img_prompt = None
     if not images and not req.cli_session_id and not is_guest:
         img_prompt = model_router.detect_image_request(_last_user)

@@ -116,9 +116,7 @@ export default function SharePage() {
                       <ReactMarkdown
                         remarkPlugins={[remarkMath, remarkGfm]}
                         urlTransform={(url) =>
-                          url.startsWith('data:image/') || url.startsWith('data:video/')
-                            ? url
-                            : defaultUrlTransform(url)
+                          url.startsWith('data:') ? url : defaultUrlTransform(url)
                         }
                         components={{
                           inlineMath({ value }: { value: string }) {
@@ -140,18 +138,6 @@ export default function SharePage() {
                             )
                           },
                           img({ src, alt }: { src?: string; alt?: string }) {
-                            if (typeof src === 'string' && src.startsWith('data:video/')) {
-                              return (
-                                <video
-                                  src={src}
-                                  controls
-                                  loop
-                                  playsInline
-                                  className="rounded-lg border border-gray-700/60 max-w-full my-2"
-                                  style={{ maxHeight: '512px' }}
-                                />
-                              )
-                            }
                             return (
                               <img
                                 src={src}

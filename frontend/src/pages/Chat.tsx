@@ -365,9 +365,7 @@ function MessageBubble({
               <ReactMarkdown
                 remarkPlugins={[remarkMath, remarkGfm]}
                 urlTransform={(url) =>
-                  url.startsWith('data:image/') || url.startsWith('data:video/')
-                    ? url
-                    : defaultUrlTransform(url)
+                  url.startsWith('data:') ? url : defaultUrlTransform(url)
                 }
                 components={{
                   inlineMath: InlineMath,
@@ -380,20 +378,6 @@ function MessageBubble({
                       : <code className={className}>{children}</code>
                   },
                   img({ src, alt }: { src?: string; alt?: string }) {
-                    // Generated videos arrive via image markdown with a video data
-                    // URL — render them as a real <video> player instead of <img>.
-                    if (typeof src === 'string' && src.startsWith('data:video/')) {
-                      return (
-                        <video
-                          src={src}
-                          controls
-                          loop
-                          playsInline
-                          className="rounded-lg border border-gray-700/60 max-w-full my-2"
-                          style={{ maxHeight: '512px' }}
-                        />
-                      )
-                    }
                     return (
                       <img
                         src={src}
