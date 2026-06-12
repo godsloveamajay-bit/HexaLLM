@@ -12,7 +12,7 @@ from .core.database import Base, engine
 from .models import user, model, chat, knowledge, template, memory, persona, workflow, mcp_server, tool, billing, ip_whitelist  # noqa: F401
 from .api import (
     auth, models, chat as chat_api, agents, analytics,
-    knowledge as knowledge_api, image as image_api, video as video_api,
+    knowledge as knowledge_api, image as image_api,
     templates as templates_api, memory as memory_api,
     personas as personas_api, workflows as workflows_api,
     openai_compat, mcp as mcp_api, cli_tunnel as cli_tunnel_api,
@@ -186,7 +186,6 @@ app.include_router(agents.router,         prefix="/api/v1")
 app.include_router(analytics.router,      prefix="/api/v1")
 app.include_router(knowledge_api.router,  prefix="/api/v1")
 app.include_router(image_api.router,      prefix="/api/v1")
-app.include_router(video_api.router,       prefix="/api/v1")
 app.include_router(templates_api.router,  prefix="/api/v1")
 app.include_router(memory_api.router,     prefix="/api/v1")
 app.include_router(personas_api.router,   prefix="/api/v1")

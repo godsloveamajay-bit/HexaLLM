@@ -225,37 +225,6 @@ _IMG_DRAW_RE = re.compile(
 # Explicit slash command.
 _IMG_SLASH_RE = re.compile(r"^\s*/(?:image|imagine|img|draw|gen)\s+(.+)", re.IGNORECASE | re.DOTALL)
 
-# ── Text-to-video detection (checked BEFORE image so "video of …" wins) ──
-_VID_EXPLICIT_RE = re.compile(
-    r"^\s*(?:please\s+|pls\s+|hey,?\s+)?"
-    r"(?:can|could|would)?\s*(?:you\s+)?"
-    r"(?:generate|create|make|render|produce|animate|give me|show me)\s+"
-    r"(?:me\s+)?(?:an?|some|a\s+few|a\s+short)?\s*"
-    r"(?:video|clip|animation|movie|gif|footage|reel)s?"
-    r"\s*(?:of|showing|depicting|featuring|with|that shows?|about|for|[:\-,])\s*(.+)",
-    re.IGNORECASE | re.DOTALL,
-)
-# Verb that implies video output directly: "animate … X".
-_VID_VERB_RE = re.compile(
-    r"^\s*(?:please\s+|pls\s+)?(?:can|could|would)?\s*(?:you\s+)?"
-    r"animate\s+(?:me\s+)?(?:an?|some)?\s*(.+)",
-    re.IGNORECASE | re.DOTALL,
-)
-# Explicit slash command.
-_VID_SLASH_RE = re.compile(r"^\s*/(?:video|vid|clip|animate)\s+(.+)", re.IGNORECASE | re.DOTALL)
-
-
-def detect_video_request(text: str) -> Optional[str]:
-    """If the message is a text-to-video request, return the video prompt
-    (whitespace-collapsed, single line); else None."""
-    for rx in (_VID_SLASH_RE, _VID_EXPLICIT_RE, _VID_VERB_RE):
-        m = rx.match(text or "")
-        if m:
-            prompt = " ".join(m.group(1).split()).strip().strip("\"'.")
-            if len(prompt) >= 2:
-                return prompt
-    return None
-
 
 def detect_image_request(text: str) -> Optional[str]:
     """If the message is a text-to-image request, return the image prompt
