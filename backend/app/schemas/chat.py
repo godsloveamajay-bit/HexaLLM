@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
@@ -25,6 +25,7 @@ class ChatRequest(BaseModel):
     personality: Optional[Dict[str, int]] = None  # Personality Engine sliders (0–100)
     regenerate: bool = False                 # re-roll the last answer: replace it in history, don't re-append the user turn
     web_search: bool = False                 # ground the answer with live web results
+    ollama_options: Optional[Dict[str, Any]] = None  # advanced Ollama generation params (Hyper+ plan)
 
 
 class ChatSessionCreate(BaseModel):
@@ -66,6 +67,8 @@ class AgentTaskCreate(BaseModel):
     system_prompt: Optional[str] = None
     mcp_server_ids: List[int] = []
     generated_tool_ids: List[int] = []
+    subagent_model: Optional[str] = None
+    subagent_max_depth: Optional[int] = None
 
 
 class AgentStepOut(BaseModel):

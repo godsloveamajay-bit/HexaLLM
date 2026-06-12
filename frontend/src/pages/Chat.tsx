@@ -5,6 +5,7 @@ import {
   X, Paperclip, Share2, BookMarked, Clipboard, ClipboardCheck,
   Mic, MicOff, Square, Download, RotateCcw, Search, Terminal,
   ChevronRight, Wrench, Lock, Sparkle, SlidersHorizontal, Globe, Sigma,
+  Sliders,
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../store/auth'
@@ -15,7 +16,7 @@ import AiSparkle from '../components/AiSparkle'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkMath from 'remark-math'
 import remarkGfm from 'remark-gfm'
-import rehypeKatex from 'rehype-katex'
+import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -100,6 +101,16 @@ interface StreamEntry {
   onComplete: Array<(c: string, ci: Citation[], r: RouteInfo | undefined, u: StreamEntry['usage'], l: number) => void>
 }
 const liveStreams = new Map<number, StreamEntry>()
+
+// ── Math renderer (inline $…$ and block $$…$$) ──────────────────────────
+function InlineMath({ value }: { value: string }) {
+  const html = katex.renderToString(value, { throwOnError: false, displayMode: false })
+  return <span dangerouslySetInnerHTML={{ __html: html }} />
+}
+function BlockMath({ value }: { value: string }) {
+  const html = katex.renderToString(value, { throwOnError: false, displayMode: true })
+  return <span dangerouslySetInnerHTML={{ __html: html }} />
+}
 
 // ── Code block with copy button ───────────────────────────────────────────
 function CodeBlock({ language, children }: { language?: string; children: string }) {
@@ -332,9 +343,10 @@ function MessageBubble({
             <div className="bg-gray-800/30 rounded-xl px-4 py-3 prose prose-sm">
               <ReactMarkdown
                 remarkPlugins={[remarkMath, remarkGfm]}
-                rehypePlugins={[rehypeKatex]}
                 components={{
-                  code({ className, children }) {
+                  inlineMath: InlineMath,
+                  math: BlockMath,
+                  code({ className, children }: { className?: string; children?: React.ReactNode }) {
                     const code = String(children).replace(/\n$/, '')
                     return (
                       <code className={className || 'bg-gray-800 text-primary-300 px-1.5 py-0.5 rounded-md text-[0.85em] font-mono'}>
@@ -342,7 +354,7 @@ function MessageBubble({
                       </code>
                     )
                   },
-                }}
+                } as any}
               >
                 {clean}
               </ReactMarkdown>
@@ -352,21 +364,22 @@ function MessageBubble({
             <div className="bg-gray-800/30 rounded-xl px-4 py-3 prose prose-sm">
               <ReactMarkdown
                 remarkPlugins={[remarkMath, remarkGfm]}
-                rehypePlugins={[rehypeKatex]}
                 urlTransform={(url) =>
                   url.startsWith('data:image/') || url.startsWith('data:video/')
                     ? url
                     : defaultUrlTransform(url)
                 }
                 components={{
-                  code({ className, children }) {
+                  inlineMath: InlineMath,
+                  math: BlockMath,
+                  code({ className, children }: { className?: string; children?: React.ReactNode }) {
                     const lang = /language-(\w+)/.exec(className || '')?.[1]
                     const code = String(children).replace(/\n$/, '')
                     return lang
                       ? <CodeBlock language={lang}>{code}</CodeBlock>
                       : <code className={className}>{children}</code>
                   },
-                  img({ src, alt }) {
+                  img({ src, alt }: { src?: string; alt?: string }) {
                     // Generated videos arrive via image markdown with a video data
                     // URL — render them as a real <video> player instead of <img>.
                     if (typeof src === 'string' && src.startsWith('data:video/')) {
@@ -391,7 +404,7 @@ function MessageBubble({
                       />
                     )
                   },
-                }}
+                } as any}
               >
                 {clean}
               </ReactMarkdown>
@@ -453,8 +466,8 @@ function MessageBubble({
         </div>
       ) : (
         <div className="max-w-3xl">
-          <div className="px-1 py-1 text-sm">
-            <p className="whitespace-pre-wrap text-gray-100">{msg.content}</p>
+          <div className="px-1 py-1 text-sm prose prose-sm prose-invert max-w-none">
+            <ReactMarkdown remarkPlugins={[remarkMath]} components={{ inlineMath: InlineMath, math: BlockMath } as any}>{msg.content}</ReactMarkdown>
           </div>
           {/* Copy for user message */}
           {msg.content && (
@@ -523,6 +536,11 @@ export default function ChatPage() {
   const [activeCli, setActiveCli] = useState<string>('')
   const [greeting, setGreeting] = useState<string | null>(null)
   const [greetingLoading, setGreetingLoading] = useState(false)
+
+  // Raw model access (Hyper+ plans) + advanced Ollama params
+  const hasRawAccess = !!user?.is_admin || user?.subscription?.plan?.slug === 'hyper' || user?.subscription?.plan?.slug === 'supreme'
+  const [ollamaOptions, setOllamaOptions] = useState<Record<string, any>>({})
+  const [showAdvanced, setShowAdvanced] = useState(false)
 
   const bottomRef    = useRef<HTMLDivElement>(null)
   const scrollRef    = useRef<HTMLDivElement>(null)
@@ -612,6 +630,8 @@ export default function ChatPage() {
   const loadOllamaModels = async () => {
     try { const { data } = await api.get('/models/ollama/list'); setOllamaModels((data.models || []).map((m: any) => m.name)) } catch {}
   }
+  // Re-fetch raw models when access level changes
+  useEffect(() => { if (hasRawAccess) loadOllamaModels() }, [hasRawAccess])
 
   // Auto-scroll to the newest message ONLY when the user is already near the
   // bottom. Otherwise streaming tokens (which update `messages` constantly) kept
@@ -808,7 +828,7 @@ export default function ChatPage() {
       const resp = await fetch(`${baseURL}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), ...(personalityActive(personality) ? { personality } : {}), ...(opts.regenerate ? { regenerate: true } : {}), ...(webSearch ? { web_search: true } : {}), knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null }),
+        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), ...(personalityActive(personality) ? { personality } : {}), ...(opts.regenerate ? { regenerate: true } : {}), ...(webSearch ? { web_search: true } : {}), knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null, ...(Object.keys(ollamaOptions).length > 0 ? { ollama_options: ollamaOptions } : {}) }),
         signal: abortRef.current.signal,
       })
 
@@ -990,6 +1010,19 @@ export default function ChatPage() {
     const blob = new Blob([`# ${title}\n\n${md}`], { type: 'text/markdown' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
     a.download = `${title.replace(/[^a-z0-9]+/gi, '-').toLowerCase()}.md`; a.click()
+  }
+
+  // ── Insert math delimiters at cursor ───────────────────────────────────
+  const insertMath = () => {
+    const ta = textareaRef.current
+    if (!ta) return
+    const start = ta.selectionStart
+    const end = ta.selectionEnd
+    const sel = input.slice(start, end)
+    const wrapped = sel ? `$$${sel}$$` : '$$  $$'
+    const cursorPos = sel ? start + wrapped.length - 2 : start + 3
+    setInput(input.slice(0, start) + wrapped + input.slice(end))
+    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(cursorPos, cursorPos) })
   }
 
   // ── Voice input (record → server-side Whisper transcription) ───────────
@@ -1211,7 +1244,7 @@ export default function ChatPage() {
               <optgroup label="NebulaX (smart routing)">
                 {variants.map((v) => <option key={v.id} value={v.id} disabled={!v.ready}>{v.label}{v.ready ? '' : ' (unavailable)'}</option>)}
               </optgroup>
-              {user?.is_admin && ollamaModels.length > 0 && (
+              {hasRawAccess && ollamaModels.length > 0 && (
                 <optgroup label="Models (direct)">
                   {ollamaModels.map((m) => <option key={m} value={m}>{m}</option>)}
                 </optgroup>
@@ -1275,6 +1308,13 @@ export default function ChatPage() {
                   {personalityActive(personality) && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary-400" />}
                 </button>
               )}
+              {hasRawAccess && (
+                <button onClick={() => setShowAdvanced(!showAdvanced)} className={clsx('btn-ghost text-xs gap-1 p-1.5', showAdvanced && 'bg-primary-900/30')} title="Advanced Ollama params">
+                  <Sliders className="w-3.5 h-3.5" />
+                  <span className="hidden sm:inline">Params</span>
+                  {Object.keys(ollamaOptions).length > 0 && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary-400" />}
+                </button>
+              )}
               {showTemplates && (
                 <div className="absolute right-0 top-full mt-1 w-72 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 p-3 space-y-2">
                   <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Saved templates</p>
@@ -1289,8 +1329,59 @@ export default function ChatPage() {
                     <div className="pt-2 border-t border-gray-800 flex gap-2">
                       <input value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="Template name…" className="input text-xs flex-1 py-1" onKeyDown={e => e.key === 'Enter' && saveTemplate()} />
                       <button onClick={saveTemplate} className="btn-primary text-xs px-2 py-1">Save</button>
-                    </div>
+          </div>
+        )}
+
+        {hasRawAccess && showAdvanced && (
+          <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/50">
+            <p className="text-xs font-semibold text-gray-300 mb-3 flex items-center gap-1.5">
+              <Sliders className="w-3.5 h-3.5 text-primary-400" /> Advanced Ollama Params
+            </p>
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+              {[
+                { key: 'num_ctx', label: 'Context Length', type: 'number', min: 2048, max: 65536, step: 2048 },
+                { key: 'top_k', label: 'Top K', type: 'number', min: 1, max: 100, step: 1 },
+                { key: 'repeat_penalty', label: 'Repeat Penalty', type: 'number', min: 0.1, max: 2, step: 0.1 },
+                { key: 'frequency_penalty', label: 'Freq Penalty', type: 'number', min: 0, max: 2, step: 0.1 },
+                { key: 'presence_penalty', label: 'Presence Penalty', type: 'number', min: 0, max: 2, step: 0.1 },
+                { key: 'seed', label: 'Seed (0=random)', type: 'number', min: 0, max: 2147483647, step: 1 },
+                { key: 'mirostat', label: 'Mirostat', type: 'select', options: [{value: 0, label: 'Off'}, {value: 1, label: 'Mirostat 1'}, {value: 2, label: 'Mirostat 2'}] },
+              ].map(({ key, label, type, min, max, step, options }) => (
+                <div key={key}>
+                  <label className="text-xs text-gray-500 block mb-0.5">{label}</label>
+                  {type === 'select' ? (
+                    <select
+                      value={typeof ollamaOptions[key] === 'number' ? ollamaOptions[key] as number : 0}
+                      onChange={(e) => setOllamaOptions(o => ({...o, [key]: parseInt(e.target.value)}))}
+                      className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 w-full"
+                    >
+                      {options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  ) : (
+                    <input
+                      type={type} min={min} max={max} step={step}
+                      value={typeof ollamaOptions[key] === 'number' ? ollamaOptions[key] as number : ''}
+                      onChange={(e) => {
+                        const raw = e.target.value
+                        if (raw === '') {
+                          const next = {...ollamaOptions}; delete next[key]; setOllamaOptions(next)
+                        } else {
+                          setOllamaOptions(o => ({...o, [key]: type === 'number' ? parseFloat(raw) : raw}))
+                        }
+                      }}
+                      placeholder="Default"
+                      className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 w-full"
+                    />
                   )}
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2 mt-3">
+              <button onClick={() => setOllamaOptions({})} className="btn-ghost text-xs px-2 py-1 text-gray-500 hover:text-gray-300">Reset all</button>
+              <p className="text-xs text-gray-600">Applies when using direct models. NebulaX variants ignore these.</p>
+            </div>
+          </div>
+        )}
                 </div>
               )}
             </div>
@@ -1480,6 +1571,9 @@ export default function ChatPage() {
             )}
             <button onClick={toggleVoice} disabled={transcribing} className={clsx('btn-ghost p-2 flex-shrink-0 transition-colors', listening && 'text-red-400 bg-red-900/20', transcribing && 'opacity-60 cursor-not-allowed')} title={transcribing ? 'Transcribing…' : listening ? 'Stop recording' : 'Voice input (Whisper)'}>
               {transcribing ? <Loader2 className="w-4 h-4 animate-spin" /> : listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+            <button onClick={insertMath} className="btn-ghost p-2 flex-shrink-0 text-indigo-400 hover:text-cyan-300 transition-colors" title="Insert math ($$ ... $$)">
+              <Sigma className="w-4 h-4" />
             </button>
             <textarea
               ref={textareaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}

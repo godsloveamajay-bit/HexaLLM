@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server, Brain, Terminal, ShieldCheck, ShieldAlert, Wrench } from 'lucide-react'
+import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server, Brain, Terminal, ShieldCheck, ShieldAlert, Wrench, GitBranch, FolderSearch, Clock, Zap } from 'lucide-react'
 import api, { baseURL } from '../lib/api'
 import { loadModelOptions, defaultModelValue, ModelOption } from '../lib/models'
 import { useAuth } from '../store/auth'
@@ -38,9 +38,11 @@ const TOOL_ICONS: Record<string, any> = {
   bash_exec: Terminal,
   read_file: FileText,
   write_file: FileText,
+  list_files: FolderSearch,
+  delegate: GitBranch,
 }
 
-const AVAILABLE_TOOLS = ['web_search', 'code_exec', 'bash_exec', 'read_file', 'write_file']
+const AVAILABLE_TOOLS = ['web_search', 'code_exec', 'bash_exec', 'read_file', 'write_file', 'list_files']
 
 interface Persona {
   id: string
@@ -92,9 +94,37 @@ interface SandboxStatus {
   image: string | null
 }
 
+function SubStepCard({ text }: { text: string }) {
+  const match = text.match(/^\s*Step\s+(\d+):\s+(\S+)\s+→\s+(.*)$/)
+  if (!match) return <pre className="text-xs text-gray-500 pl-4">{text}</pre>
+  const [, num, tool, output] = match
+  const Icon = TOOL_ICONS[tool] || Bot
+  return (
+    <div className="flex items-start gap-2 pl-4 py-1 border-l-2 border-primary-800/30">
+      <Icon className="w-3 h-3 text-primary-400 mt-0.5 flex-shrink-0" />
+      <div className="min-w-0 flex-1">
+        <span className="text-xs text-gray-500">Step {num}</span>{' '}
+        <span className="text-xs text-gray-300 font-medium">{tool}</span>
+        <p className="text-xs text-gray-500 truncate mt-0.5">{output}</p>
+      </div>
+    </div>
+  )
+}
+
 function StepCard({ step }: { step: Step }) {
   const [open, setOpen] = useState(false)
   const Icon = step.tool ? TOOL_ICONS[step.tool] || Bot : Bot
+
+  const isDelegate = step.tool === 'delegate'
+  let delegateResult = ''
+  let delegateSteps: string[] = []
+  if (isDelegate && step.output) {
+    const parts = step.output.split('\n\nSub-agent steps:\n')
+    delegateResult = parts[0] ? parts[0].replace(/^Sub-agent result:\s*/, '') : ''
+    if (parts[1]) {
+      delegateSteps = parts[1].split('\n').filter(l => l.trim() && l.match(/^\s*Step/))
+    }
+  }
 
   return (
     <div className="border border-gray-700/50 rounded-lg overflow-hidden">
@@ -108,10 +138,26 @@ function StepCard({ step }: { step: Step }) {
           <Icon className="w-3 h-3 text-primary-300" />
         </div>
         <span className="text-xs text-gray-500">Step {step.step}</span>
-        <span className="text-xs font-medium text-gray-300 flex-1 truncate">
+        <span className={clsx('text-xs font-medium flex-1 truncate',
+          step.tool === 'delegate' ? 'text-purple-300' : 'text-gray-300'
+        )}>
           {step.tool === 'done' ? 'Finished' : step.tool || 'thinking'}
           {step.thought ? ` — ${step.thought.slice(0, 60)}${step.thought.length > 60 ? '…' : ''}` : ''}
         </span>
+        <div className="flex items-center gap-2 flex-shrink-0">
+          {step.duration_ms != null && step.duration_ms > 0 && (
+            <span className="text-xs text-gray-600 flex items-center gap-0.5" title="Duration">
+              <Clock className="w-3 h-3" />
+              {step.duration_ms >= 1000 ? `${(step.duration_ms / 1000).toFixed(1)}s` : `${step.duration_ms}ms`}
+            </span>
+          )}
+          {step.tokens?.total != null && step.tokens.total > 0 && (
+            <span className="text-xs text-gray-600 flex items-center gap-0.5" title="Tokens">
+              <Zap className="w-3 h-3" />
+              {step.tokens.total}
+            </span>
+          )}
+        </div>
         {open ? <ChevronDown className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" /> : <ChevronRight className="w-3.5 h-3.5 text-gray-600 flex-shrink-0" />}
       </button>
       {open && (
@@ -128,7 +174,21 @@ function StepCard({ step }: { step: Step }) {
               <pre className="bg-gray-900/80 rounded p-2 text-gray-300 overflow-x-auto whitespace-pre-wrap">{step.input}</pre>
             </div>
           )}
-          {step.output && (
+          {isDelegate && delegateResult && (
+            <div>
+              <p className="text-gray-600 mb-0.5 uppercase tracking-wide" style={{ fontSize: '10px' }}>Sub-Agent Result</p>
+              <p className="text-gray-200 whitespace-pre-wrap">{delegateResult}</p>
+            </div>
+          )}
+          {isDelegate && delegateSteps.length > 0 && (
+            <div>
+              <p className="text-gray-600 mb-0.5 uppercase tracking-wide" style={{ fontSize: '10px' }}>Sub-Agent Steps</p>
+              <div className="space-y-0.5">
+                {delegateSteps.map((s, i) => <SubStepCard key={i} text={s} />)}
+              </div>
+            </div>
+          )}
+          {step.output && !isDelegate && (
             <div>
               <p className="text-gray-600 mb-0.5 uppercase tracking-wide" style={{ fontSize: '10px' }}>Output</p>
               <pre className="bg-gray-900/80 rounded p-2 text-gray-300 overflow-x-auto whitespace-pre-wrap max-h-40">{step.output}</pre>
@@ -215,6 +275,8 @@ export default function AgentsPage() {
   const [selectedGenTools, setSelectedGenTools] = useState<number[]>([])
   const [sandboxStatus, setSandboxStatus] = useState<SandboxStatus | null>(null)
   const [flowView, setFlowView] = useState(true)
+  const [subagentModel, setSubagentModel] = useState('')
+  const [subagentMaxDepth, setSubagentMaxDepth] = useState(3)
   const stepsRef = useRef<HTMLDivElement>(null)
 
   const activePersona = PERSONAS.find((p) => p.id === persona) ?? PERSONAS[0]
@@ -263,6 +325,8 @@ export default function AgentsPage() {
           system_prompt: persona === 'custom' ? (customPrompt || undefined) : activePersona.systemPrompt,
           mcp_server_ids: selectedMcp,
           generated_tool_ids: selectedGenTools,
+          subagent_model: subagentModel || undefined,
+          subagent_max_depth: subagentMaxDepth,
         }),
       })
 
@@ -426,6 +490,27 @@ export default function AgentsPage() {
                 <label className="label">Max Steps: {maxSteps}</label>
                 <input type="range" min={3} max={20} value={maxSteps} onChange={(e) => setMaxSteps(+e.target.value)} className="w-full accent-primary-500" />
               </div>
+
+              <details className="group">
+                <summary className="text-xs text-gray-500 cursor-pointer hover:text-gray-400 select-none font-medium">
+                  Sub-Agent Settings
+                </summary>
+                <div className="mt-3 space-y-3">
+                  <div>
+                    <label className="label">Sub-Agent Model (default: llama3.2:3b)</label>
+                    <select value={subagentModel} onChange={(e) => setSubagentModel(e.target.value)} className="input text-xs">
+                      <option value="">Default (llama3.2:3b)</option>
+                      {modelOptions.filter(m => m.value.includes('3b') || m.value.includes('1.5b') || m.value.includes('tiny')).map((m) => (
+                        <option key={m.value} value={m.value}>{m.label}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label">Max Delegation Depth: {subagentMaxDepth}</label>
+                    <input type="range" min={1} max={5} value={subagentMaxDepth} onChange={(e) => setSubagentMaxDepth(+e.target.value)} className="w-full accent-primary-500" />
+                  </div>
+                </div>
+              </details>
 
               {mcpServers.length > 0 && (
                 <div>

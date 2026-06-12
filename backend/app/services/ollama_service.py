@@ -70,6 +70,7 @@ class OllamaService:
         usage: Optional[Dict] = None,
         think: Optional[bool] = None,
         top_p: Optional[float] = None,
+        extra_options: Optional[Dict] = None,
     ) -> AsyncGenerator[str, None]:
         # Ollama's /api/chat takes system messages via the messages array,
         # NOT a top-level "system" field (that's only for /api/generate).
@@ -98,6 +99,8 @@ class OllamaService:
             payload["options"]["num_ctx"] = num_ctx
         if top_p is not None:
             payload["options"]["top_p"] = top_p
+        if extra_options:
+            payload["options"].update(extra_options)
         # think=False suppresses chain-of-thought on reasoning models (deepseek-r1,
         # qwen3) so trivial inputs answer instantly instead of reasoning for minutes.
         # Leave it unset (None) for normal queries / non-reasoning models.

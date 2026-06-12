@@ -1,10 +1,33 @@
 import { useEffect, useState } from 'react'
 import { useSearchParams, useNavigate } from 'react-router-dom'
 import { clsx } from 'clsx'
-import { CreditCard, Loader2, CheckCircle, XCircle, ExternalLink, ArrowLeft, Zap } from 'lucide-react'
+import { CreditCard, Loader2, CheckCircle, XCircle, ExternalLink, ArrowLeft, Zap, ChevronDown } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
+
+const CURRENCIES: Record<string, { label: string; symbol: string; rate: number }> = {
+  USD: { label: 'US Dollar', symbol: '$', rate: 1 },
+  EUR: { label: 'Euro', symbol: '€', rate: 0.92 },
+  GBP: { label: 'British Pound', symbol: '£', rate: 0.79 },
+  CAD: { label: 'Canadian Dollar', symbol: 'CA$', rate: 1.36 },
+  AUD: { label: 'Australian Dollar', symbol: 'A$', rate: 1.53 },
+  JPY: { label: 'Japanese Yen', symbol: '¥', rate: 149 },
+}
+
+const STORAGE_KEY = 'nebulax_currency'
+
+function getSavedCurrency(): string {
+  try { return localStorage.getItem(STORAGE_KEY) || 'USD' } catch { return 'USD' }
+}
+
+function formatPrice(usd: number, c: string): string {
+  const info = CURRENCIES[c]
+  if (!info) return `$${usd.toFixed(2)}`
+  const converted = usd * info.rate
+  if (c === 'JPY') return `${info.symbol}${Math.round(converted).toLocaleString()}`
+  return `${info.symbol}${converted.toFixed(2)}`
+}
 
 interface PlanBrief {
   id: number; name: string; slug: string
@@ -44,6 +67,8 @@ export default function BillingPage() {
   const [state, setState] = useState<BillingState | null>(null)
   const [loading, setLoading] = useState(true)
   const [cancelling, setCancelling] = useState(false)
+  const [currency, setCurrency] = useState(getSavedCurrency)
+  const [showCurrencyMenu, setShowCurrencyMenu] = useState(false)
 
   useEffect(() => {
     if (params.get('success') === 'true') {
@@ -148,13 +173,38 @@ export default function BillingPage() {
 
           {state!.payments.length > 0 && (
             <div className="mt-10">
-              <h3 className="text-sm font-semibold text-secondary uppercase tracking-wider mb-3">Recent Payments</h3>
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-secondary uppercase tracking-wider">Recent Payments</h3>
+                <div className="relative">
+                  <button
+                    onClick={() => setShowCurrencyMenu(!showCurrencyMenu)}
+                    className="flex items-center gap-1 px-2.5 py-1 rounded-lg border border-neutral-600 text-xs text-secondary hover:text-foreground hover:border-neutral-500 transition-colors"
+                  >
+                    {CURRENCIES[currency]?.symbol || '$'} {currency}
+                    <ChevronDown className="w-3 h-3" />
+                  </button>
+                  {showCurrencyMenu && (
+                    <>
+                      <div className="fixed inset-0 z-10" onClick={() => setShowCurrencyMenu(false)} />
+                      <div className="absolute right-0 top-full mt-1 z-20 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl py-1 min-w-[120px]">
+                        {Object.keys(CURRENCIES).map(code => (
+                          <button
+                            key={code}
+                            onClick={() => { setCurrency(code); setShowCurrencyMenu(false) }}
+                            className={clsx('w-full text-left px-3 py-1 text-xs transition-colors', code === currency ? 'text-primary-400' : 'text-secondary hover:text-foreground')}
+                          >{CURRENCIES[code].symbol} {code}</button>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </div>
+              </div>
               <div className="space-y-2">
                 {state!.payments.map(p => (
                   <div key={p.id} className="flex items-center justify-between border border-neutral-700 rounded-lg px-4 py-3 text-sm">
                     <div className="flex items-center gap-2">
                       <CheckCircle className="w-4 h-4 text-green-500" />
-                      <span>{p.currency} {p.amount.toFixed(2)}</span>
+                      <span>{formatPrice(p.amount, currency)}</span>
                     </div>
                     <span className="text-secondary">{new Date(p.paid_at).toLocaleDateString()}</span>
                   </div>

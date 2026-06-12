@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Check, Loader2, ExternalLink, Zap } from 'lucide-react'
+import { Check, Loader2, ExternalLink, Zap, ChevronDown } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
@@ -19,6 +19,33 @@ interface Plan {
   sort_order: number
 }
 
+const CURRENCIES: Record<string, { label: string; symbol: string; rate: number }> = {
+  USD: { label: 'US Dollar', symbol: '$', rate: 1 },
+  EUR: { label: 'Euro', symbol: '€', rate: 0.92 },
+  GBP: { label: 'British Pound', symbol: '£', rate: 0.79 },
+  CAD: { label: 'Canadian Dollar', symbol: 'CA$', rate: 1.36 },
+  AUD: { label: 'Australian Dollar', symbol: 'A$', rate: 1.53 },
+  JPY: { label: 'Japanese Yen', symbol: '¥', rate: 149 },
+}
+
+const STORAGE_KEY = 'nebulax_currency'
+
+function getSavedCurrency(): string {
+  try { return localStorage.getItem(STORAGE_KEY) || 'USD' } catch { return 'USD' }
+}
+
+function saveCurrency(c: string) {
+  try { localStorage.setItem(STORAGE_KEY, c) } catch {}
+}
+
+function formatPrice(usd: number, currency: string): string {
+  const info = CURRENCIES[currency]
+  if (!info) return `$${usd.toFixed(2)}`
+  const converted = usd * info.rate
+  if (currency === 'JPY') return `${info.symbol}${Math.round(converted).toLocaleString()}`
+  return `${info.symbol}${converted.toFixed(2)}`
+}
+
 export default function PricingPage() {
   const { user } = useAuth()
   const navigate = useNavigate()
@@ -26,6 +53,8 @@ export default function PricingPage() {
   const [loading, setLoading] = useState(true)
   const [subscribing, setSubscribing] = useState<string | null>(null)
   const [yearly, setYearly] = useState(false)
+  const [currency, setCurrency] = useState(getSavedCurrency)
+  const [showCurrencyMenu, setShowCurrencyMenu] = useState(false)
 
   useEffect(() => {
     api.get('/billing/plans').then(({ data }) => {
@@ -75,25 +104,56 @@ export default function PricingPage() {
         </p>
       </div>
 
-      <div className="flex items-center justify-center gap-3 mb-10">
-        <span className={clsx('text-sm font-medium', !yearly && 'text-foreground', yearly && 'text-secondary')}>
-          Monthly
-        </span>
-        <button
-          onClick={() => setYearly(!yearly)}
-          className={clsx(
-            'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
-            yearly ? 'bg-primary-600' : 'bg-neutral-600',
+      <div className="flex items-center justify-center gap-6 mb-10 flex-wrap">
+        <div className="flex items-center gap-3">
+          <span className={clsx('text-sm font-medium', !yearly && 'text-foreground', yearly && 'text-secondary')}>
+            Monthly
+          </span>
+          <button
+            onClick={() => setYearly(!yearly)}
+            className={clsx(
+              'relative inline-flex h-6 w-11 items-center rounded-full transition-colors',
+              yearly ? 'bg-primary-600' : 'bg-neutral-600',
+            )}
+          >
+            <span className={clsx(
+              'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
+              yearly ? 'translate-x-6' : 'translate-x-1',
+            )} />
+          </button>
+          <span className={clsx('text-sm font-medium', yearly && 'text-foreground', !yearly && 'text-secondary')}>
+            Yearly <span className="text-xs text-green-500">Save 17%</span>
+          </span>
+        </div>
+
+        <div className="relative">
+          <button
+            onClick={() => setShowCurrencyMenu(!showCurrencyMenu)}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-neutral-600 text-sm text-secondary hover:text-foreground hover:border-neutral-500 transition-colors"
+          >
+            {CURRENCIES[currency]?.symbol || '$'} {currency}
+            <ChevronDown className="w-3.5 h-3.5" />
+          </button>
+          {showCurrencyMenu && (
+            <>
+              <div className="fixed inset-0 z-10" onClick={() => setShowCurrencyMenu(false)} />
+              <div className="absolute right-0 top-full mt-1 z-20 bg-neutral-800 border border-neutral-700 rounded-lg shadow-xl py-1 min-w-[140px]">
+                {Object.entries(CURRENCIES).map(([code, info]) => (
+                  <button
+                    key={code}
+                    onClick={() => { setCurrency(code); saveCurrency(code); setShowCurrencyMenu(false) }}
+                    className={clsx(
+                      'w-full text-left px-3 py-1.5 text-sm transition-colors flex items-center gap-2',
+                      code === currency ? 'text-primary-400 bg-primary-900/20' : 'text-secondary hover:text-foreground hover:bg-neutral-700/50'
+                    )}
+                  >
+                    {info.symbol} {code} — {info.label}
+                  </button>
+                ))}
+              </div>
+            </>
           )}
-        >
-          <span className={clsx(
-            'inline-block h-4 w-4 transform rounded-full bg-white transition-transform',
-            yearly ? 'translate-x-6' : 'translate-x-1',
-          )} />
-        </button>
-        <span className={clsx('text-sm font-medium', yearly && 'text-foreground', !yearly && 'text-secondary')}>
-          Yearly <span className="text-xs text-green-500">Save 17%</span>
-        </span>
+        </div>
       </div>
 
       <div className="grid md:grid-cols-3 gap-6">
@@ -101,10 +161,10 @@ export default function PricingPage() {
           <div className="border border-neutral-700 rounded-xl p-6 flex flex-col">
             <h2 className="text-xl font-semibold mb-1">{freePlan.name}</h2>
             <p className="text-sm text-secondary mb-4">{freePlan.description}</p>
-            <div className="mb-6">
-              <span className="text-3xl font-bold">$0</span>
-              <span className="text-secondary ml-1">/mo</span>
-            </div>
+          <div className="mb-6">
+            <span className="text-3xl font-bold">{formatPrice(0, currency)}</span>
+            <span className="text-secondary ml-1">/mo</span>
+          </div>
             <ul className="space-y-3 mb-8 flex-1">
               {freePlan.features.map((f, i) => (
                 <li key={i} className="flex items-start gap-2 text-sm">
@@ -141,10 +201,10 @@ export default function PricingPage() {
               <h2 className="text-xl font-semibold mb-1">{plan.name}</h2>
               <p className="text-sm text-secondary mb-4">{plan.description}</p>
               <div className="mb-6">
-                <span className="text-3xl font-bold">${price.toFixed(0)}</span>
+                <span className="text-3xl font-bold">{formatPrice(price, currency)}</span>
                 <span className="text-secondary ml-1">/mo</span>
                 {yearly && (
-                  <div className="text-xs text-secondary mt-1">${plan.price_yearly.toFixed(0)} billed yearly</div>
+                  <div className="text-xs text-secondary mt-1">{formatPrice(plan.price_yearly, currency)} billed yearly</div>
                 )}
               </div>
               <ul className="space-y-3 mb-8 flex-1">

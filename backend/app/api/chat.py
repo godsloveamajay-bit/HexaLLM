@@ -739,6 +739,7 @@ async def chat_completions(
                     agen = ollama.chat_stream(
                         eff_model, messages, sys_for_llm, eff_temp, eff_max, eff_ctx,
                         images=images, usage=usage_info, think=eff_think, top_p=eff_top_p,
+                        extra_options=req.ollama_options,
                     )
                     async for kind, value in _stream_with_keepalive(agen):
                         if kind == "ping":
@@ -812,7 +813,7 @@ async def chat_completions(
             full_response = f"⚠️ Image generation failed: {exc}"
     else:
         ns_usage: Dict = {}
-        async for chunk in ollama.chat_stream(eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx, think=eff_think, usage=ns_usage, top_p=eff_top_p):
+        async for chunk in ollama.chat_stream(eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx, think=eff_think, usage=ns_usage, top_p=eff_top_p, extra_options=req.ollama_options):
             full_response += chunk
         if is_guest and guest_ip:
             guest_remaining = _guest_charge_tokens(

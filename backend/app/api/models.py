@@ -233,9 +233,23 @@ def get_training_job(model_id: int, job_id: int, db: Session = Depends(get_db), 
 
 @router.get("/ollama/list")
 async def ollama_list(user: Optional[User] = Depends(get_optional_user)):
-    """Raw underlying Ollama models. This is back-end plumbing, so it's only
-    exposed to admins — regular users work with NebulaX variants instead."""
-    if not (user and user.is_admin):
+    """Raw underlying Ollama models. Admins and users on Hyper+ plans
+    can access raw models directly for advanced use."""
+    can_access = False
+    if user:
+        if user.is_admin:
+            can_access = True
+        else:
+            from ..services.billing_enforcement import get_user_limits
+            from ..core.database import SessionLocal
+            db = SessionLocal()
+            try:
+                limits = get_user_limits(db, user)
+                if limits.get("raw_models"):
+                    can_access = True
+            finally:
+                db.close()
+    if not can_access:
         return {"models": []}
     models = await ollama.list_models()
     return {"models": models}

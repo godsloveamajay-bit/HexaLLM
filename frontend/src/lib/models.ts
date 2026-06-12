@@ -29,9 +29,9 @@ export function prettyModel(value?: string | null): string {
 }
 
 /** Selectable models for the current user.
- *  Everyone gets the NebulaX variants; admins additionally get the raw Ollama
- *  models (back-end plumbing). Variants always come first. */
-export async function loadModelOptions(isAdmin: boolean): Promise<ModelOption[]> {
+ *  Everyone gets the NebulaX variants; admins and Hyper+ users additionally
+ *  get the raw Ollama models. Variants always come first. */
+export async function loadModelOptions(isAdmin: boolean, hasRawAccess?: boolean): Promise<ModelOption[]> {
   const opts: ModelOption[] = []
   try {
     const { data } = await api.get('/models/nebulax/variants')
@@ -40,7 +40,7 @@ export async function loadModelOptions(isAdmin: boolean): Promise<ModelOption[]>
       opts.push({ value: v.id, label: v.label, group: 'NebulaX' })
     }
   } catch {}
-  if (isAdmin) {
+  if (isAdmin || hasRawAccess) {
     try {
       const { data } = await api.get('/models/ollama/list')
       for (const m of chatCapableModels((data.models || []).map((x: any) => x.name))) {

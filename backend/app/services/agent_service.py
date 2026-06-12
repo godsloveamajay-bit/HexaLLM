@@ -5,6 +5,8 @@ import asyncio
 import subprocess
 import tempfile
 import os
+import glob
+import contextvars
 from typing import List, Dict, Any, Optional
 from .ollama_service import ollama
 
@@ -15,7 +17,12 @@ TOOL_DESCRIPTIONS = {
     "bash_exec": "Run a bash shell command and return output. Input: bash command string.",
     "read_file": "Read a file's contents. Input: file path (workspace-relative or absolute).",
     "write_file": 'Write to a file. Input: JSON {"path": "...", "content": "..."}',
+    "list_files": 'List files in a directory or glob pattern. Input: path or glob (e.g. "src/**/*.py"). Max 50 entries, depth limited to 2 levels.',
+    "delegate": 'Delegate a subtask to a sub-agent. Input: JSON {"task": "...", "tools": ["web_search", ...]}. Returns the sub-agent\'s result with nested steps.',
 }
+
+SUBAGENT_MODEL = "llama3.2:3b"
+MAX_SUBAGENT_DEPTH = 3
 
 AGENT_SYSTEM_PROMPT = """\
 You are an autonomous AI agent. Complete tasks step by step using the tools below.
@@ -172,12 +179,76 @@ async def _bash_exec(cmd: str) -> str:
         return f"Bash execution error: {e}"
 
 
+async def _list_files(pattern: str) -> str:
+    try:
+        pattern = pattern.strip() or "."
+        if os.path.isfile(pattern):
+            return pattern
+        if os.path.isdir(pattern):
+            pattern = os.path.join(pattern, "**/*")
+        matches = sorted(glob.glob(pattern, recursive=True))[:50]
+        if not matches:
+            return f"No files matching: {pattern}"
+        lines = []
+        for p in matches:
+            if os.path.isdir(p):
+                lines.append(f"📁 {p}/")
+            else:
+                size = os.path.getsize(p)
+                lines.append(f"📄 {p}  ({size} bytes)")
+        return "\n".join(lines)
+    except Exception as e:
+        return f"List files error: {e}"
+
+
+_agent_ctx = contextvars.ContextVar('agent_ctx', default={})
+
+async def _delegate_subagent(input_str: str) -> str:
+    try:
+        data = json.loads(input_str)
+    except json.JSONDecodeError:
+        data = {"task": input_str}
+    task = data.get("task", input_str)
+    tools = data.get("tools", ["web_search", "code_exec", "bash_exec"])
+    max_sub_steps = data.get("max_steps", 5)
+
+    ctx = _agent_ctx.get()
+    depth = ctx.get("subagent_depth", 0) if ctx else 0
+    max_depth = ctx.get("subagent_max_depth", MAX_SUBAGENT_DEPTH) if ctx else MAX_SUBAGENT_DEPTH
+    model = ctx.get("subagent_model", SUBAGENT_MODEL) if ctx else SUBAGENT_MODEL
+
+    if depth >= max_depth:
+        return f"Sub-agent depth limit ({max_depth}) reached. Cannot delegate further."
+
+    _agent_ctx.set({**ctx, "subagent_depth": depth + 1})
+    try:
+        result = await run_agent(
+            task=task,
+            model=model,
+            tools=tools,
+            max_steps=max_sub_steps,
+            persona_prompt="You are a focused sub-agent. Complete the assigned subtask efficiently. Use tools as needed. Output only the final result without extra commentary.",
+        )
+    finally:
+        _agent_ctx.set(ctx)
+
+    rtext = result.get("result") or result.get("error") or "No result"
+    steps = result.get("steps", [])
+    steps_txt = "\n".join(
+        f"  Step {s['step']}: {s.get('tool', '?')} → {(s.get('output') or '')[:300]}"
+        for s in steps
+    )
+    return f"Sub-agent result: {rtext}\n\nSub-agent steps:\n{steps_txt}"
+
+
 _TOOL_FUNCS = {
     "web_search": _web_search,
     "code_exec": _code_exec,
     "bash_exec": _bash_exec,
     "read_file": _read_file,
     "write_file": _write_file,
+    "list_files": _list_files,
+    "delegate": _delegate_subagent,
 }
 
 
@@ -212,8 +283,20 @@ async def run_agent(
     mcp_clients: Optional[List] = None,   # list of (server_name, MCPClient) tuples
     sandbox=None,                          # Optional[Sandbox] from sandbox_service
     dynamic_tools: Optional[Dict[str, Dict[str, Any]]] = None,  # name -> {"description", "func"}
+    subagent_model: Optional[str] = None,  # model used by sub-agents (default: SUBAGENT_MODEL)
+    subagent_max_depth: Optional[int] = None,  # max delegation depth (default: MAX_SUBAGENT_DEPTH)
 ) -> Dict[str, Any]:
+    # Initialize per-run agent context for sub-agent delegation tracking
+    if not _agent_ctx.get():
+        _agent_ctx.set({
+            "subagent_model": subagent_model or SUBAGENT_MODEL,
+            "subagent_max_depth": subagent_max_depth or MAX_SUBAGENT_DEPTH,
+            "subagent_depth": 0,
+        })
+
     available = {k: TOOL_DESCRIPTIONS[k] for k in tools if k in TOOL_DESCRIPTIONS}
+    if "delegate" not in available:
+        available["delegate"] = TOOL_DESCRIPTIONS["delegate"]
 
     # Build sandbox-aware tool dispatch table
     tool_funcs = dict(_TOOL_FUNCS)
@@ -222,6 +305,7 @@ async def run_agent(
         tool_funcs["bash_exec"] = sandbox.execute_bash
         tool_funcs["write_file"] = sandbox.write_file
         tool_funcs["read_file"] = sandbox.read_file
+        tool_funcs["list_files"] = sandbox.list_files
 
     # Inject human-approved, AI-generated tools (run sandboxed via their func)
     if dynamic_tools:

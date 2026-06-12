@@ -372,7 +372,7 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: '0.13.3',
+    version: '0.13.6',
     date: '2026-06-06',
     summary: 'Web search is dramatically faster and shows live progress instead of looking stuck.',
     changes: [
@@ -625,7 +625,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '0.13.3'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '0.13.6'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 

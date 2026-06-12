@@ -10,6 +10,7 @@ from ..models.workflow import Workflow
 from ..models.chat import RequestLog
 from ..services.agent_service import run_agent
 from ..services.ollama_service import ollama
+from ..services.sandbox_service import Sandbox
 from ..services import model_router
 
 router = APIRouter(prefix="/workflows", tags=["workflows"])
@@ -149,13 +150,18 @@ async def _run_workflow_bg(workflow_id: int, user_id: int):
             except Exception:
                 avail = []
             eff_model = model_router.concrete_for(wf.model, wf.task, avail)
-        result = await run_agent(
-            task=wf.task,
-            model=eff_model,
-            tools=wf.tools or [],
-            max_steps=wf.max_steps,
-            persona_prompt=wf.system_prompt,
-        )
+        sb = Sandbox()
+        try:
+            result = await run_agent(
+                task=wf.task,
+                model=eff_model,
+                tools=wf.tools or [],
+                max_steps=wf.max_steps,
+                persona_prompt=wf.system_prompt,
+                sandbox=sb,
+            )
+        finally:
+            sb.cleanup()
         wf.last_result = result.get("result")
         wf.last_error = result.get("error")
         wf.run_count = (wf.run_count or 0) + 1

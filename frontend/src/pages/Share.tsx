@@ -4,7 +4,7 @@ import { Bot, User, Sparkle, Loader2, AlertCircle } from 'lucide-react'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkMath from 'remark-math'
 import remarkGfm from 'remark-gfm'
-import rehypeKatex from 'rehype-katex'
+import katex from 'katex'
 import 'katex/dist/katex.min.css'
 import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
 import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -115,14 +115,21 @@ export default function SharePage() {
                     <div className="max-w-2xl text-sm text-gray-200 pt-1 prose prose-sm">
                       <ReactMarkdown
                         remarkPlugins={[remarkMath, remarkGfm]}
-                        rehypePlugins={[rehypeKatex]}
                         urlTransform={(url) =>
                           url.startsWith('data:image/') || url.startsWith('data:video/')
                             ? url
                             : defaultUrlTransform(url)
                         }
                         components={{
-                          code({ className, children }) {
+                          inlineMath({ value }: { value: string }) {
+                            const html = katex.renderToString(value, { throwOnError: false, displayMode: false })
+                            return <span dangerouslySetInnerHTML={{ __html: html }} />
+                          },
+                          math({ value }: { value: string }) {
+                            const html = katex.renderToString(value, { throwOnError: false, displayMode: true })
+                            return <span dangerouslySetInnerHTML={{ __html: html }} />
+                          },
+                          code({ className, children }: { className?: string; children?: React.ReactNode }) {
                             const lang = /language-(\w+)/.exec(className || '')?.[1]
                             return lang ? (
                               <SyntaxHighlighter style={oneDark as any} language={lang} PreTag="div">
@@ -132,7 +139,7 @@ export default function SharePage() {
                               <code className={className}>{children}</code>
                             )
                           },
-                          img({ src, alt }) {
+                          img({ src, alt }: { src?: string; alt?: string }) {
                             if (typeof src === 'string' && src.startsWith('data:video/')) {
                               return (
                                 <video
@@ -155,7 +162,7 @@ export default function SharePage() {
                               />
                             )
                           },
-                        }}
+                        } as any}
                       >
                         {msg.content}
                       </ReactMarkdown>
