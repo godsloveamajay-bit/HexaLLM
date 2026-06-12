@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { ImageIcon, Sparkles, Download, RefreshCw, Loader2, X, Wand2, Zap, Cpu } from 'lucide-react'
+import { ImageIcon, Sparkles, Download, RefreshCw, Loader2, X, Wand2 } from 'lucide-react'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -14,7 +14,6 @@ interface GeneratedImage {
   prompt: string
   enhancedPrompt?: string
   seed: number
-  provider?: string
 }
 
 const SIZES = [
@@ -40,16 +39,11 @@ export default function ImageGenPage() {
   const [negativePrompt, setNegativePrompt] = useState('')
   const [size, setSize] = useState(SIZES[0])
   const [models, setModels] = useState<ImageModel[]>([
-    { id: 'flux-realism', name: 'FLUX Realism' },
-    { id: 'flux-anime', name: 'FLUX Anime' },
-    { id: 'flux-3d', name: 'FLUX 3D' },
-    { id: 'flux', name: 'FLUX' },
-    { id: 'turbo', name: 'Turbo' },
+    { id: 'sd3-core', name: 'Stable Diffusion 3.5 Core' },
+    { id: 'sd3-ultra', name: 'Stable Diffusion 3.5 Ultra' },
   ])
-  const [model, setModel] = useState('flux-realism')
-  const [providers, setProviders] = useState<string[]>(['pollinations'])
+  const [model, setModel] = useState('sd3-core')
   const [enhancePrompt, setEnhancePrompt] = useState(false)
-  const [pollinationsEnhance, setPollinationsEnhance] = useState(true)
   const [generating, setGenerating] = useState(false)
   const [enhancing, setEnhancing] = useState(false)
   const [current, setCurrent] = useState<GeneratedImage | null>(null)
@@ -57,26 +51,12 @@ export default function ImageGenPage() {
 
   useEffect(() => {
     api.get('/image/models').then(({ data }) => {
-      const all: ImageModel[] = []
-      const provs: string[] = []
-      if (data.pollinations?.length) {
-        provs.push('pollinations')
-        all.push(...data.pollinations)
-      }
       if (data.stability?.length) {
-        provs.push('stability')
-        all.push(...data.stability)
-      }
-      if (all.length) {
-        setModels(all)
-        setProviders(provs)
-        setModel(all[0].id)
+        setModels(data.stability)
+        setModel(data.stability[0].id)
       }
     }).catch(() => {})
   }, [])
-
-  const isStability = providers.length === 1 && providers[0] === 'stability' ||
-    model.startsWith('sd3-')
 
   const applyPreset = (prefix: string) => {
     setPrompt((p) => {
@@ -100,7 +80,6 @@ export default function ImageGenPage() {
         height: size.h,
         model,
         enhance_prompt: enhancePrompt,
-        pollinations_enhance: pollinationsEnhance,
       })
       setEnhancing(false)
       const img: GeneratedImage = {
@@ -108,7 +87,6 @@ export default function ImageGenPage() {
         prompt: data.prompt,
         enhancedPrompt: data.enhanced_prompt ?? undefined,
         seed: data.seed,
-        provider: data.provider,
       }
       setCurrent(img)
       setHistory((h) => [img, ...h].slice(0, 12))
@@ -148,17 +126,7 @@ export default function ImageGenPage() {
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-100">Image Generation</h1>
-        <p className="text-gray-400 mt-1">
-          Generate images from text
-          {providers.length > 1 && (
-            <span className="text-xs text-gray-600 ml-2">
-              (Pollinations + Stability AI)
-            </span>
-          )}
-          {providers.length === 1 && providers[0] === 'stability' && (
-            <span className="text-xs text-gray-600 ml-2">(Stability AI)</span>
-          )}
-        </p>
+        <p className="text-gray-400 mt-1">Generate images from text using Stability AI</p>
       </div>
 
       <div className="card mb-6">
@@ -230,14 +198,6 @@ export default function ImageGenPage() {
             </div>
           </div>
 
-          {/* Provider badge */}
-          {isStability && (
-            <div className="flex items-center gap-1.5 text-xs text-gray-500">
-              <Cpu className="w-3 h-3" />
-              Using Stability AI — add <code className="text-primary-400">STABILITY_API_KEY</code> to your <code className="text-primary-400">.env</code>
-            </div>
-          )}
-
           <div className="flex flex-wrap gap-4 pt-1">
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
               <div
@@ -258,28 +218,6 @@ export default function ImageGenPage() {
                 <span className="ml-1.5 text-xs text-gray-500">(rewrites with more detail)</span>
               </span>
             </label>
-
-            {!isStability && (
-              <label className="flex items-center gap-2.5 cursor-pointer select-none">
-                <div
-                  onClick={() => setPollinationsEnhance((v) => !v)}
-                  className={clsx(
-                    'relative w-10 h-5 rounded-full transition-colors',
-                    pollinationsEnhance ? 'bg-primary-600' : 'bg-gray-700'
-                  )}
-                >
-                  <span className={clsx(
-                    'absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow transition-transform',
-                    pollinationsEnhance && 'translate-x-5'
-                  )} />
-                </div>
-                <Zap className="w-4 h-4 text-gray-400" />
-                <span className="text-sm text-gray-300">
-                  Quality Boost
-                  <span className="ml-1.5 text-xs text-gray-500">(recommended)</span>
-                </span>
-              </label>
-            )}
 
             <div className="flex items-center ml-auto">
               <button type="submit" disabled={generating || !prompt.trim()} className="btn-primary">
@@ -326,12 +264,7 @@ export default function ImageGenPage() {
               <div className="mt-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm text-gray-300 line-clamp-2">{current.prompt}</p>
-                  <p className="text-xs text-gray-600 mt-0.5">
-                    Seed: {current.seed}
-                    {current.provider && (
-                      <span className="ml-2 capitalize">({current.provider})</span>
-                    )}
-                  </p>
+                  <p className="text-xs text-gray-600 mt-0.5">Seed: {current.seed}</p>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
                   <button
