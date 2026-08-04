@@ -1,8 +1,8 @@
 [package]
-name = "nebulax-ai"
+name = "hexallm-ai"
 version = "0.13.6"
-description = "NebulaX AI — local AI hub"
-authors = ["NebulaX AI"]
+description = "HexaLLM AI — local AI hub"
+authors = ["HexaLLM AI"]
 license = "MIT"
 repository = ""
 edition = "2021"

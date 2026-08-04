@@ -141,7 +141,7 @@ export default function RemoteCLIPage() {
   const runTask = async () => {
     if (!task.trim() || runState.status === 'running') return
     if (sessions.length === 0) {
-      toast.error('No CLI connected. Run `nebula daemon` on your machine.')
+      toast.error('No CLI connected. Run `hexallm daemon` on your machine.')
       return
     }
 
@@ -231,7 +231,7 @@ export default function RemoteCLIPage() {
           Remote CLI
         </h1>
         <p className="text-gray-400 mt-1">
-          Dispatch tasks to a <code className="text-primary-400 text-sm">nebula daemon</code> running on any connected machine.
+          Dispatch tasks to a <code className="text-primary-400 text-sm">hexallm daemon</code> running on any connected machine.
         </p>
       </div>
 
@@ -254,7 +254,7 @@ export default function RemoteCLIPage() {
                 <p className="text-sm">No CLI connected</p>
                 <p className="text-xs">
                   Run on your machine:<br />
-                  <code className="text-primary-400">nebula daemon</code>
+                  <code className="text-primary-400">hexallm daemon</code>
                 </p>
               </div>
             ) : (

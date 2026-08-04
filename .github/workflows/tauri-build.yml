@@ -4,7 +4,7 @@ name: Build & Release
 #   build-tauri          – desktop installers (macOS / Windows / Linux)
 #   build-android        – signed Android APK
 #   publish-updater-json – latest.json for the in-app auto-updater
-#   publish-cli          – NebulaCode CLI wheel+sdist to PyPI (and the release)
+#   publish-cli          – HexaLLM CLI wheel+sdist to PyPI (and the release)
 # One workflow == one release run.
 on:
   push:
@@ -93,13 +93,13 @@ jobs:
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://ai.nebualax.co.uk/api/v1' }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://ai.hexallm.co.uk/api/v1' }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           projectPath: frontend
           tagName: ${{ github.ref_name }}
-          releaseName: NebulaX AI ${{ github.ref_name }}
+          releaseName: HexaLLM AI ${{ github.ref_name }}
           releaseBody: ""
           releaseDraft: false
           prerelease: false
@@ -209,7 +209,7 @@ jobs:
         working-directory: frontend
         run: npm run build
         env:
-          VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://ai.nebualax.co.uk/api/v1' }}
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://ai.hexallm.co.uk/api/v1' }}
 
       - name: Sync Capacitor to Android
         working-directory: frontend
@@ -230,7 +230,7 @@ jobs:
         run: |
           echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" \
             | tr -d '[:space:]' \
-            | base64 -d > /tmp/nebulax.keystore
+            | base64 -d > /tmp/hexallm.keystore
 
       - name: Build release APK
         working-directory: frontend/android
@@ -238,7 +238,7 @@ jobs:
           chmod +x gradlew
           ./gradlew assembleRelease --no-daemon --stacktrace
         env:
-          ANDROID_KEYSTORE_PATH: /tmp/nebulax.keystore
+          ANDROID_KEYSTORE_PATH: /tmp/hexallm.keystore
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           GRADLE_OPTS: "-Dorg.gradle.jvmargs=-Xmx2g"
@@ -250,7 +250,7 @@ jobs:
           APK=$(find frontend/android/app/build/outputs/apk/release -name "*.apk" | head -1)
           [ -f "$APK" ] || (echo "APK not found" && exit 1)
           VERSION="${GITHUB_REF_NAME#v}"
-          NAME="nebulax-ai-${VERSION}-android.apk"
+          NAME="hexallm-ai-${VERSION}-android.apk"
           cp "$APK" "/tmp/$NAME"
           gh release upload "$GITHUB_REF_NAME" "/tmp/$NAME" --clobber --repo "${{ github.repository }}"
           echo "Uploaded: $NAME"
@@ -303,7 +303,7 @@ jobs:
           gh release upload "$TAG" /tmp/latest.json --clobber --repo "$REPO"
           echo "latest.json uploaded successfully"
 
-  # Build the `nebulacode` CLI and publish it to PyPI on the same tag, then
+  # Build the `hexallm` CLI and publish it to PyPI on the same tag, then
   # attach the wheel + sdist to the GitHub Release alongside the installers.
   # Runs in parallel with the desktop/mobile builds (no dependency).
   # Auth: repo secret PYPI_API_TOKEN (a `pypi-…` token). Falls back to PyPI
@@ -354,6 +354,6 @@ jobs:
           # isn't there yet so the upload never races to a missing release.
           gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1 \
             || gh release create "$TAG" --repo "${{ github.repository }}" \
-                 --title "NebulaX AI $TAG" --notes "" --verify-tag || true
+                 --title "HexaLLM AI $TAG" --notes "" --verify-tag || true
           gh release upload "$TAG" dist/*.whl dist/*.tar.gz \
             --clobber --repo "${{ github.repository }}"

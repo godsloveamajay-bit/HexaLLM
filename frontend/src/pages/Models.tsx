@@ -15,26 +15,42 @@ interface Model {
 
 const POPULAR_BASES = ['qwen3:14B', 'llama3:8B', 'openchat:7B', 'Qwen2.5-Coder:7B', 'deepseek-r1:latest', 'mistral:7b', 'gemma2:2b', 'phi3:mini']
 
+function HexMark({ className = 'w-5 h-5' }: { className?: string }) {
+  return (
+    <svg viewBox="0 0 24 24" className={className}>
+      <defs>
+        <linearGradient id="model-hex" x1="0.15" y1="0" x2="0.85" y2="1">
+          <stop offset="0%" stopColor="#4FF3FF" />
+          <stop offset="50%" stopColor="#A78BFA" />
+          <stop offset="100%" stopColor="#3B82F6" />
+        </linearGradient>
+      </defs>
+      <path d="M12 2L20.66 7L20.66 17L12 22L3.34 17L3.34 7Z" fill="url(#model-hex)" />
+      <path d="M12 6.5L16.76 9.25L16.76 14.75L12 17.5L7.24 14.75L7.24 9.25Z" fill="rgb(var(--g-950))" />
+    </svg>
+  )
+}
+
 function ModelCard({ model, onDelete, onLike, isOwner }: { model: Model; onDelete: () => void; onLike: () => void; isOwner: boolean }) {
   const { user } = useAuth()
   // Branded variant label; raw base names are hidden from non-admins.
-  const showBase = user?.is_admin || model.base_model?.startsWith('nebulax:')
+  const showBase = user?.is_admin || model.base_model?.startsWith('hex-')
   return (
-    <div className="card hover:border-gray-700 transition-all fade-in">
+    <div className="card fade-in">
       <div className="flex items-start justify-between gap-3 mb-3">
         <div className="flex items-start gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-lg bg-gradient-to-br from-primary-600 to-secondary-600 flex items-center justify-center flex-shrink-0">
-            <Cpu className="w-5 h-5 text-white" />
+          <div className="w-10 h-10 rounded-xl bg-gray-800 ring-1 ring-gray-700/60 flex items-center justify-center flex-shrink-0">
+            <HexMark />
           </div>
           <div className="min-w-0">
-            <h3 className="font-semibold text-gray-100 truncate">{model.name}</h3>
+            <h3 className="font-display font-semibold text-gray-100 truncate">{model.name}</h3>
             <p className="text-xs text-gray-500 flex items-center gap-1">
               <User className="w-3 h-3" />{model.owner_username}
             </p>
           </div>
         </div>
         <div className="flex items-center gap-1.5 flex-shrink-0">
-          {model.is_fine_tuned && <span className="badge bg-secondary-900/40 text-secondary-300">fine-tuned</span>}
+          {model.is_fine_tuned && <span className="badge bg-secondary-400/10 text-secondary-300 ring-secondary-400/30">fine-tuned</span>}
           {model.is_public
             ? <span className="badge bg-green-900/40 text-green-300"><Globe className="w-3 h-3 mr-1" />public</span>
             : <span className="badge bg-gray-800 text-gray-400"><Lock className="w-3 h-3 mr-1" />private</span>}
@@ -44,9 +60,9 @@ function ModelCard({ model, onDelete, onLike, isOwner }: { model: Model; onDelet
       {model.description && <p className="text-sm text-gray-400 mb-3 line-clamp-2">{model.description}</p>}
 
       <div className="flex flex-wrap gap-1.5 mb-3">
-        <span className="badge bg-gray-800 text-gray-400">{showBase ? prettyModel(model.base_model) : 'NebulaX model'}</span>
+        <span className="badge bg-primary-400/10 text-primary-300 ring-primary-400/30">{showBase ? prettyModel(model.base_model) : 'HexaLLM model'}</span>
         {model.parameter_count && <span className="badge bg-gray-800 text-gray-400">{model.parameter_count}</span>}
-        {model.tags.slice(0, 3).map((t) => <span key={t} className="badge bg-primary-900/30 text-primary-400">{t}</span>)}
+        {model.tags.slice(0, 3).map((t) => <span key={t} className="badge bg-secondary-400/10 text-secondary-300 ring-secondary-400/30">{t}</span>)}
       </div>
 
       <div className="flex items-center justify-between text-xs text-gray-500">
@@ -81,7 +97,7 @@ export default function ModelsPage() {
     tags: '', is_public: true, parameter_count: '', system_prompt: '', license: 'MIT',
   })
 
-  // Non-admins build on NebulaX variants, not raw bases.
+  // Non-admins build on HexaLLM variants, not raw bases.
   useEffect(() => {
     loadModelOptions(false).then((opts) => {
       setVariantOpts(opts)

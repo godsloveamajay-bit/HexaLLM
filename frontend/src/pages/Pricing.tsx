@@ -28,7 +28,7 @@ const CURRENCIES: Record<string, { label: string; symbol: string; rate: number }
   JPY: { label: 'Japanese Yen', symbol: '¥', rate: 149 },
 }
 
-const STORAGE_KEY = 'nebulax_currency'
+const STORAGE_KEY = 'hexallm_currency'
 
 function getSavedCurrency(): string {
   try { return localStorage.getItem(STORAGE_KEY) || 'USD' } catch { return 'USD' }
@@ -100,7 +100,7 @@ export default function PricingPage() {
       <div className="text-center mb-12">
         <h1 className="text-3xl font-bold text-foreground mb-3">Choose Your Plan</h1>
         <p className="text-secondary max-w-xl mx-auto">
-          Unlock more features as your needs grow. All plans include access to NebulaX AI's core models.
+          Unlock more features as your needs grow. All plans include access to HexaLLM AI's core models.
         </p>
       </div>
 

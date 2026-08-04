@@ -6,11 +6,11 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=postgresql://nebulaxai:nebulaxai@db:5432/nebulaxai
+      - DATABASE_URL=postgresql://hexallm:hexallm@db:5432/hexallm
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_BASE_URL=http://ollama:11434
       - SECRET_KEY=${SECRET_KEY}
-      - APP_URL=https://ai.nebualax.co.uk
+      - APP_URL=https://ai.hexallm.co.uk
     volumes:
       - ./data/models:/app/models
       - ./data/datasets:/app/datasets
@@ -22,7 +22,7 @@ services:
         condition: service_started
     restart: unless-stopped
     networks:
-      - nebulaxai-network
+      - hexallm-network
 
   worker:
     build:
@@ -30,7 +30,7 @@ services:
       dockerfile: Dockerfile
     command: celery -A app.worker worker --loglevel=info
     environment:
-      - DATABASE_URL=postgresql://nebulaxai:nebulaxai@db:5432/nebulaxai
+      - DATABASE_URL=postgresql://hexallm:hexallm@db:5432/hexallm
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_BASE_URL=http://ollama:11434
     volumes:
@@ -41,19 +41,19 @@ services:
       - db
     restart: unless-stopped
     networks:
-      - nebulaxai-network
+      - hexallm-network
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     environment:
-      - VITE_API_URL=https://ai.nebualax.co.uk
+      - VITE_API_URL=https://ai.hexallm.co.uk
     depends_on:
       - backend
     restart: unless-stopped
     networks:
-      - nebulaxai-network
+      - hexallm-network
 
   cloudflared:
     image: cloudflare/cloudflared:latest
@@ -62,7 +62,7 @@ services:
       - CLOUDFLARE_TUNNEL_TOKEN=${CLOUDFLARE_TUNNEL_TOKEN}
     restart: unless-stopped
     networks:
-      - nebulaxai-network
+      - hexallm-network
     depends_on:
       - frontend
       - backend
@@ -70,19 +70,19 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_USER=nebulaxai
-      - POSTGRES_PASSWORD=nebulaxai
-      - POSTGRES_DB=nebulaxai
+      - POSTGRES_USER=hexallm
+      - POSTGRES_PASSWORD=hexallm
+      - POSTGRES_DB=hexallm
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nebulaxai"]
+      test: ["CMD-SHELL", "pg_isready -U hexallm"]
       interval: 5s
       timeout: 5s
       retries: 5
     restart: unless-stopped
     networks:
-      - nebulaxai-network
+      - hexallm-network
 
   redis:
     image: redis:7-alpine
@@ -90,7 +90,7 @@ services:
       - redisdata:/data
     restart: unless-stopped
     networks:
-      - nebulaxai-network
+      - hexallm-network
 
   ollama:
     image: ollama/ollama:latest
@@ -98,7 +98,7 @@ services:
       - ollama_models:/root/.ollama
     restart: unless-stopped
     networks:
-      - nebulaxai-network
+      - hexallm-network
 
 volumes:
   pgdata:
@@ -106,5 +106,5 @@ volumes:
   ollama_models:
 
 networks:
-  nebulaxai-network:
+  hexallm-network:
     driver: bridge

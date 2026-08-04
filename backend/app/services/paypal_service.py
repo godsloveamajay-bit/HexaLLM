@@ -111,7 +111,7 @@ class PayPalService:
         payload = {
             "plan_id": plan_id,
             "application_context": {
-                "brand_name": "NebulaX AI",
+                "brand_name": "HexaLLM AI",
                 "locale": "en-US",
                 "shipping_preference": "NO_SHIPPING",
                 "user_action": "SUBSCRIBE_NOW",

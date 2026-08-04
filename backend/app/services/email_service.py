@@ -18,13 +18,13 @@ def _smtp_configured() -> bool:
 
 
 def send_password_reset(to_email: str, reset_url: str, username: str) -> None:
-    subject = "Reset your NebulaX AI password"
+    subject = "Reset your HexaLLM AI password"
     html = f"""
 <!DOCTYPE html>
 <html>
 <body style="font-family:sans-serif;background:#0f172a;color:#e2e8f0;padding:32px;">
   <div style="max-width:480px;margin:auto;background:#1e293b;border-radius:12px;padding:32px;">
-    <h2 style="color:#a78bfa;margin-top:0;">NebulaX AI</h2>
+    <h2 style="color:#a78bfa;margin-top:0;">HexaLLM AI</h2>
     <p>Hi <strong>{username}</strong>,</p>
     <p>We received a request to reset your password. Click the button below — this link expires in <strong>1 hour</strong>.</p>
     <a href="{reset_url}"
@@ -42,13 +42,13 @@ def send_password_reset(to_email: str, reset_url: str, username: str) -> None:
 
     plain = (
         f"Hi {username},\n\n"
-        f"Reset your NebulaX AI password (expires in 1 hour):\n{reset_url}\n\n"
+        f"Reset your HexaLLM AI password (expires in 1 hour):\n{reset_url}\n\n"
         "If you didn't request this, ignore this email."
     )
 
     if not _smtp_configured():
         logger.warning("SMTP not configured — password reset link for %s: %s", to_email, reset_url)
-        print(f"\n[NebulaX] Password reset link for {to_email}:\n  {reset_url}\n", flush=True)
+        print(f"\n[HexaLLM] Password reset link for {to_email}:\n  {reset_url}\n", flush=True)
         return
 
     msg = MIMEMultipart("alternative")
@@ -67,5 +67,5 @@ def send_password_reset(to_email: str, reset_url: str, username: str) -> None:
         logger.info("Password reset email sent to %s", to_email)
     except Exception as exc:
         logger.error("Failed to send reset email to %s: %s", to_email, exc)
-        print(f"\n[NebulaX] SMTP failed — reset link for {to_email}:\n  {reset_url}\n", flush=True)
+        print(f"\n[HexaLLM] SMTP failed — reset link for {to_email}:\n  {reset_url}\n", flush=True)
         raise

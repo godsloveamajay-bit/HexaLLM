@@ -69,11 +69,11 @@ def create_model(
     if db.query(AIModel).filter(AIModel.slug == slug).first():
         slug = slug + "-1"
 
-    # Non-admins build on NebulaX variants, not raw Ollama bases. Keep the
+    # Non-admins build on HexaLLM variants, not raw Ollama bases. Keep the
     # variant id as the displayed base, but resolve a concrete model behind it
     # for training/inference. Admins may pass a raw base directly.
     if not current_user.is_admin and not model_router.is_variant(data.base_model):
-        raise HTTPException(status_code=400, detail="Choose a NebulaX model as the base.")
+        raise HTTPException(status_code=400, detail="Choose a HexaLLM model as the base.")
     concrete_base = model_router.base_for_training(data.base_model)
 
     model = AIModel(
@@ -183,7 +183,7 @@ def start_training(
     db.refresh(job)
 
     output_dir = str(Path(settings.MODELS_DIR) / f"ft_{model_id}_{job.id}")
-    # Resolve a NebulaX variant base to a concrete model to fine-tune on.
+    # Resolve a HexaLLM variant base to a concrete model to fine-tune on.
     train_base = model_router.base_for_training(model.base_model)
 
     try:
@@ -255,9 +255,9 @@ async def ollama_list(user: Optional[User] = Depends(get_optional_user)):
     return {"models": models}
 
 
-@router.get("/nebulax/variants")
-async def list_nebulax_variants(user: Optional[User] = Depends(get_optional_user)):
-    """List the NebulaX virtual models. Admins additionally see which raw
+@router.get("/hexallm/variants")
+async def list_hexallm_variants(user: Optional[User] = Depends(get_optional_user)):
+    """List the HexaLLM virtual models. Admins additionally see which raw
     Ollama bases back each variant; regular users only see the branded
     variant (id, label, description, readiness) with no raw model names."""
     available = {m["name"] for m in await ollama.list_models()}

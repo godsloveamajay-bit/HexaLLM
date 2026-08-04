@@ -21,7 +21,7 @@ from ..services import model_router
 
 
 async def _resolve_agent_model(model: str, task: str) -> str:
-    """Resolve a NebulaX variant selection to a concrete Ollama model so the
+    """Resolve a HexaLLM variant selection to a concrete Ollama model so the
     agent loop can run it. Non-variant ids pass through unchanged."""
     if not model_router.is_variant(model):
         return model

@@ -31,16 +31,17 @@ export default function MobileLayout() {
             <div className="w-7 h-7 flex items-center justify-center">
               <svg viewBox="0 0 24 24" className="w-5 h-5">
                 <defs>
-                  <linearGradient id="mob-topbar-grad" x1="0" y1="0" x2="1" y2="1">
-                    <stop offset="0%" stopColor="#22d3ee"/>
-                    <stop offset="50%" stopColor="#6366f1"/>
-                    <stop offset="100%" stopColor="#a855f7"/>
+                  <linearGradient id="mob-topbar-hex" x1="0.15" y1="0" x2="0.85" y2="1">
+                    <stop offset="0%" stopColor="#4FF3FF"/>
+                    <stop offset="50%" stopColor="#A78BFA"/>
+                    <stop offset="100%" stopColor="#3B82F6"/>
                   </linearGradient>
                 </defs>
-                <path d="M12 3L13.5 10.5L21 12L13.5 13.5L12 21L10.5 13.5L3 12L10.5 10.5Z" fill="url(#mob-topbar-grad)"/>
+                <path d="M12 2L20.66 7L20.66 17L12 22L3.34 17L3.34 7Z" fill="url(#mob-topbar-hex)"/>
+                <path d="M12 6.5L16.76 9.25L16.76 14.75L12 17.5L7.24 14.75L7.24 9.25Z" fill="rgb(var(--g-950))"/>
               </svg>
             </div>
-            <span className="font-bold text-gray-100 light:text-gray-950 text-sm tracking-wide">NebulaX AI</span>
+            <span className="font-bold text-gray-100 light:text-gray-950 text-sm tracking-wide">HexaLLM AI</span>
           </div>
           {user && (
             <div className="flex items-center gap-2">

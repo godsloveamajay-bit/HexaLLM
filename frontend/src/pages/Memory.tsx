@@ -74,7 +74,7 @@ export default function MemoryPage() {
       for (const session of sessions.slice(0, 3)) {
         const { data: msgs } = await api.get(`/chat/sessions/${session.id}/messages`)
         const limited = msgs.slice(-20).map((m: any) => ({ role: m.role, content: m.content }))
-        const { data } = await api.post('/memory/extract', { messages: limited, model: 'nebulax:balanced' })
+        const { data } = await api.post('/memory/extract', { messages: limited, model: 'hex-5.1-prime' })
         total += data.extracted?.length || 0
       }
       await load()

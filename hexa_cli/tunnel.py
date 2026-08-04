@@ -1,5 +1,5 @@
 """
-WebSocket tunnel that connects the local nebula-cli daemon to a NebulaX
+WebSocket tunnel that connects the local hexallm-cli daemon to a HexaLLM
 instance.  Once running, the web UI can dispatch tasks that execute locally
 and stream results back in real time.
 """
@@ -14,7 +14,7 @@ from typing import Any, Callable, Dict, Optional
 
 class CliTunnel:
     """
-    Opens a persistent WebSocket to NebulaX and handles incoming `run` tasks
+    Opens a persistent WebSocket to HexaLLM and handles incoming `run` tasks
     by executing them through the local Agent.
 
     Each incoming task gets a fresh conversation context so remote tasks don't
@@ -22,8 +22,8 @@ class CliTunnel:
     remote runs.
     """
 
-    def __init__(self, nebulax_url: str, token: str) -> None:
-        ws_base = nebulax_url.rstrip("/").replace("https://", "wss://").replace("http://", "ws://")
+    def __init__(self, hexallm_url: str, token: str) -> None:
+        ws_base = hexallm_url.rstrip("/").replace("https://", "wss://").replace("http://", "ws://")
         self.ws_url = f"{ws_base}/api/v1/ws/cli?token={token}"
         self.session_id: Optional[str] = None
 

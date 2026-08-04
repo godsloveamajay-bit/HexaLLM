@@ -23,9 +23,9 @@ TOOL_STYLE: dict = {
 
 
 def print_welcome(model: str, backend_label: str) -> None:
-    is_nebulax = backend_label.startswith("NebulaX")
+    is_hexallm = backend_label.startswith("HexaLLM")
     is_pollinations = backend_label.startswith("Pollinations")
-    if is_nebulax:
+    if is_hexallm:
         backend_style, border = "green", "bright_green"
     elif is_pollinations:
         backend_style, border = "bright_cyan", "bright_cyan"
@@ -35,7 +35,7 @@ def print_welcome(model: str, backend_label: str) -> None:
     console.print(
         Panel(
             Text.assemble(
-                ("NebulaCode", "bold white"),
+                ("HexaLLM", "bold white"),
                 ("  v0.8.0\n", "dim"),
                 ("model    ", "dim"),
                 (model, "cyan"),

@@ -240,7 +240,7 @@ async def extract_memories(
     )
     msgs = [{"role": "user", "content": f"Conversation:\n{conversation}"}]
     # Memory extraction is a cheap throwaway pass — pick a fast model server-side
-    # (resolving a NebulaX variant if one was sent) rather than trusting a raw id.
+    # (resolving a HexaLLM variant if one was sent) rather than trusting a raw id.
     from ..services import model_router
     extract_model = data.model
     if model_router.is_variant(extract_model) or not extract_model:

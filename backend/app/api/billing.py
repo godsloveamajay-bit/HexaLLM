@@ -18,7 +18,7 @@ def _seed_plans(db: Session):
         Plan(
             name="Free",
             slug="free",
-            description="Get started with NebulaX AI for free",
+            description="Get started with HexaLLM AI for free",
             price_monthly=0,
             price_yearly=0,
             features=[
@@ -55,7 +55,7 @@ def _seed_plans(db: Session):
         Plan(
             name="Supreme",
             slug="supreme",
-            description="The ultimate NebulaX AI experience for power users",
+            description="The ultimate HexaLLM AI experience for power users",
             price_monthly=24,
             price_yearly=240,
             features=[

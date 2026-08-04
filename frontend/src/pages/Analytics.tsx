@@ -7,14 +7,14 @@ import api from '../lib/api'
 import { useAuth } from '../store/auth'
 import { prettyModel } from '../lib/models'
 
-const COLORS = ['#6366f1', '#8b5cf6', '#06b6d4', '#10b981', '#f59e0b', '#ef4444']
+const COLORS = ['#4FF3FF', '#A78BFA', '#3B82F6', '#34d399', '#fbbf24', '#f87171']
 
-// Non-admins never see raw model names: collapse each row to its NebulaX
+// Non-admins never see raw model names: collapse each row to its HexaLLM
 // variant label (or "Other" for legacy raw rows) and re-aggregate.
 function maskModelUsage(rows: any[]): any[] {
   const agg: Record<string, any> = {}
   for (const r of rows) {
-    const name = r.model?.startsWith('nebulax:') ? prettyModel(r.model) : 'Other'
+    const name = r.model?.startsWith('hex-') ? prettyModel(r.model) : 'Other'
     const a = agg[name] || (agg[name] = { model: name, requests: 0, _latSum: 0 })
     a.requests += r.requests || 0
     a._latSum += (r.avg_latency_ms || 0) * (r.requests || 0)
@@ -87,15 +87,15 @@ export default function AnalyticsPage() {
             <AreaChart data={daily}>
               <defs>
                 <linearGradient id="gr1" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.4} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#A78BFA" stopOpacity={0.4} />
+                  <stop offset="95%" stopColor="#A78BFA" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 10 }} tickLine={false} axisLine={false}
                 tickFormatter={(d) => d.slice(5)} interval={4} />
               <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} tickLine={false} axisLine={false} />
               <Tooltip contentStyle={{ backgroundColor: '#111827', border: '1px solid #374151', borderRadius: '8px', fontSize: 12 }} />
-              <Area type="monotone" dataKey="requests" stroke="#6366f1" fill="url(#gr1)" strokeWidth={2} name="Requests" />
+              <Area type="monotone" dataKey="requests" stroke="#A78BFA" fill="url(#gr1)" strokeWidth={2} name="Requests" />
               <Area type="monotone" dataKey="errors" stroke="#ef4444" fill="transparent" strokeWidth={1.5} strokeDasharray="4" name="Errors" />
             </AreaChart>
           </ResponsiveContainer>

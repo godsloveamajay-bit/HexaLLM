@@ -1,23 +1,23 @@
-# NebulaCode
+# HexaLLM
 
-AI coding assistant for the terminal — like Claude Code or Codex, but runs on your own local models via [Ollama](https://ollama.com) or a [NebulaX](https://github.com/godsloveamajay-bit/nebulaxai) instance.
+AI coding assistant for the terminal — like Claude Code or Codex, but runs on your own local models via [Ollama](https://ollama.com) or a [HexaLLM](https://github.com/godsloveamajay-bit/hexallm) instance.
 
 ```
-nebula › explain the auth flow in this repo
-nebula › add input validation to src/api/users.py
-nebula › write tests for the payment module and run them
+hexallm › explain the auth flow in this repo
+hexallm › add input validation to src/api/users.py
+hexallm › write tests for the payment module and run them
 ```
 
 ## Install
 
 ```bash
-pip install nebulacode
+pip install hexallm
 ```
 
 Or from a downloaded wheel:
 
 ```bash
-pip install nebulacode-0.13.3-py3-none-any.whl
+pip install hexallm-0.13.3-py3-none-any.whl
 ```
 
 ## Requirements
@@ -29,10 +29,10 @@ pip install nebulacode-0.13.3-py3-none-any.whl
 ## Quick start
 
 ```bash
-nebula                   # start interactive session
-nebula -m codellama:7b   # use a specific model
-nebula models            # list available models
-nebula set model codellama:7b   # save default model
+hexallm                   # start interactive session
+hexallm -m codellama:7b   # use a specific model
+hexallm models            # list available models
+hexallm set model codellama:7b   # save default model
 ```
 
 ## Session commands
@@ -60,22 +60,22 @@ nebula set model codellama:7b   # save default model
 
 ## Remote daemon mode
 
-Connect to a NebulaX server and let the web UI dispatch tasks to your machine:
+Connect to a HexaLLM server and let the web UI dispatch tasks to your machine:
 
 ```bash
-nebula login https://your-nebulax-server   # authenticate
-nebula daemon                              # start listening
+hexallm login https://your-hexallm-server   # authenticate
+hexallm daemon                              # start listening
 ```
 
-The NebulaX Chat UI will show a "CLI" badge — select your connected machine and the AI will execute tasks locally and stream results back.
+The HexaLLM Chat UI will show a "CLI" badge — select your connected machine and the AI will execute tasks locally and stream results back.
 
 ## Configuration
 
-Stored at `~/.nebula/config.json`.
+Stored at `~/.hexallm/config.json`.
 
 ```bash
-nebula config                            # show config
-nebula set model codellama:13b           # default model
-nebula set max_steps 30                  # allow longer runs
-nebula set ollama_url http://host:11434  # remote Ollama
+hexallm config                            # show config
+hexallm set model codellama:13b           # default model
+hexallm set max_steps 30                  # allow longer runs
+hexallm set ollama_url http://host:11434  # remote Ollama
 ```

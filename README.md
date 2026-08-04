@@ -1,8 +1,8 @@
-# NebulaX AI Platform
+# HexaLLM AI Platform
 
-**NebulaX AI is a platform where you can interact with AI, share and create your own models, run sandboxed workflows and more.**
+**HexaLLM AI is a platform where you can interact with AI, share and create your own models, run sandboxed workflows and more.**
 
-🌐 Website: **[ai.nebualax.co.uk](https://ai.nebualax.co.uk)**
+🌐 Website: **[ai.hexallm.co.uk](https://ai.hexallm.co.uk)**
 
 ## Features
 
@@ -24,45 +24,61 @@
 
 Available on the web, desktop (macOS · Windows · Linux), Android, and as an installable PWA.
 
-## NebulaCode CLI
+## HexaLLM CLI
 
-**NebulaCode** (`nebulacode`) is an AI coding assistant for your terminal — like Claude Code or Codex, but running entirely on your own local models via [Ollama](https://ollama.com) or a NebulaX instance.
+**HexaLLM** (`hexallm`) is an AI coding assistant for your terminal — like Claude Code or Codex, but running entirely on your own local models via [Ollama](https://ollama.com) or a HexaLLM instance.
 
 ```
-nebula › explain the auth flow in this repo
-nebula › add input validation to src/api/users.py
-nebula › write tests for the payment module and run them
+hexallm › explain the auth flow in this repo
+hexallm › add input validation to src/api/users.py
+hexallm › write tests for the payment module and run them
 ```
 
 ### Install
 
 ```bash
-pip install nebulacode
+pip install hexallm
 ```
 
 ### Quick start
 
 ```bash
-nebula                          # start an interactive session
-nebula -m codellama:7b          # use a specific model
-nebula models                   # list available models
-nebula set model codellama:7b   # save your default model
+hexallm                          # start an interactive session
+hexallm -m codellama:7b          # use a specific model
+hexallm models                   # list available models
+hexallm set model codellama:7b   # save your default model
 ```
 
 It can read and write files, apply targeted patches, search the codebase, and run shell commands (tests, linters, builds) — all with your approval.
 
 ### Remote daemon mode
 
-Connect the CLI to a NebulaX server and let the web UI dispatch tasks to your machine:
+Connect the CLI to a HexaLLM server and let the web UI dispatch tasks to your machine:
 
 ```bash
-nebula login https://your-nebulax-server   # authenticate
-nebula daemon                               # start listening
+hexallm login https://your-hexallm-server   # authenticate
+hexallm daemon                               # start listening
 ```
 
-The NebulaX Chat UI shows a “CLI” badge — pick your connected machine and the AI executes tasks locally, streaming results back to the browser.
+The HexaLLM Chat UI shows a “CLI” badge — pick your connected machine and the AI executes tasks locally, streaming results back to the browser.
 
 See **[README_CLI.md](README_CLI.md)** for the full command and tool reference.
+
+## The Hexa Ecosystem
+
+HexaLLM is part of the **Hexa** product family — integrated AI products built on one shared engine:
+
+- **HexaCore** — the inference and routing engine behind every Hexa product
+- **HexaCloud** — managed hosting and scaling for Hexa deployments
+- **HexaAPI** — OpenAI-compatible API with per-key access (see *Expose as API*)
+- **HexaStudio** — build, evaluate, and ship prompts, agents, and workflows
+- **HexaConsole** — monitoring, analytics, and key management
+- **HexaFlow** — visual workflow and agent pipelines
+- **HexaForge** — fine-tuning and model training
+
+Tools: **HexaCLI** (the `hexallm` terminal assistant in this repo), **HexaSDK**, **HexaStream**, **HexaEmbed**, **HexaGuard**.
+Utilities: **HexaTune**, **HexaInspect**, **HexaCache**, **HexaSync**, **HexaSecure**, **HexaDeploy**.
+UI: **HexaPanel**, **HexaPrompt**, **HexaCanvas**, **HexaBlocks**, **HexaShell**.
 
 ## License
 

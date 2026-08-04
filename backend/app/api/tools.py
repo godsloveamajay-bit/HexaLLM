@@ -91,7 +91,7 @@ async def generate(
             GeneratedTool.user_id == current_user.id
         ).all()
     ]
-    # Resolve a NebulaX variant selection to a concrete model for generation.
+    # Resolve a HexaLLM variant selection to a concrete model for generation.
     from ..services import model_router
     from ..services.ollama_service import ollama
     gen_model = data.model

@@ -1,7 +1,7 @@
 """OpenAI-compatible API ("Expose as API").
 
-Any OpenAI client can point at NebulaX and talk to a local model. Authenticate
-with a NebulaX API key (nai_…). A key may be *bound* to a saved persona, in
+Any OpenAI client can point at HexaLLM and talk to a local model. Authenticate
+with a HexaLLM API key (nai_…). A key may be *bound* to a saved persona, in
 which case callers automatically get that persona's model, system prompt and
 temperature — the "Expose as API" toggle — without knowing any of it.
 
@@ -122,7 +122,7 @@ async def chat_completions(
     db: Session = Depends(get_db),
 ):
     model, system_prompt, temperature, top_p, messages = _resolve(key, req)
-    # `model` is the advertised id (may be a NebulaX variant); resolve it to a
+    # `model` is the advertised id (may be a HexaLLM variant); resolve it to a
     # concrete Ollama model for the actual inference call.
     concrete = model
     if model_router.is_variant(model):
@@ -203,7 +203,7 @@ async def chat_completions(
 @router.get("/models")
 async def list_models(key: APIKey = Depends(get_api_key_record)):
     """OpenAI-style model list. A bound key advertises only its served model;
-    an unbound key advertises the NebulaX models (variants), never raw bases."""
+    an unbound key advertises the HexaLLM models (variants), never raw bases."""
     created = int(time.time())
     if key.model_name:
         names = [key.model_name]
@@ -213,5 +213,5 @@ async def list_models(key: APIKey = Depends(get_api_key_record)):
         names = [v["id"] for v in model_router.public_variants()]
     return {
         "object": "list",
-        "data": [{"id": n, "object": "model", "created": created, "owned_by": "nebulax"} for n in names],
+        "data": [{"id": n, "object": "model", "created": created, "owned_by": "hexallm"} for n in names],
     }

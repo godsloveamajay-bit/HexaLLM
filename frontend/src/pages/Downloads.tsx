@@ -6,7 +6,7 @@ import {
 } from 'lucide-react'
 import { baseURL } from '../lib/api'
 
-const GITHUB_REPO = 'godsloveamajay-bit/nebulaxai'
+const GITHUB_REPO = 'godsloveamajay-bit/hexallm'
 const GITHUB_RELEASE_URL = `https://github.com/${GITHUB_REPO}/releases`
 const GITHUB_API_URL = `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`
 
@@ -123,8 +123,8 @@ function CliCard({ item }: { item: LocalItem }) {
               <Package className="w-3.5 h-3.5 text-primary-400" />From PyPI
               <span className="ml-auto text-xs text-gray-500">v{item.version}</span>
             </p>
-            <CodeLine code={`pip install nebulacode==${item.version}`} />
-            <p className="text-xs text-gray-600">Already installed? <span className="font-mono text-gray-500">pip install --force-reinstall nebulacode=={item.version}</span></p>
+            <CodeLine code={`pip install hexallm==${item.version}`} />
+            <p className="text-xs text-gray-600">Already installed? <span className="font-mono text-gray-500">pip install --force-reinstall hexallm=={item.version}</span></p>
           </div>
           <div className="space-y-2 bg-gray-900/50 rounded-xl p-3 border border-gray-800">
             <p className="text-xs font-medium text-gray-300 flex items-center gap-1.5">
@@ -138,30 +138,30 @@ function CliCard({ item }: { item: LocalItem }) {
         <details className="group">
           <summary className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-300 transition-colors list-none select-none">
             <ChevronRight className="w-3.5 h-3.5 group-open:rotate-90 transition-transform" />
-            Windows: <code className="font-mono ml-1">nebula</code> not found after install?
+            Windows: <code className="font-mono ml-1">hexallm</code> not found after install?
           </summary>
           <div className="mt-2 space-y-2 pl-5">
             <p className="text-xs text-gray-400">
-              pip installs the <code className="font-mono text-gray-300">nebula</code> command to your user Scripts folder
+              pip installs the <code className="font-mono text-gray-300">hexallm</code> command to your user Scripts folder
               (<code className="font-mono text-gray-300">%APPDATA%\Python\Python3XX\Scripts</code>), which isn't on PATH by default.
               Run this once in PowerShell to fix it permanently:
             </p>
             <CodeLine code={`$s = python -c "import sysconfig; print(sysconfig.get_path('scripts', 'nt_user'))"\n[Environment]::SetEnvironmentVariable("PATH", $env:PATH + ";$s", "User")\n$env:PATH += ";$s"`} />
-            <p className="text-xs text-gray-500">Open a new PowerShell window and run <code className="font-mono text-emerald-400">nebula</code>.</p>
+            <p className="text-xs text-gray-500">Open a new PowerShell window and run <code className="font-mono text-emerald-400">hexallm</code>.</p>
           </div>
         </details>
 
         <div className="space-y-2">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide mt-1">Quick start</p>
-          <CodeLine code="nebula login https://ai.nebualax.co.uk --google" label="1a. Connect with Google (opens browser)" />
-          <CodeLine code="nebula login https://ai.nebualax.co.uk" label="1b. Connect with email + password" />
-          <CodeLine code="nebula" label="2. Start the interactive coding session" />
-          <CodeLine code="nebula daemon" label="3. (Optional) Run as a remote-control daemon" />
+          <CodeLine code="hexallm login https://ai.hexallm.co.uk --google" label="1a. Connect with Google (opens browser)" />
+          <CodeLine code="hexallm login https://ai.hexallm.co.uk" label="1b. Connect with email + password" />
+          <CodeLine code="hexallm" label="2. Start the interactive coding session" />
+          <CodeLine code="hexallm daemon" label="3. (Optional) Run as a remote-control daemon" />
         </div>
         <details className="group">
           <summary className="flex items-center gap-1.5 text-xs text-gray-500 cursor-pointer hover:text-gray-300 transition-colors list-none select-none mt-1">
             <ChevronRight className="w-3.5 h-3.5 group-open:rotate-90 transition-transform" />
-            What can NebulaCode do?
+            What can HexaLLM do?
           </summary>
           <ul className="mt-2 pl-5 space-y-1 text-xs text-gray-400 list-disc">
             <li>ReAct agent loop — reasons and acts step-by-step to complete tasks</li>
@@ -184,9 +184,9 @@ function CliCard({ item }: { item: LocalItem }) {
               ))}
             </li>
             <li>Works out of the box in the cloud — no setup, no API key needed</li>
-            <li>Optionally run fully local on your own machine, or connect to your <strong>NebulaX</strong> instance</li>
+            <li>Optionally run fully local on your own machine, or connect to your <strong>HexaLLM</strong> instance</li>
             <li>Multi-turn memory — remembers context across your session</li>
-            <li>Run <code className="text-emerald-400 font-mono">nebula daemon</code> to let the NebulaX web UI send tasks to your machine</li>
+            <li>Run <code className="text-emerald-400 font-mono">hexallm daemon</code> to let the HexaLLM web UI send tasks to your machine</li>
           </ul>
         </details>
       </div>
@@ -237,7 +237,7 @@ function DesktopCard({ assets, version }: { assets: GHAsset[]; version: string }
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-base font-semibold text-gray-100">NebulaX Desktop</h2>
+            <h2 className="text-base font-semibold text-gray-100">HexaLLM Desktop</h2>
             <span className="badge bg-primary-900/30 text-primary-400 border border-primary-800/40">v{version}</span>
           </div>
           <p className="text-sm text-gray-400 mt-1">
@@ -276,10 +276,10 @@ function DesktopCard({ assets, version }: { assets: GHAsset[]; version: string }
             The app isn’t Apple-notarized yet, so macOS blocks it on first launch. To open it:
           </p>
           <ul className="list-disc ml-4 space-y-1 text-gray-400">
-            <li>Drag <span className="text-gray-200">NebulaX AI</span> to Applications, then <span className="text-gray-200">right-click it → Open → Open</span> (only needed once), or</li>
+            <li>Drag <span className="text-gray-200">HexaLLM AI</span> to Applications, then <span className="text-gray-200">right-click it → Open → Open</span> (only needed once), or</li>
             <li>run this once in Terminal:
               <code className="block mt-1 bg-gray-900 border border-gray-700/60 rounded-lg px-2 py-1 font-mono text-emerald-400 select-all">
-                xattr -dr com.apple.quarantine "/Applications/NebulaX AI.app"
+                xattr -dr com.apple.quarantine "/Applications/HexaLLM AI.app"
               </code>
             </li>
           </ul>
@@ -316,7 +316,7 @@ function MobileCard({ assets, version }: { assets: GHAsset[]; version: string })
         </div>
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <h2 className="text-base font-semibold text-gray-100">NebulaX Mobile</h2>
+            <h2 className="text-base font-semibold text-gray-100">HexaLLM Mobile</h2>
             <span className="badge bg-primary-900/30 text-primary-400 border border-primary-800/40">v{version}</span>
           </div>
           <p className="text-sm text-gray-400 mt-1">
@@ -428,7 +428,7 @@ const CHANGELOG: Release[] = [
       { type: 'new',      text: 'Knowledge Graph: an interactive force-directed view of how the AI stores and connects knowledge — bases, documents, chunks and memories, linked by meaning' },
       { type: 'new',      text: 'AI Tools: the AI writes its own tools (you review, test and approve them); approved tools run sandboxed and are selectable in Agents' },
       { type: 'new',      text: 'Expose as API: turn any model or persona into an OpenAI-compatible endpoint with a dedicated key and per-key usage metering, on a clean /v1 base URL' },
-      { type: 'fixed',    text: 'Chatting with a connected NebulaCode daemon no longer hangs on “Agent Thinking…” — the stream stays alive and reasoning models parse their tool calls' },
+      { type: 'fixed',    text: 'Chatting with a connected HexaLLM daemon no longer hangs on “Agent Thinking…” — the stream stays alive and reasoning models parse their tool calls' },
       { type: 'fixed',    text: 'The thinking indicator now shows on every turn, not just the first' },
       { type: 'improved', text: 'Docker code sandbox fixed (workspaces moved off the service’s private /tmp), which also repaired agent code execution' },
     ],
@@ -457,7 +457,7 @@ const CHANGELOG: Release[] = [
   {
     version: '0.10.1',
     date: '2026-06-03',
-    summary: 'A fresh app icon that matches the cosy NebulaX look.',
+    summary: 'A fresh app icon that matches the cosy HexaLLM look.',
     changes: [
       { type: 'improved', text: 'New app icon — the warm sparkle from the app, across desktop, mobile, and the browser tab' },
     ],
@@ -504,7 +504,7 @@ const CHANGELOG: Release[] = [
       { type: 'improved', text: 'Direct-prose answers skip the old double-generation pass — much faster first token' },
       { type: 'improved', text: 'Trivial prompts skip the thinking phase entirely' },
       { type: 'improved', text: 'Refreshed warm "sunset" theme with light & dark modes' },
-      { type: 'fixed',    text: 'Editable installs no longer run a stale copy — nebula always uses the installed build' },
+      { type: 'fixed',    text: 'Editable installs no longer run a stale copy — hexallm always uses the installed build' },
       { type: 'fixed',    text: 'Downloads page now always serves the latest CLI wheel' },
     ],
   },
@@ -514,7 +514,7 @@ const CHANGELOG: Release[] = [
     summary: 'Works out of the box — no setup or API key required.',
     changes: [
       { type: 'new',      text: 'Free cloud inference — start chatting with zero setup' },
-      { type: 'new',      text: 'Smart routing — your NebulaX instance or a local runtime when available, otherwise the free cloud' },
+      { type: 'new',      text: 'Smart routing — your HexaLLM instance or a local runtime when available, otherwise the free cloud' },
       { type: 'new',      text: 'web_search tool — search the web via DuckDuckGo, no API key' },
       { type: 'new',      text: 'fetch_url tool — download and read any URL as plain text' },
       { type: 'new',      text: 'git_run tool — run git commands (status, diff, log, commit…)' },
@@ -529,13 +529,13 @@ const CHANGELOG: Release[] = [
     date: '2026-05-24',
     summary: 'First public release on PyPI.',
     changes: [
-      { type: 'new',      text: 'Published to PyPI — pip install nebulacode' },
+      { type: 'new',      text: 'Published to PyPI — pip install hexallm' },
       { type: 'new',      text: 'Renamed from "Nebula Code" to NebulaCode' },
       { type: 'new',      text: 'ReAct agent loop with multi-turn conversation memory' },
       { type: 'new',      text: 'File tools: read_file, write_file, patch_file, list_files, search_files' },
       { type: 'new',      text: 'run_command — run any shell command locally' },
-      { type: 'new',      text: 'nebula daemon — accept tasks dispatched from the NebulaX web UI' },
-      { type: 'new',      text: 'nebula login / logout — connect to a NebulaX instance' },
+      { type: 'new',      text: 'hexallm daemon — accept tasks dispatched from the HexaLLM web UI' },
+      { type: 'new',      text: 'hexallm login / logout — connect to a HexaLLM instance' },
       { type: 'new',      text: 'Knowledge base search via /use-kb in interactive mode' },
     ],
   },
@@ -555,7 +555,7 @@ function ChangelogSection() {
       <div className="flex items-center gap-2">
         <ScrollText className="w-4 h-4 text-gray-400" />
         <h2 className="text-sm font-semibold text-gray-200">Changelog</h2>
-        <span className="text-xs text-gray-600 ml-auto">NebulaCode CLI</span>
+        <span className="text-xs text-gray-600 ml-auto">HexaLLM CLI</span>
       </div>
 
       <div className="space-y-2">
@@ -637,7 +637,7 @@ export default function DownloadsPage() {
             <Download className="w-6 h-6 text-primary-400" />Downloads
           </h1>
           <p className="text-sm text-gray-400 mt-1">
-            Install NebulaX apps and tools on your devices.
+            Install HexaLLM apps and tools on your devices.
           </p>
         </div>
         {release && (

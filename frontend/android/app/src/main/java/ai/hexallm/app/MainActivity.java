@@ -1,4 +1,4 @@
-package ai.nebulax.app;
+package ai.hexallm.app;
 
 import com.getcapacitor.BridgeActivity;
 

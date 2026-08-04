@@ -11,9 +11,9 @@ from ..models.persona import SavedPersona
 
 
 def _check_base_model(model: Optional[str], user: User):
-    """Non-admins build personas on NebulaX variants, not raw Ollama bases."""
+    """Non-admins build personas on HexaLLM variants, not raw Ollama bases."""
     if model and not user.is_admin and not model_router.is_variant(model):
-        raise HTTPException(status_code=400, detail="Choose a NebulaX model as the base.")
+        raise HTTPException(status_code=400, detail="Choose a HexaLLM model as the base.")
 
 router = APIRouter(prefix="/personas", tags=["personas"])
 

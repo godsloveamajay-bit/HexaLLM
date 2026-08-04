@@ -15,8 +15,8 @@ export default defineConfig({
       registerType: 'autoUpdate',
       includeAssets: ['logo.svg', 'pwa-*.png'],
       manifest: {
-        name: 'NebulaX AI Platform',
-        short_name: 'NebulaX AI',
+        name: 'HexaLLM AI Platform',
+        short_name: 'HexaLLM AI',
         description: 'Open-source AI hub — chat, agents, image gen, and more',
         theme_color: '#121626',
         background_color: '#121626',

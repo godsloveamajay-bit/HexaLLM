@@ -19,19 +19,19 @@ PIDS_LIMIT = "64"
 
 # Host-side: docker run -v resolves paths from the HOST filesystem, not the
 # container's. When this backend runs inside a container with
-#   -v /opt/nebulaxai/data:/app/data
-# then /app/data/.sandbox on the inside is /opt/nebulaxai/data/.sandbox outside.
+#   -v /opt/hexallm/data:/app/data
+# then /app/data/.sandbox on the inside is /opt/hexallm/data/.sandbox outside.
 # We detect whether we are inside a container and derive the host-side base.
 _CONTAINER_DATA_DIR = "/app/data"
 _HOST_DATA_DIR = os.environ.get(
-    "NEBULA_HOST_DATA_DIR",
+    "HEXA_HOST_DATA_DIR",
     _CONTAINER_DATA_DIR if os.path.exists(_CONTAINER_DATA_DIR) else _CONTAINER_DATA_DIR,
 )
 SANDBOX_BASE_CONTAINER = os.environ.get(
-    "NEBULA_SANDBOX_DIR",
+    "HEXA_SANDBOX_DIR",
     os.path.join(_CONTAINER_DATA_DIR, ".sandbox"),
 )
-if os.environ.get("NEBULA_HOST_DATA_DIR"):
+if os.environ.get("HEXA_HOST_DATA_DIR"):
     SANDBOX_BASE_HOST = SANDBOX_BASE_CONTAINER.replace(_CONTAINER_DATA_DIR, _HOST_DATA_DIR, 1)
 else:
     SANDBOX_BASE_HOST = SANDBOX_BASE_CONTAINER
@@ -75,7 +75,7 @@ class Sandbox:
 
     def __init__(self):
         os.makedirs(SANDBOX_BASE_CONTAINER, exist_ok=True)
-        self.workspace = tempfile.mkdtemp(prefix="nebula_sb_", dir=SANDBOX_BASE_CONTAINER)
+        self.workspace = tempfile.mkdtemp(prefix="hexallm_sb_", dir=SANDBOX_BASE_CONTAINER)
         # Host-side path for docker -v bind mounts
         if self.workspace.startswith(SANDBOX_BASE_CONTAINER):
             self._host_workspace = self.workspace.replace(
@@ -180,7 +180,7 @@ class Sandbox:
     # ── Container lifecycle ─────────────────────────────────────────────────
 
     def _start_container(self) -> Optional[str]:
-        container_name = f"nebula-sb-{uuid.uuid4().hex[:8]}"
+        container_name = f"hexallm-sb-{uuid.uuid4().hex[:8]}"
         try:
             result = subprocess.run(
                 [

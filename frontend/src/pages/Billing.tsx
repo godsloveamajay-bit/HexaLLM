@@ -15,7 +15,7 @@ const CURRENCIES: Record<string, { label: string; symbol: string; rate: number }
   JPY: { label: 'Japanese Yen', symbol: '¥', rate: 149 },
 }
 
-const STORAGE_KEY = 'nebulax_currency'
+const STORAGE_KEY = 'hexallm_currency'
 
 function getSavedCurrency(): string {
   try { return localStorage.getItem(STORAGE_KEY) || 'USD' } catch { return 'USD' }

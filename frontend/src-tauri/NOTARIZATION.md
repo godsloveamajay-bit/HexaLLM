@@ -3,7 +3,7 @@
 Right now the DMG is **unsigned / un-notarized**, so macOS Gatekeeper blocks it
 ("can't be opened… Apple cannot check it for malicious software"). The in-app
 Downloads page tells users the one-time workaround (right-click → Open, or
-`xattr -dr com.apple.quarantine "/Applications/NebulaX AI.app"`).
+`xattr -dr com.apple.quarantine "/Applications/HexaLLM AI.app"`).
 
 To make it install cleanly with **no warning**, the app must be signed with a
 **Developer ID** certificate and notarized by Apple. That requires an Apple

@@ -52,9 +52,9 @@ export default function AiSparkle({
     >
       <defs>
         <linearGradient id={grad} x1="0" y1="0" x2="0.45" y2="1">
-          <stop offset="0%" stopColor="#22d3ee" />
-          <stop offset="50%" stopColor="#6366f1" />
-          <stop offset="100%" stopColor="#a855f7" />
+          <stop offset="0%" stopColor="#4FF3FF" />
+          <stop offset="50%" stopColor="#A78BFA" />
+          <stop offset="100%" stopColor="#3B82F6" />
         </linearGradient>
         <filter id={glow} x="-70%" y="-70%" width="240%" height="240%">
           <feGaussianBlur stdDeviation={active ? 1.1 : 0.6} result="b" />

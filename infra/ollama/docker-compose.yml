@@ -21,7 +21,7 @@ services:
       - /usr/share/ollama/.ollama/models:/root/.ollama/models
     environment:
       # Same tuning as the native drop-in (keepalive.conf): pin the LRU-hot set,
-      # single-request latency priority. See [[nebulax-ollama-models]].
+      # single-request latency priority. See [[hexallm-ollama-models]].
       OLLAMA_KEEP_ALIVE: "-1"
       OLLAMA_MAX_LOADED_MODELS: "5"
       OLLAMA_NUM_PARALLEL: "1"

@@ -115,7 +115,7 @@ export default function ImageGenPage() {
       const blob = await res.blob()
       const a = document.createElement('a')
       a.href = URL.createObjectURL(blob)
-      a.download = `nebulax-${prompt.slice(0, 40).replace(/\s+/g, '-')}.png`
+      a.download = `hexallm-${prompt.slice(0, 40).replace(/\s+/g, '-')}.png`
       a.click()
     } catch {
       toast.error('Download failed')

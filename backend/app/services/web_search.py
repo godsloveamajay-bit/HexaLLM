@@ -21,7 +21,7 @@ from typing import Dict, List
 
 import httpx
 
-_UA = "NebulaX-AI (https://ai.nebualax.co.uk; self-hosted AI assistant)"
+_UA = "HexaLLM-AI (https://ai.hexallm.co.uk; self-hosted AI assistant)"
 _TAG_RE = re.compile(r"<[^>]+>")
 
 

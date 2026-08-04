@@ -44,7 +44,7 @@ export default function SettingsPage() {
   const [aiSaving, setAiSaving] = useState(false)
 
   useEffect(() => {
-    api.get('/models/nebulax/variants').then(({ data }) => setVariants(data.variants || [])).catch(() => {})
+    api.get('/models/hexallm/variants').then(({ data }) => setVariants(data.variants || [])).catch(() => {})
     api.get('/knowledge').then(({ data }) => setKbs(data || [])).catch(() => {})
   }, [])
 
@@ -79,7 +79,7 @@ export default function SettingsPage() {
   const checkForUpdate = async () => {
     // ── Mobile (Capacitor) ────────────────────────────────────────────────
     if (isCapacitor()) {
-      window.open('https://github.com/godsloveamajay-bit/nebulaxai/releases/latest', '_system')
+      window.open('https://github.com/godsloveamajay-bit/hexallm/releases/latest', '_system')
       return
     }
 

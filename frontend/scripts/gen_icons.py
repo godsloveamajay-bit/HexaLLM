@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """
-Regenerate every raster app icon from the cosy NebulaX sparkle in public/logo.svg.
+Regenerate every raster app icon from the HexaLLM hexagonal mark in
+public/logo.svg.
 
 The design (kept identical to logo.svg / components/AiSparkle.tsx):
-  - warm charcoal #1f1611 rounded tile
-  - soft orange radial glow offset toward the main star
-  - a four-point concave sparkle with the ffd5a6 -> fb923c -> f9518f -> ef3b6b
-    vertical gradient, plus two companion sparkles
+  - Hex Charcoal #0F172A rounded tile
+  - a pointy-top hexagon filled with the 4FF3FF -> A78BFA -> 3B82F6
+    vertical gradient, plus an inner Hex Charcoal hexagon that forms the
+    "hex-nut" ring (two identical hexagons, the inner one rotated 180°).
 Rendered at 4x supersample then LANCZOS-downscaled to each target size.
 """
 import os
@@ -17,26 +18,20 @@ VB = 512                      # logo.svg viewBox
 F = 4                         # supersample factor
 RES = VB * F                  # master resolution (2048)
 
-CHARCOAL = (31, 22, 17, 255)  # #1f1611
-GLOW_RGB = (251, 146, 60)     # #fb923c
-GLOW_MAX_A = 128              # 0.5 * 255
+CHARCOAL = (15, 23, 42, 255)  # #0F172A
 CORNER = 120                  # logo.svg rx
 
-# gradient stops: (offset, (r,g,b))
+# gradient stops: (offset, (r,g,b))  — brand cyan -> violet -> blue
 STOPS = [
-    (0.00, (255, 213, 166)),  # #ffd5a6
-    (0.35, (251, 146, 60)),   # #fb923c
-    (0.70, (249, 81, 143)),   # #f9518f
-    (1.00, (239, 59, 107)),   # #ef3b6b
+    (0.00, (79, 243, 255)),   # #4FF3FF
+    (0.50, (167, 139, 250)),  # #A78BFA
+    (1.00, (59, 130, 246)),   # #3B82F6
 ]
 
-# stars: (cx, cy, r, opacity) in 512-space  (matches logo.svg paths)
-STARS = [
-    (224, 256, 160.0, 1.00),  # main
-    (416, 112, 51.2, 1.00),   # top-right companion
-    (80, 432, 33.6, 0.85),    # bottom-left companion
-]
-K = 0.16  # concavity (control-point pull), same as AiSparkle
+# hex-nut ring geometry in 512-space (matches logo.svg paths)
+OUTER_R = 210.0               # outer hexagon radius
+INNER_R = 115.0               # inner hexagon radius
+CX = CY = 256.0
 
 
 def grad_color(t):
@@ -50,72 +45,45 @@ def grad_color(t):
     return STOPS[-1][1]
 
 
-def qbez(p0, p1, p2, n=48):
-    pts = []
-    for i in range(n + 1):
-        t = i / n
-        u = 1 - t
-        x = u * u * p0[0] + 2 * u * t * p1[0] + t * t * p2[0]
-        y = u * u * p0[1] + 2 * u * t * p1[1] + t * t * p2[1]
-        pts.append((x, y))
-    return pts
-
-
-def star_points(cx, cy, r, scale):
-    """Concave four-point star, sampled to a polygon, in master pixels."""
-    c = r * K
-    top = (cx, cy - r)
-    right = (cx + r, cy)
-    bot = (cx, cy + r)
-    left = (cx - r, cy)
-    segs = [
-        (top, (cx + c, cy - c), right),
-        (right, (cx + c, cy + c), bot),
-        (bot, (cx - c, cy + c), left),
-        (left, (cx - c, cy - c), top),
+def hex_points(cx, cy, r, scale):
+    """Pointy-top hexagon (vertex at top), in master pixels."""
+    d = 0.8660254  # sqrt(3)/2
+    raw = [
+        (cx, cy - r),
+        (cx + d * r, cy - 0.5 * r),
+        (cx + d * r, cy + 0.5 * r),
+        (cx, cy + r),
+        (cx - d * r, cy + 0.5 * r),
+        (cx - d * r, cy - 0.5 * r),
     ]
-    pts = []
-    for p0, p1, p2 in segs:
-        pts.extend(qbez(p0, p1, p2))
-    return [(x * scale, y * scale) for (x, y) in pts]
+    return [(x * scale, y * scale) for (x, y) in raw]
 
 
-def make_glow():
-    """Radial orange glow as an RGBA layer sized RES, centred at the main star."""
-    GR = 512
-    cx, cy, rg = 224, 256, 190
-    m = Image.new("L", (GR, GR), 0)
-    d = ImageDraw.Draw(m)
-    steps = rg
-    # draw largest (faint) -> smallest (bright); each smaller circle overwrites
-    # the centre with a higher alpha, giving a clean radial falloff.
-    for i in range(steps):
-        rad = rg * (1 - i / steps)
-        a = int(GLOW_MAX_A * (i / steps))
-        d.ellipse([cx - rad, cy - rad, cx + rad, cy + rad], fill=a)
-    m = m.resize((RES, RES), Image.LANCZOS)
-    layer = Image.new("RGBA", (RES, RES), GLOW_RGB + (0,))
-    layer.putalpha(m)
-    return layer
+def paste_hex(canvas, cx, cy, r, scale):
+    """Hexagon filled with the vertical brand gradient."""
+    side = max(2, round(2 * r * scale))
+    col = [grad_color(y / (side - 1)) for y in range(side)]
+    g = Image.new("RGB", (1, side))
+    g.putdata(col)
+    g = g.resize((side, side), Image.LANCZOS)
+    x0 = (cx - r) * scale
+    y0 = (cy - r) * scale
+    pts = [(x - x0, y - y0) for (x, y) in hex_points(cx, cy, r, scale)]
+    mask = Image.new("L", (side, side), 0)
+    ImageDraw.Draw(mask).polygon(pts, fill=255)
+    canvas.alpha_composite(_to_rgba(g, mask), (round(x0), round(y0)))
 
 
-def paste_stars(canvas, scale):
-    for (cx, cy, r, op) in STARS:
-        side = max(2, round(2 * r * scale))
-        # vertical gradient over the star's bounding box
-        col = [grad_color(y / (side - 1)) for y in range(side)]
-        g = Image.new("RGB", (1, side))
-        g.putdata(col)
-        g = g.resize((side, side), Image.LANCZOS)
-        # mask: the star shape in bbox-local coords
-        x0 = (cx - r) * scale
-        y0 = (cy - r) * scale
-        pts = [(x - x0, y - y0) for (x, y) in star_points(cx, cy, r, scale)]
-        mask = Image.new("L", (side, side), 0)
-        ImageDraw.Draw(mask).polygon(pts, fill=255)
-        if op < 1.0:
-            mask = mask.point(lambda v: int(v * op))
-        canvas.alpha_composite(_to_rgba(g, mask), (round(x0), round(y0)))
+def paste_hex_solid(canvas, cx, cy, r, color, scale):
+    """Solid-colour hexagon (the inner ring hole)."""
+    x0 = (cx - r) * scale
+    y0 = (cy - r) * scale
+    side = max(2, round(2 * r * scale))
+    g = Image.new("RGB", (side, side), color)
+    pts = [(x - x0, y - y0) for (x, y) in hex_points(cx, cy, r, scale)]
+    mask = Image.new("L", (side, side), 0)
+    ImageDraw.Draw(mask).polygon(pts, fill=255)
+    canvas.alpha_composite(_to_rgba(g, mask), (round(x0), round(y0)))
 
 
 def _to_rgba(rgb, mask):
@@ -126,23 +94,23 @@ def _to_rgba(rgb, mask):
 
 # ---- masters -------------------------------------------------------------
 def master_tile(rounded=True):
-    """Charcoal tile + glow + sparkles. Rounded => transparent corners."""
+    """Charcoal tile + hex-nut ring. Rounded => transparent corners."""
     bg = Image.new("RGBA", (RES, RES), (0, 0, 0, 0))
     d = ImageDraw.Draw(bg)
     if rounded:
         d.rounded_rectangle([0, 0, RES - 1, RES - 1], radius=CORNER * F, fill=CHARCOAL)
     else:
         d.rectangle([0, 0, RES, RES], fill=CHARCOAL)
-    bg.alpha_composite(make_glow())
-    paste_stars(bg, F)
+    paste_hex(bg, CX, CY, OUTER_R, F)
+    paste_hex_solid(bg, CX, CY, INNER_R, CHARCOAL[:3], F)
     return bg
 
 
 def master_marks():
-    """Glow + sparkles on transparent (for the Android adaptive foreground)."""
+    """Hex-nut ring on transparent (for the Android adaptive foreground)."""
     bg = Image.new("RGBA", (RES, RES), (0, 0, 0, 0))
-    bg.alpha_composite(make_glow())
-    paste_stars(bg, F)
+    paste_hex(bg, CX, CY, OUTER_R, F)
+    paste_hex_solid(bg, CX, CY, INNER_R, CHARCOAL[:3], F)
     return bg
 
 
@@ -166,7 +134,7 @@ def save(master, relpath, size, mode="RGBA"):
     os.makedirs(os.path.dirname(p), exist_ok=True)
     img = out(master, size)
     if mode == "RGB":
-        flat = Image.new("RGB", img.size, (31, 22, 17))
+        flat = Image.new("RGB", img.size, CHARCOAL[:3])
         flat.paste(img, mask=img.split()[-1])
         img = flat
     img.save(p)
@@ -247,7 +215,7 @@ for dpi, (sq, fg) in android.items():
 
 # --- Capacitor Android (frontend/android/app/src/main/res) — the icons that
 #     actually ship in the APK. Adaptive icon = charcoal background colour
-#     (see values/ic_launcher_background.xml) + the sparkle foreground. ---
+#     (see values/ic_launcher_background.xml) + the hex-nut foreground. ---
 cap_android = {
     "mdpi": (48, 108), "hdpi": (72, 162), "xhdpi": (96, 216),
     "xxhdpi": (144, 324), "xxxhdpi": (192, 432),

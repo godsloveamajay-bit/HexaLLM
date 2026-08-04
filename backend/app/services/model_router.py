@@ -1,7 +1,7 @@
-"""NebulaX virtual models — a thin routing layer over Ollama.
+"""HexaLLM virtual models — a thin routing layer over Ollama.
 
 Each variant looks like a single model from the user's perspective
-(`nebulax:fast`, `nebulax:balanced`, `nebulax:thinking`) but the backend
+(`hex-4.2-turbo`, `hex-5.1-prime`, `hex-6.0-reason`) but the backend
 picks the best underlying Ollama model per request, then merges in the
 variant's system prompt + sampling parameters.
 """
@@ -276,9 +276,9 @@ def vision_model_for(available_models: List[str]) -> Optional[str]:
 
 VARIANTS: Dict[str, Variant] = {
     # ── 1. Code & Maths ──────────────────────────────────────────────────────
-    "nebulax:code": Variant(
-        id="nebulax:code",
-        label="NebulaX Code",
+    "hex-4.2-code": Variant(
+        id="hex-4.2-code",
+        label="HexaLLM Code",
         description="Coding and maths. Scales from quick snippets to big refactors and step-by-step proofs.",
         default_model=_CODING,
         routes=[
@@ -287,7 +287,7 @@ VARIANTS: Dict[str, Variant] = {
             RoutedModel(_THINKING, "reasoning"),       # proofs, equations, step-by-step maths (no code)
         ],
         system_prompt=(
-            "You are NebulaX Code, an expert software engineer and mathematician. "
+            "You are HexaLLM Code, an expert software engineer and mathematician. "
             "Write clean, correct, well-commented code. For maths and proofs, show each step clearly. "
             "Always specify the language in code blocks. Prefer concise, idiomatic solutions. "
             "Point out edge cases, bugs, and complexity trade-offs where relevant."
@@ -299,14 +299,14 @@ VARIANTS: Dict[str, Variant] = {
     ),
 
     # ── 2. Chat & Everyday tasks ─────────────────────────────────────────────
-    "nebulax:chat": Variant(
-        id="nebulax:chat",
-        label="NebulaX Chat",
+    "hex-4.2-turbo": Variant(
+        id="hex-4.2-turbo",
+        label="HexaLLM Turbo",
         description="Friendly conversation and everyday tasks. Fast, warm, and to the point.",
         default_model=_CHAT,
         routes=[],
         system_prompt=(
-            "You are NebulaX Chat, a friendly and helpful assistant. "
+            "You are HexaLLM Turbo, a friendly and helpful assistant. "
             "Keep answers conversational, clear, and concise. "
             "Match the user's tone — casual if they're casual, detailed if they want depth. "
             "Don't pad responses with unnecessary disclaimers or filler."
@@ -318,14 +318,14 @@ VARIANTS: Dict[str, Variant] = {
     ),
 
     # ── 3. Writing & Literature ──────────────────────────────────────────────
-    "nebulax:write": Variant(
-        id="nebulax:write",
-        label="NebulaX Write",
+    "hex-4.3-write": Variant(
+        id="hex-4.3-write",
+        label="HexaLLM Write",
         description="Creative writing, editing, storytelling, and literary analysis.",
         default_model=_GENERAL,
         routes=[],
         system_prompt=(
-            "You are NebulaX Write, a skilled writer and literary assistant. "
+            "You are HexaLLM Write, a skilled writer and literary assistant. "
             "Help with creative writing, storytelling, poetry, essays, editing, and literary analysis. "
             "Adapt your voice to the genre and style the user asks for — literary, commercial, academic, or playful. "
             "For editing tasks, explain changes and preserve the author's voice. "
@@ -338,16 +338,16 @@ VARIANTS: Dict[str, Variant] = {
     ),
 
     # ── 4. Deep reasoning & Analysis ────────────────────────────────────────
-    "nebulax:think": Variant(
-        id="nebulax:think",
-        label="NebulaX Think",
+    "hex-6.0-reason": Variant(
+        id="hex-6.0-reason",
+        label="HexaLLM Reason",
         description="Deep analysis, research, strategy, and complex problem solving. Digs deeper when you ask for rigour.",
         default_model=_THINKING,
         routes=[
             RoutedModel(_THINKING_DEEP, "reasoning_deep"),  # "rigorous", "in depth", very long prompts
         ],
         system_prompt=(
-            "You are NebulaX Think, an analytical assistant built for deep reasoning. "
+            "You are HexaLLM Reason, an analytical assistant built for deep reasoning. "
             "Break complex problems into steps. State your assumptions explicitly. "
             "Weigh trade-offs, consider multiple perspectives, and flag uncertainty. "
             "Prefer correctness and thoroughness over speed. "
@@ -361,10 +361,10 @@ VARIANTS: Dict[str, Variant] = {
         fallbacks=[_THINKING, _LARGE, _GENERAL],
     ),
 
-    # ── 5. Balanced ──────────────────────────────────────────────────────────
-    "nebulax:balanced": Variant(
-        id="nebulax:balanced",
-        label="NebulaX Balanced",
+    # ── 5. Prime ─────────────────────────────────────────────────────────────
+    "hex-5.1-prime": Variant(
+        id="hex-5.1-prime",
+        label="HexaLLM Prime",
         description="Spreads work across all models. Routes each message to the best model for the job.",
         default_model=_LARGE,
         routes=[
@@ -374,23 +374,23 @@ VARIANTS: Dict[str, Variant] = {
             RoutedModel(_THINKING, "reasoning"),
         ],
         system_prompt=(
-            "You are NebulaX Balanced, a versatile assistant. "
+            "You are HexaLLM Prime, a versatile assistant. "
             "Match the depth and tone to what the user needs — concise for simple questions, "
             "detailed for complex ones. Write clean code, reason through problems step by step, "
             "and communicate clearly in plain language."
         ),
         temperature=0.6,
         num_ctx=8192,
-        # Balanced routes reasoning queries to deepseek-r1, whose <think> stream
+        # Prime routes reasoning queries to deepseek-r1, whose <think> stream
         # shares this budget with the answer — give it room so the body isn't empty.
         num_predict=4096,
         fallbacks=[_GENERAL, _CHAT],
     ),
 
     # ── 6. Custom ────────────────────────────────────────────────────────────
-    "nebulax:custom": Variant(
-        id="nebulax:custom",
-        label="NebulaX Custom",
+    "hex-4.2-custom": Variant(
+        id="hex-4.2-custom",
+        label="HexaLLM Custom",
         description="Bring-your-own system prompt. Full control over the assistant's voice and behavior.",
         default_model=_GENERAL,
         routes=[],
@@ -402,14 +402,14 @@ VARIANTS: Dict[str, Variant] = {
     ),
 
     # ── 7. Vision ────────────────────────────────────────────────────────────
-    "nebulax:vision": Variant(
-        id="nebulax:vision",
-        label="NebulaX Vision",
+    "hex-4.1-vision": Variant(
+        id="hex-4.1-vision",
+        label="HexaLLM Vision",
         description="Understands images — screenshots, diagrams, charts, photos, UI mockups, handwriting.",
         default_model=_VISION,
         routes=[],
         system_prompt=(
-            "You are NebulaX Vision, a multimodal assistant that can see images. "
+            "You are HexaLLM Vision, a multimodal assistant that can see images. "
             "Describe and analyze what's in the image accurately and specifically. "
             "For screenshots/diagrams/UI, read text and structure precisely; for charts, "
             "report the actual values and trends; for code or errors in an image, transcribe "
@@ -424,14 +424,14 @@ VARIANTS: Dict[str, Variant] = {
     ),
 
     # ── 8. Math ─────────────────────────────────────────────────────────────
-    "nebulax:math": Variant(
-        id="nebulax:math",
-        label="NebulaX Math",
+    "hex-4.2-math": Variant(
+        id="hex-4.2-math",
+        label="HexaLLM Math",
         description="Math-tuned model for equations, proofs, step-by-step problem solving, and data analysis.",
         default_model=_MATH,
         routes=[],
         system_prompt=(
-            "You are NebulaX Math, a specialised mathematics assistant. "
+            "You are HexaLLM Math, a specialised mathematics assistant. "
             "Solve problems step by step with clear reasoning. Use LaTeX notation "
             "for equations and mathematical expressions. Explain concepts thoroughly "
             "and show all working. If the problem involves code, use appropriate "
@@ -447,7 +447,7 @@ VARIANTS: Dict[str, Variant] = {
 
 # Variants that allow the caller to supply their own system prompt.
 # All other variants ignore req.system_prompt to preserve their branded voice.
-USER_PROMPT_ALLOWED = {"nebulax:custom"}
+USER_PROMPT_ALLOWED = {"hex-4.2-custom"}
 
 
 def allows_user_prompt(variant_id: str) -> bool:
@@ -472,7 +472,7 @@ def public_variants() -> List[Dict[str, str]]:
 def concrete_for(model_id: str, user_text: str, available_models: List[str]) -> str:
     """Resolve a model selection to a concrete Ollama model.
 
-    If `model_id` is a NebulaX variant, route it (using `user_text` as the
+    If `model_id` is a HexaLLM variant, route it (using `user_text` as the
     prompt hint) to the best available base. Non-variant ids pass through
     unchanged. Used by the agent / OpenAI-compat paths so a user can pick a
     variant anywhere, not just in chat."""

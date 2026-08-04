@@ -6,8 +6,6 @@
       <stop offset="100%" stop-color="#3B82F6"/>
     </linearGradient>
   </defs>
-  <!-- HexaLLM hex-nut mark: gradient hexagonal ring built from two
-       mathematically identical pointy-top hexagons rotated exactly 60°. -->
+  <!-- Central hexagon only — clean and recognizable at 16px (favicon). -->
   <path d="M256 36 L446.5 146 L446.5 366 L256 476 L65.5 366 L65.5 146 Z" fill="url(#hex)"/>
-  <path d="M256 136 L359.9 196 L359.9 316 L256 376 L152.1 316 L152.1 196 Z" fill="#0F172A"/>
 </svg>

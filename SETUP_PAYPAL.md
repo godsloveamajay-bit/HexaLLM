@@ -1,4 +1,4 @@
-# PayPal Setup Guide for NebulaX AI
+# PayPal Setup Guide for HexaLLM AI
 
 ## 1. Create a PayPal Business Account
 
@@ -10,7 +10,7 @@ Go to https://www.paypal.com/business and sign up if you don't have one.
 2. Click **Log in to Dashboard** and sign in with your PayPal business account
 3. In the left nav, go to **Apps & Credentials**
 4. Under **REST API apps**, click **Create App**
-5. Name it `NebulaX AI` and click **Create App**
+5. Name it `HexaLLM AI` and click **Create App**
 6. You'll see **Client ID** and **Secret** — copy both
 
 ## 3. Set environment variables
@@ -18,7 +18,7 @@ Go to https://www.paypal.com/business and sign up if you don't have one.
 On your server, edit the `.env` file:
 
 ```bash
-# /home/ubuntu/nebulaxai/.env
+# /home/ubuntu/hexallm/.env
 # ... existing vars ...
 
 PAYPAL_CLIENT_ID=your_client_id_here
@@ -52,7 +52,7 @@ async def setup():
         return
     
     # Create the product in PayPal
-    product_id = await paypal.create_product('NebulaX AI Pro', 'Unlimited access to NebulaX AI')
+    product_id = await paypal.create_product('HexaLLM AI Pro', 'Unlimited access to HexaLLM AI')
     if not product_id:
         print('Product already exists — fetching existing plan')
         plans = await paypal.list_plans('')
@@ -64,8 +64,8 @@ async def setup():
     # Create monthly billing plan
     monthly_plan_id = await paypal.create_plan(
         product_id=product_id,
-        name='NebulaX AI Pro Monthly',
-        description='Monthly subscription to NebulaX AI Pro',
+        name='HexaLLM AI Pro Monthly',
+        description='Monthly subscription to HexaLLM AI Pro',
         price=12.00,
         interval='MONTH',
     )
@@ -74,8 +74,8 @@ async def setup():
     # Create yearly billing plan
     yearly_plan_id = await paypal.create_plan(
         product_id=product_id,
-        name='NebulaX AI Pro Yearly',
-        description='Yearly subscription to NebulaX AI Pro',
+        name='HexaLLM AI Pro Yearly',
+        description='Yearly subscription to HexaLLM AI Pro',
         price=120.00,
         interval='YEAR',
     )
@@ -99,7 +99,7 @@ This only needs to be done once. It creates the PayPal billing plan and saves it
 1. Go to https://developer.paypal.com/dashboard/applications
 2. Select your app
 3. Click **Add Webhook**
-4. **Webhook URL**: `https://ai.nebualax.co.uk/api/v1/billing/webhooks/paypal`
+4. **Webhook URL**: `https://ai.hexallm.co.uk/api/v1/billing/webhooks/paypal`
 5. **Event types**: Select:
    - `BILLING.SUBSCRIPTION.ACTIVATED`
    - `BILLING.SUBSCRIPTION.CANCELLED`
@@ -121,7 +121,7 @@ docker restart backend
 
 ## 6. Test the flow
 
-1. Visit https://ai.nebualax.co.uk/pricing
+1. Visit https://ai.hexallm.co.uk/pricing
 2. Click **Subscribe with PayPal** on the Pro plan
 3. You'll be redirected to PayPal Sandbox
 4. Log in with a **sandbox test buyer account** (create one at https://developer.paypal.com/dashboard/accounts)

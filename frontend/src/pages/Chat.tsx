@@ -71,22 +71,22 @@ interface Session { id: number; title: string; model_name: string; updated_at: s
 interface ContentMatch { id: number; title: string; model_name: string; updated_at: string; match_count: number; snippet: string; role: string | null }
 interface KB { id: number; name: string; document_count: number; chunk_count: number }
 interface CliSession { session_id: string; hostname: string; cwd: string; platform: string }
-interface NebulaVariant {
+interface HexaLLMVariant {
   id: string; label: string; description: string; ready: boolean
   available_bases: string[]; missing_bases: string[]
 }
 
 const VARIANT_ICONS: Record<string, any> = {
-  'nebulax:balanced': Scale,
-  'nebulax:code':     Zap,
-  'nebulax:chat':     Brain,
-  'nebulax:write':    Sparkles,
-  'nebulax:think':    Brain,
-  'nebulax:custom':   Settings2,
-  'nebulax:math':     Sigma,
+  'hex-5.1-prime': Scale,
+  'hex-4.2-code':     Zap,
+  'hex-4.2-turbo':     Brain,
+  'hex-4.3-write':    Sparkles,
+  'hex-6.0-reason':    Brain,
+  'hex-4.2-custom':   Settings2,
+  'hex-4.2-math':     Sigma,
 }
 
-const CUSTOM_VARIANT_ID = 'nebulax:custom'
+const CUSTOM_VARIANT_ID = 'hex-4.2-custom'
 // Guests have no server-side session; this local-only id keeps the streaming
 // plumbing (liveStreams map) working while the backend persists nothing.
 const GUEST_SESSION_ID = -1
@@ -481,7 +481,7 @@ export default function ChatPage() {
   const [activeSession, setActiveSession] = useState<Session | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [model, setModel] = useState(user?.ai_default_model || 'nebulax:balanced')
+  const [model, setModel] = useState(user?.ai_default_model || 'hex-5.1-prime')
   const [sending, setSending] = useState(false)
   const [streamPhase, setStreamPhase] = useState<'idle' | 'thinking' | 'warming' | 'typing'>('idle')
   const [showJump, setShowJump] = useState(false)
@@ -500,7 +500,7 @@ export default function ChatPage() {
   const [showSystem, setShowSystem] = useState(false)
   const [kbs, setKbs] = useState<KB[]>([])
   const [kbId, setKbId] = useState<number | null>(null)
-  const [variants, setVariants] = useState<NebulaVariant[]>([])
+  const [variants, setVariants] = useState<HexaLLMVariant[]>([])
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [attachment, setAttachment] = useState<Attachment | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
@@ -603,7 +603,7 @@ export default function ChatPage() {
     try { const { data } = await api.get('/cli/sessions'); setCliSessions(data || []) } catch {}
   }
   const loadVariants = async () => {
-    try { const { data } = await api.get('/models/nebulax/variants'); setVariants(data.variants || []) } catch {}
+    try { const { data } = await api.get('/models/hexallm/variants'); setVariants(data.variants || []) } catch {}
   }
   const loadPersonas = async () => {
     try { const { data } = await api.get('/personas'); setPersonas(data || []) } catch {}
@@ -857,7 +857,7 @@ export default function ChatPage() {
             // Show the branded variant label; never leak a raw model name to non-admins.
             try {
               const w = JSON.parse(data); const m = w.model || ''
-              setWarmingModel((user?.is_admin || m.startsWith('nebulax:')) ? prettyModel(m) : '')
+              setWarmingModel((user?.is_admin || m.startsWith('hex-')) ? prettyModel(m) : '')
             } catch {}
             setStreamPhase('warming')
           }
@@ -989,7 +989,7 @@ export default function ChatPage() {
     const title = activeSession?.title || 'conversation'
     const md = messages
       .filter(m => m.role !== 'system')
-      .map(m => `## ${m.role === 'user' ? 'You' : 'NebulaX AI'}\n\n${m.content}`)
+      .map(m => `## ${m.role === 'user' ? 'You' : 'HexaLLM AI'}\n\n${m.content}`)
       .join('\n\n---\n\n')
     const blob = new Blob([`# ${title}\n\n${md}`], { type: 'text/markdown' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob)
@@ -1169,7 +1169,7 @@ export default function ChatPage() {
                     {s.snippet ? (
                       <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">{s.snippet}</p>
                     ) : (
-                      <p className="text-xs text-gray-600 truncate">{s.model_name.replace('nebulax:', '')}</p>
+                      <p className="text-xs text-gray-600 truncate">{prettyModel(s.model_name)}</p>
                     )}
                     {s.match_count > 1 && (
                       <p className="text-[10px] text-primary-500/80 mt-0.5">{s.match_count} matches</p>
@@ -1193,7 +1193,7 @@ export default function ChatPage() {
                 <Bot className="w-3.5 h-3.5 flex-shrink-0" />
                 <div className="flex-1 min-w-0">
                   <p className="truncate text-sm">{s.title}</p>
-                  <p className="text-xs text-gray-600 truncate">{s.model_name.replace('nebulax:', '')}</p>
+                  <p className="text-xs text-gray-600 truncate">{prettyModel(s.model_name)}</p>
                 </div>
                 <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
                   {activeSession?.id === s.id && (
@@ -1225,7 +1225,7 @@ export default function ChatPage() {
                 setActiveSession(a => a ? { ...a, model_name: m } : a)
               }
             }} className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-500">
-              <optgroup label="NebulaX (smart routing)">
+              <optgroup label="HexaLLM (smart routing)">
                 {variants.map((v) => <option key={v.id} value={v.id} disabled={!v.ready}>{v.label}{v.ready ? '' : ' (unavailable)'}</option>)}
               </optgroup>
               {hasRawAccess && ollamaModels.length > 0 && (
@@ -1279,13 +1279,13 @@ export default function ChatPage() {
                 <BookMarked className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Templates</span>
               </button>
-              {(model === CUSTOM_VARIANT_ID || !model.startsWith('nebulax:')) && (
+              {(model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && (
                 <button onClick={() => setShowSystem(!showSystem)} className="btn-ghost text-xs gap-1 p-1.5">
                   <ChevronDown className={clsx('w-3 h-3 transition-transform', showSystem && 'rotate-180')} />
                   <span className="hidden sm:inline">System</span>
                 </button>
               )}
-              {(model === CUSTOM_VARIANT_ID || !model.startsWith('nebulax:')) && (
+              {(model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && (
                 <button onClick={() => setShowPersonality(!showPersonality)} className="btn-ghost text-xs gap-1 p-1.5 relative" title="Personality">
                   <SlidersHorizontal className="w-3.5 h-3.5" />
                   <span className="hidden sm:inline">Personality</span>
@@ -1362,7 +1362,7 @@ export default function ChatPage() {
             </div>
             <div className="flex items-center gap-2 mt-3">
               <button onClick={() => setOllamaOptions({})} className="btn-ghost text-xs px-2 py-1 text-gray-500 hover:text-gray-300">Reset all</button>
-              <p className="text-xs text-gray-600">Applies when using direct models. NebulaX variants ignore these.</p>
+              <p className="text-xs text-gray-600">Applies when using direct models. HexaLLM variants ignore these.</p>
             </div>
           </div>
         )}
@@ -1395,7 +1395,7 @@ export default function ChatPage() {
               ))}
             </select>
             {activeCli && <span className="badge bg-emerald-900/30 text-emerald-400 text-xs flex-shrink-0">CLI</span>}
-            {cliSessions.length === 0 && <span className="text-xs text-gray-600">Run <code className="font-mono">nebula daemon</code> to connect</span>}
+            {cliSessions.length === 0 && <span className="text-xs text-gray-600">Run <code className="font-mono">hexallm daemon</code> to connect</span>}
           </div>
           )}
         </div>
@@ -1417,14 +1417,14 @@ export default function ChatPage() {
           </div>
         )}
 
-        {(model === CUSTOM_VARIANT_ID || !model.startsWith('nebulax:')) && showSystem && (
+        {(model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && showSystem && (
           <div className="px-4 py-2 border-b border-gray-800 bg-gray-900/50">
             <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} placeholder="You are a helpful assistant that…" rows={2} className="input text-sm resize-none" />
             <p className="text-xs text-gray-500 mt-1">Custom variant & direct models use this system prompt. Branded variants enforce their own behaviour.</p>
           </div>
         )}
 
-        {!isGuest && (model === CUSTOM_VARIANT_ID || !model.startsWith('nebulax:')) && showPersonality && (
+        {!isGuest && (model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && showPersonality && (
           <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/50">
             <div className="flex items-center justify-between mb-2">
               <p className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
@@ -1464,7 +1464,7 @@ export default function ChatPage() {
                   <>
                     <h1 className="text-2xl font-semibold text-gray-100 leading-relaxed">{greeting}</h1>
                     <p className="text-sm text-gray-500 mt-3 max-w-md mx-auto">
-                      I'm NebulaX — code, write, analyze, create. Pick a model and start chatting.
+                      I'm HexaLLM — code, write, analyze, create. Pick a model and start chatting.
                     </p>
                   </>
                 )}

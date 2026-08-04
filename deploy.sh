@@ -1,12 +1,12 @@
 #!/bin/bash
-# Deploy NebulaX AI to ai.nebualax.co.uk using Cloudflare Tunnel
+# Deploy HexaLLM AI to ai.hexallm.co.uk using Cloudflare Tunnel
 # Run this script on your production server
 
 set -e
 
-DOMAIN="ai.nebualax.co.uk"
+DOMAIN="ai.hexallm.co.uk"
 
-echo "🚀 Deploying NebulaX AI to $DOMAIN via Cloudflare Tunnel"
+echo "🚀 Deploying HexaLLM AI to $DOMAIN via Cloudflare Tunnel"
 
 # Check if running as root
 if [ "$EUID" -ne 0 ]; then
@@ -26,7 +26,7 @@ if ! command -v docker-compose &> /dev/null; then
 fi
 
 # Create project directory
-PROJECT_DIR="/opt/nebulaxai"
+PROJECT_DIR="/opt/hexallm"
 mkdir -p $PROJECT_DIR
 cd $PROJECT_DIR
 

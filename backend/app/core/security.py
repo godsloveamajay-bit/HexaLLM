@@ -103,7 +103,7 @@ def get_api_key_record(
     if not credentials or not credentials.credentials.startswith("nai_"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Provide a NebulaX API key (nai_…) as a Bearer token.",
+            detail="Provide a HexaLLM API key (nai_…) as a Bearer token.",
         )
     api_key = db.query(APIKey).filter(
         APIKey.key == credentials.credentials, APIKey.is_active

@@ -170,7 +170,7 @@ def web_search(query: str) -> str:
         resp = httpx.post(
             "https://html.duckduckgo.com/html/",
             data={"q": query.strip()},
-            headers={"User-Agent": "Mozilla/5.0 (compatible; NebulaCode/0.6)"},
+            headers={"User-Agent": "Mozilla/5.0 (compatible; HexaLLM/0.6)"},
             timeout=15,
             follow_redirects=True,
         )
@@ -207,7 +207,7 @@ def fetch_url(url: str) -> str:
     try:
         resp = httpx.get(
             url.strip(),
-            headers={"User-Agent": "Mozilla/5.0 (compatible; NebulaCode/0.6)"},
+            headers={"User-Agent": "Mozilla/5.0 (compatible; HexaLLM/0.6)"},
             timeout=20,
             follow_redirects=True,
         )

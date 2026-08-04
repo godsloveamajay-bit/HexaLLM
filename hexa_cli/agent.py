@@ -5,7 +5,7 @@ from typing import Any, AsyncIterator, Dict, List, Optional
 import httpx
 
 SYSTEM_PROMPT = """\
-You are NebulaCode, an expert AI coding assistant running in the terminal.
+You are HexaLLM, an expert AI coding assistant running in the terminal.
 You help users read, write, debug, and understand code in any language.
 
 AVAILABLE TOOLS (use ONLY these exact names):
@@ -21,7 +21,7 @@ OUTPUT FORMAT RULES — follow exactly every time:
 Examples:
   {{"thought": "List project files first", "tool": "list_files", "input": "."}}
   {{"thought": "Answer directly", "tool": "done", "input": "The answer is 42."}}
-  {{"thought": "Greet user", "tool": "done", "input": "Hello! I'm NebulaCode. What would you like me to help with today?"}}
+  {{"thought": "Greet user", "tool": "done", "input": "Hello! I'm HexaLLM. What would you like me to help with today?"}}
 
 Rules:
 - "input" for "done" must contain your actual reply text — never leave it empty.
@@ -289,7 +289,7 @@ class Agent:
     """
     ReAct agent with persistent conversation history.
 
-    Accepts either an OllamaClient or a NebulaXClient as the LLM backend —
+    Accepts either an OllamaClient or a HexaLLMClient as the LLM backend —
     both expose the same `full_response(model, messages, system, temperature)`
     and `list_models()` interface.
 
@@ -305,7 +305,7 @@ class Agent:
         ollama_url: str = "http://localhost:11434",
         max_steps: int = 20,
         temperature: float = 0.1,
-        backend=None,          # OllamaClient or NebulaXClient; overrides ollama_url
+        backend=None,          # OllamaClient or HexaLLMClient; overrides ollama_url
     ) -> None:
         self.model = model
         self.backend = backend if backend is not None else OllamaClient(ollama_url)

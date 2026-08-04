@@ -46,22 +46,22 @@ HELP_TEXT = """
   [cyan]/save[/]            Save session as JSON file
   [cyan]/system[/]          Show backend and model configuration
   [cyan]/model NAME[/]      Switch model for this session
-  [cyan]/kb[/]              List NebulaX knowledge bases (when connected)
+  [cyan]/kb[/]              List HexaLLM knowledge bases (when connected)
   [cyan]/use-kb ID[/]       Attach a KB — adds search_kb tool to this session
   [cyan]/set KEY VALUE[/]   Change max_steps, temperature, or backend
   [cyan]/tools[/]           List active tools
   [cyan]/help[/]            Show this message
   [cyan]/exit[/]            Quit
 
-[bold]NebulaX login[/]
-  [cyan]nebula login URL[/]           Sign in with email + password
-  [cyan]nebula login URL --google[/]  Sign in with Google (opens browser)
+[bold]HexaLLM login[/]
+  [cyan]hexallm login URL[/]           Sign in with email + password
+  [cyan]hexallm login URL --google[/]  Sign in with Google (opens browser)
 
-[bold]Backends[/]  (priority: NebulaX › Ollama › Pollinations)
-  [dim]auto[/]          NebulaX if logged in, then Ollama if running, then Pollinations
+[bold]Backends[/]  (priority: HexaLLM › Ollama › Pollinations)
+  [dim]auto[/]          HexaLLM if logged in, then Ollama if running, then Pollinations
   [dim]pollinations[/]  Free cloud — works out of the box, no install needed
   [dim]ollama[/]        Local inference — run [cyan]ollama pull llama3[/] first
-  Switch with: [cyan]nebula set backend pollinations[/]  or  [cyan]nebula set backend ollama[/]
+  Switch with: [cyan]hexallm set backend pollinations[/]  or  [cyan]hexallm set backend ollama[/]
 
 [bold]Built-in tools[/]
   [dim]read_file / write_file / patch_file / list_files[/]   File operations
@@ -73,18 +73,18 @@ HELP_TEXT = """
 
 [bold]Tips[/]
   • Works out of the box — Pollinations is used automatically if Ollama isn't installed.
-  • Ask NebulaCode to [italic]read, edit, create, debug, explain[/] any file.
+  • Ask HexaLLM to [italic]read, edit, create, debug, explain[/] any file.
   • "Search the web for…" or "fetch https://…" triggers web tools.
   • "git diff HEAD" or "commit my changes" uses git_run.
   • [cyan]/clear[/] starts a fresh task with no prior context.
 """
 
 
-def _make_nebulax_client(cfg):
-    """Return a NebulaXClient if credentials are configured, else None."""
-    if cfg.nebulax_url and cfg.nebulax_token:
-        from .nebulax import NebulaXClient
-        return NebulaXClient(cfg.nebulax_url, cfg.nebulax_token)
+def _make_hexallm_client(cfg):
+    """Return a HexaLLMClient if credentials are configured, else None."""
+    if cfg.hexallm_url and cfg.hexallm_token:
+        from .hexallm import HexaLLMClient
+        return HexaLLMClient(cfg.hexallm_url, cfg.hexallm_token)
     return None
 
 
@@ -101,28 +101,28 @@ def _build_kb_tool(nx_client, kb_id: int):
 async def _pick_backend(cfg):
     """
     Return (backend, backend_label, nx_client_or_None) using priority:
-      1. NebulaX  — if backend is explicitly set to "nebulax" OR (auto AND token is valid)
+      1. HexaLLM  — if backend is explicitly set to "hexallm" OR (auto AND token is valid)
       2. Ollama   — if cfg.backend == "ollama" OR (auto AND Ollama is reachable)
       3. Pollinations — free cloud fallback, no setup needed
     """
-    from .nebulax import NebulaXClient, PollinationsClient
+    from .hexallm import HexaLLMClient, PollinationsClient
 
-    # 1. NebulaX
-    want_nebulax = cfg.backend == "nebulax"
-    nx = _make_nebulax_client(cfg)
-    if nx:
-        nx_user = await NebulaXClient.verify(cfg.nebulax_url, cfg.nebulax_token)
-        if nx_user:
+    # 1. HexaLLM
+    want_hexallm = cfg.backend == "hexallm"
+    hexa = _make_hexallm_client(cfg)
+    if hexa:
+        hexa_user = await HexaLLMClient.verify(cfg.hexallm_url, cfg.hexallm_token)
+        if hexa_user:
             # Try to get or create an API key for LLM calls
-            await nx.get_or_create_api_key()
-            return nx, f"NebulaX  {cfg.nebulax_url}", nx, nx_user
+            await hexa.get_or_create_api_key()
+            return hexa, f"HexaLLM  {cfg.hexallm_url}", hexa, hexa_user
         # If explicitly requested but token invalid, fail fast
-        if want_nebulax:
-            console.print("[red]NebulaX backend requested but token is expired or invalid.[/]")
-            console.print("[yellow]Run[/] [cyan]nebula login <URL>[/] [yellow]to reconnect.[/]")
+        if want_hexallm:
+            console.print("[red]HexaLLM backend requested but token is expired or invalid.[/]")
+            console.print("[yellow]Run[/] [cyan]hexallm login <URL>[/] [yellow]to reconnect.[/]")
             sys.exit(1)
         # Otherwise, if auto, continue to fallback backends
-        console.print("[yellow]NebulaX token expired — run[/] [cyan]nebula login URL[/] [yellow]to reconnect.[/]")
+        console.print("[yellow]HexaLLM token expired — run[/] [cyan]hexallm login URL[/] [yellow]to reconnect.[/]")
 
     # 2. Ollama
     want_ollama = cfg.backend == "ollama"
@@ -165,14 +165,14 @@ def _pick_default_model(models: list) -> str:
 async def _interactive(cfg) -> None:
     CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
-    backend, backend_label, nx, nx_user = await _pick_backend(cfg)
+    backend, backend_label, hexa, hexa_user = await _pick_backend(cfg)
 
     # Auto-select a sensible default model for the chosen backend
-    from .nebulax import PollinationsClient
+    from .hexallm import PollinationsClient
     if isinstance(backend, PollinationsClient):
         if cfg.model not in PollinationsClient.MODELS:
             cfg.model = PollinationsClient.DEFAULT_MODEL
-    elif nx is None:  # Ollama
+    elif hexa is None:  # Ollama
         if ":" not in cfg.model:
             # Bare/invalid model name — fall back to a default that exists;
             # the live-list validation just below corrects it if needed.
@@ -186,14 +186,14 @@ async def _interactive(cfg) -> None:
     )
 
     # connectivity / model check (skip for Pollinations — no model list endpoint needed)
-    # Also skip for NebulaX since it uses cloud models, not local Ollama
+    # Also skip for HexaLLM since it uses cloud models, not local Ollama
     if not isinstance(backend, PollinationsClient):
         try:
             models = await backend.list_models()
             if not models:
-                # NebulaX doesn't require local models
-                if nx:
-                    pass  # This is expected for NebulaX cloud backend
+                # HexaLLM doesn't require local models
+                if hexa:
+                    pass  # This is expected for HexaLLM cloud backend
                 else:
                     console.print("[yellow]Warning:[/] No models found.")
             elif cfg.model not in models:
@@ -205,15 +205,15 @@ async def _interactive(cfg) -> None:
                 cfg.model = _pick_default_model(models)
                 agent.model = cfg.model
         except Exception as e:
-            src = "NebulaX" if nx else "Ollama"
+            src = "HexaLLM" if hexa else "Ollama"
             console.print(f"[red]Cannot reach {src}:[/] {e}")
             sys.exit(1)
 
     print_welcome(cfg.model, backend_label)
-    if nx and nx_user:
+    if hexa and hexa_user:
         console.print(
-            f"  [dim]Connected as[/] [cyan]{nx_user.get('email', '?')}[/] "
-            f"[dim]on[/] [cyan]{cfg.nebulax_url}[/]\n"
+            f"  [dim]Connected as[/] [cyan]{hexa_user.get('email', '?')}[/] "
+            f"[dim]on[/] [cyan]{cfg.hexallm_url}[/]\n"
         )
 
     # active tools (may grow if user attaches a KB)
@@ -237,7 +237,7 @@ async def _interactive(cfg) -> None:
         )
         try:
             raw = await session.prompt_async(
-                HTML("<prompt>nebula</prompt> <ansi_bright_black>›</ansi_bright_black> "),
+                HTML("<prompt>hexallm</prompt> <ansi_bright_black>›</ansi_bright_black> "),
                 bottom_toolbar=toolbar,
             )
         except (KeyboardInterrupt, EOFError):
@@ -263,8 +263,8 @@ async def _interactive(cfg) -> None:
             agent.history.clear()
             console.clear()
             print_welcome(cfg.model, backend_label)
-            if nx and nx_user:
-                console.print(f"  [dim]Connected as[/] [cyan]{nx_user.get('email', '?')}[/]\n")
+            if hexa and hexa_user:
+                console.print(f"  [dim]Connected as[/] [cyan]{hexa_user.get('email', '?')}[/]\n")
             continue
 
         if low == "/context":
@@ -317,7 +317,7 @@ async def _interactive(cfg) -> None:
 
         if low == "/system":
             console.print(
-                f"[cyan]NebulaCode System[/]\n"
+                f"[cyan]HexaLLM System[/]\n"
                 f"  Model     [bold]{agent.model}[/]\n"
                 f"  Backend   {backend_label}\n"
                 f"  Max steps {agent.max_steps}\n"
@@ -330,11 +330,11 @@ async def _interactive(cfg) -> None:
             continue
 
         if low == "/kb":
-            if not nx:
-                print_info("Connect to NebulaX first with [cyan]nebula login URL[/]")
+            if not hexa:
+                print_info("Connect to HexaLLM first with [cyan]hexallm login URL[/]")
                 continue
             try:
-                kbs = nx.list_kbs_sync()
+                kbs = hexa.list_kbs_sync()
                 if not kbs:
                     print_info("No knowledge bases found.")
                 else:
@@ -350,14 +350,14 @@ async def _interactive(cfg) -> None:
             continue
 
         if low.startswith("/use-kb "):
-            if not nx:
-                print_info("Connect to NebulaX first with [cyan]nebula login URL[/]")
+            if not hexa:
+                print_info("Connect to HexaLLM first with [cyan]hexallm login URL[/]")
                 continue
             try:
                 kb_id = int(user_input.split()[1])
                 active_kb_id = kb_id
-                active_tool_funcs["search_kb"] = _build_kb_tool(nx, kb_id)
-                active_tool_descs["search_kb"] = f"Search NebulaX knowledge base {kb_id}. Input: query string."
+                active_tool_funcs["search_kb"] = _build_kb_tool(hexa, kb_id)
+                active_tool_descs["search_kb"] = f"Search HexaLLM knowledge base {kb_id}. Input: query string."
                 console.print(f"[green]KB {kb_id} attached.[/] [dim]search_kb tool is now active.[/]")
             except (ValueError, IndexError):
                 print_error("Usage: /use-kb <numeric-id>")
@@ -425,10 +425,10 @@ async def _interactive(cfg) -> None:
             # If the answer already streamed live, it's on screen — don't repaint.
             if not done_event.get("streamed"):
                 print_response(done_event["text"])
-            # sync run to NebulaX in the background
-            if nx and done_event.get("steps"):
+            # sync run to HexaLLM in the background
+            if hexa and done_event.get("steps"):
                 try:
-                    run_id = nx.sync_run(
+                    run_id = hexa.sync_run(
                         task=user_input,
                         model=agent.model,
                         tools=done_event.get("tools_used", []),
@@ -437,7 +437,7 @@ async def _interactive(cfg) -> None:
                     )
                     if run_id:
                         console.print(
-                            f"[dim]↑ synced to NebulaX run #{run_id}[/]"
+                            f"[dim]↑ synced to HexaLLM run #{run_id}[/]"
                         )
                 except Exception:
                     pass
@@ -493,18 +493,18 @@ async def _google_login(url: str) -> None:
         console.print("[red]Authentication timed out or was cancelled.[/]")
         raise SystemExit(1)
 
-    from .nebulax import NebulaXClient
-    user = await NebulaXClient.verify(url, result["token"])
+    from .hexallm import HexaLLMClient
+    user = await HexaLLMClient.verify(url, result["token"])
     if not user:
         console.print("[red]Login failed: token invalid.[/]")
         raise SystemExit(1)
 
     cfg = load_config()
-    cfg.nebulax_url = url
-    cfg.nebulax_token = result["token"]
+    cfg.hexallm_url = url
+    cfg.hexallm_token = result["token"]
     save_config(cfg)
     console.print(f"[green]Logged in as[/] [cyan]{user.get('email', '?')}[/] [dim]on {url}[/]")
-    console.print("[dim]Token saved to ~/.nebula/config.json[/]\n")
+    console.print("[dim]Token saved to ~/.hexallm/config.json[/]\n")
 
 
 # ── Click entry points ─────────────────────────────────────────────────────
@@ -515,7 +515,7 @@ async def _google_login(url: str) -> None:
 @click.option("--ollama-url", default=None, help="Ollama base URL (overrides config).")
 @click.pass_context
 def main(ctx, model, ollama_url):
-    """NebulaCode — AI coding assistant for the terminal."""
+    """HexaLLM — AI coding assistant for the terminal."""
     if ctx.invoked_subcommand is not None:
         return
     cfg = load_config()
@@ -532,14 +532,14 @@ def main(ctx, model, ollama_url):
 @click.option("--password", default=None, hide_input=True, help="Password (omit to use --google).")
 @click.option("--google", is_flag=True, default=False, help="Sign in with Google via browser.")
 def cmd_login(url: str, email: Optional[str], password: Optional[str], google: bool):
-    """Authenticate with a NebulaX instance and save credentials.
+    """Authenticate with a HexaLLM instance and save credentials.
 
     \b
     Email / password:
-      nebula login https://ai.nebualax.co.uk
+      hexallm login https://ai.hexallm.co.uk
 
     Google (opens browser):
-      nebula login https://ai.nebualax.co.uk --google
+      hexallm login https://ai.hexallm.co.uk --google
     """
     if google:
         asyncio.run(_google_login(url))
@@ -552,18 +552,18 @@ def cmd_login(url: str, email: Optional[str], password: Optional[str], google: b
         password = click.prompt("Password", hide_input=True)
 
     async def _do():
-        from .nebulax import NebulaXClient
+        from .hexallm import HexaLLMClient
         try:
-            token = await NebulaXClient.login(url, email, password)
+            token = await HexaLLMClient.login(url, email, password)
             cfg = load_config()
-            cfg.nebulax_url = url
-            cfg.nebulax_token = token
+            cfg.hexallm_url = url
+            cfg.hexallm_token = token
             save_config(cfg)
 
-            user = await NebulaXClient.verify(url, token)
+            user = await HexaLLMClient.verify(url, token)
             name = user.get("email", "?") if user else email
             console.print(f"\n[green]Logged in as[/] [cyan]{name}[/] [dim]on {url}[/]")
-            console.print("[dim]Token saved to ~/.nebula/config.json[/]\n")
+            console.print("[dim]Token saved to ~/.hexallm/config.json[/]\n")
         except Exception as e:
             import httpx as _httpx
             if isinstance(e, _httpx.HTTPStatusError):
@@ -587,24 +587,24 @@ def cmd_login(url: str, email: Optional[str], password: Optional[str], google: b
 
 @main.command("logout")
 def cmd_logout():
-    """Remove stored NebulaX credentials."""
+    """Remove stored HexaLLM credentials."""
     cfg = load_config()
-    cfg.nebulax_url = None
-    cfg.nebulax_token = None
+    cfg.hexallm_url = None
+    cfg.hexallm_token = None
     save_config(cfg)
     console.print("[green]Logged out.[/] Credentials removed from config.")
 
 
 @main.command("kbs")
 def cmd_kbs():
-    """List knowledge bases on the connected NebulaX instance."""
+    """List knowledge bases on the connected HexaLLM instance."""
     cfg = load_config()
-    nx = _make_nebulax_client(cfg)
-    if not nx:
-        console.print("[yellow]Not connected.[/] Run [cyan]nebula login URL[/] first.")
+    hexa = _make_hexallm_client(cfg)
+    if not hexa:
+        console.print("[yellow]Not connected.[/] Run [cyan]hexallm login URL[/] first.")
         return
     try:
-        kbs = nx.list_kbs_sync()
+        kbs = hexa.list_kbs_sync()
         if not kbs:
             console.print("[dim]No knowledge bases found.[/]")
             return
@@ -626,7 +626,7 @@ def cmd_config():
     cfg = load_config()
     console.print(f"\n[dim]Config:[/] {CONFIG_DIR / 'config.json'}\n")
     for k, v in vars(cfg).items():
-        if k == "nebulax_token" and v:
+        if k == "hexallm_token" and v:
             v = v[:12] + "…"
         console.print(f"  [cyan]{k}[/]  {v}")
     console.print()
@@ -659,30 +659,30 @@ def cmd_set(key: str, value: str):
 @click.option("--no-reconnect", is_flag=True, default=False, help="Exit on disconnect instead of reconnecting.")
 def cmd_daemon(no_reconnect: bool):
     """
-    Connect to NebulaX and accept tasks dispatched from the web UI.
+    Connect to HexaLLM and accept tasks dispatched from the web UI.
 
     The CLI keeps a persistent WebSocket open. Any task you send from
-    the NebulaX Agents → Remote CLI page executes locally here, with
+    the HexaLLM Agents → Remote CLI page executes locally here, with
     full access to your filesystem and shell, and streams results back
     to the browser in real time.
     """
     cfg = load_config()
-    nx = _make_nebulax_client(cfg)
-    if not nx:
-        console.print("[red]Not connected to NebulaX.[/] Run [cyan]nebula login URL[/] first.")
+    hexa = _make_hexallm_client(cfg)
+    if not hexa:
+        console.print("[red]Not connected to HexaLLM.[/] Run [cyan]hexallm login URL[/] first.")
         sys.exit(1)
 
     async def _run():
         from .tunnel import CliTunnel
-        from .nebulax import NebulaXClient
+        from .hexallm import HexaLLMClient
 
         # verify token first
-        user = await NebulaXClient.verify(cfg.nebulax_url, cfg.nebulax_token)
+        user = await HexaLLMClient.verify(cfg.hexallm_url, cfg.hexallm_token)
         if not user:
-            console.print("[red]Token expired.[/] Run [cyan]nebula login URL[/] again.")
+            console.print("[red]Token expired.[/] Run [cyan]hexallm login URL[/] again.")
             sys.exit(1)
 
-        backend = nx
+        backend = hexa
 
         # Validate / auto-select model — same logic as interactive mode.
         try:
@@ -705,14 +705,14 @@ def cmd_daemon(no_reconnect: bool):
             backend=backend,
         )
 
-        tunnel = CliTunnel(cfg.nebulax_url, cfg.nebulax_token)
+        tunnel = CliTunnel(cfg.hexallm_url, cfg.hexallm_token)
 
         console.print()
         console.print(
-            f"[bold white]NebulaCode Daemon[/]  [dim]connected to[/] [cyan]{cfg.nebulax_url}[/]\n"
+            f"[bold white]HexaLLM Daemon[/]  [dim]connected to[/] [cyan]{cfg.hexallm_url}[/]\n"
             f"[dim]user:[/] [cyan]{user.get('email', '?')}[/]   "
             f"[dim]model:[/] [cyan]{cfg.model}[/]\n\n"
-            "[dim]Waiting for tasks from the NebulaX web UI…  Ctrl-C to stop.[/]\n"
+            "[dim]Waiting for tasks from the HexaLLM web UI…  Ctrl-C to stop.[/]\n"
         )
 
         def on_event(evt: dict) -> None:
@@ -750,12 +750,12 @@ def cmd_daemon(no_reconnect: bool):
 
 @main.command("models")
 def cmd_models():
-    """List models available in Ollama (or NebulaX)."""
+    """List models available in Ollama (or HexaLLM)."""
     async def _list():
         cfg = load_config()
-        nx = _make_nebulax_client(cfg)
-        backend = nx if nx else OllamaClient(cfg.ollama_url)
-        src = "NebulaX" if nx else "Ollama"
+        hexa = _make_hexallm_client(cfg)
+        backend = hexa if hexa else OllamaClient(cfg.ollama_url)
+        src = "HexaLLM" if hexa else "Ollama"
         try:
             models = await backend.list_models()
             console.print(f"\n[dim]{src} models:[/]")

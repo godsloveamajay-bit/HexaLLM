@@ -1,6 +1,6 @@
 """
-CLI Tunnel — lets the NebulaX web UI dispatch tasks to a connected
-nebula-cli daemon running on a user's local machine.
+CLI Tunnel — lets the HexaLLM web UI dispatch tasks to a connected
+hexallm-cli daemon running on a user's local machine.
 
 Protocol (WebSocket, JSON messages):
 
@@ -143,7 +143,7 @@ async def run_on_cli(
     if not user_sessions:
         raise HTTPException(
             status_code=404,
-            detail="No CLI connected. Run `nebula daemon` on your machine first.",
+            detail="No CLI connected. Run `hexallm daemon` on your machine first.",
         )
 
     sid = data.session_id or next(iter(user_sessions))

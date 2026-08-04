@@ -1,9 +1,9 @@
 """
-NebulaX platform client + Pollinations free cloud backend.
+HexaLLM platform client + Pollinations free cloud backend.
 
 Provides LLM completions (via the OpenAI-compat endpoint),
 knowledge base search, and agent-run syncing so CLI runs
-appear in the NebulaX web UI history.
+appear in the HexaLLM web UI history.
 """
 
 import json
@@ -12,7 +12,7 @@ from typing import AsyncIterator, Dict, List, Optional
 import httpx
 
 
-class NebulaXClient:
+class HexaLLMClient:
     def __init__(self, base_url: str, token: str, api_key: Optional[str] = None) -> None:
         self.base_url = base_url.rstrip("/")
         self.token = token
@@ -47,7 +47,7 @@ class NebulaXClient:
                         return self.api_key
                 
                 # Create a new key if none exist
-                payload = {"name": "NebulaCode CLI"}
+                payload = {"name": "HexaLLM CLI"}
                 r = await c.post(f"{self.base_url}/api/v1/auth/api-keys", json=payload, headers=self._h_user)
                 r.raise_for_status()
                 key_data = r.json()
@@ -162,7 +162,7 @@ class NebulaXClient:
         error: Optional[str] = None,
     ) -> Optional[int]:
         """
-        POST a completed agent run to NebulaX so it shows up in the
+        POST a completed agent run to HexaLLM so it shows up in the
         Agents page history.  Returns the saved run ID on success.
         """
         payload = {
@@ -261,7 +261,7 @@ class PollinationsClient:
                 json=payload,
                 headers={
                     "Content-Type": "application/json",
-                    "User-Agent": "NebulaCode/0.8",
+                    "User-Agent": "HexaLLM/0.8",
                 },
             ) as r:
                 r.raise_for_status()

@@ -2,11 +2,11 @@ from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
-    APP_NAME: str = "NebulaX AI Platform"
+    APP_NAME: str = "HexaLLM AI Platform"
     VERSION: str = "0.13.6"
     DEBUG: bool = False
 
-    DATABASE_URL: str = "sqlite:///./nebulaxai.db"
+    DATABASE_URL: str = "sqlite:///./hexallm.db"
     REDIS_URL: str = "redis://localhost:6379/0"
 
     SECRET_KEY: str = "change-me-in-production-use-openssl-rand-hex-32"
@@ -49,8 +49,8 @@ class Settings(BaseSettings):
     SMTP_PORT: int = 587
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
-    SMTP_FROM: str = "noreply@nebulaxai.local"
-    APP_URL: str = "https://ai.nebualax.co.uk"
+    SMTP_FROM: str = "noreply@hexallm.local"
+    APP_URL: str = "https://ai.hexallm.co.uk"
 
     # PayPal — leave blank to disable billing features
     PAYPAL_CLIENT_ID: str = ""

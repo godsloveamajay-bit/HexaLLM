@@ -1,8 +1,8 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "NebulaX AI",
+  "productName": "HexaLLM AI",
   "version": "0.13.6",
-  "identifier": "ai.nebulax.app",
+  "identifier": "ai.hexallm.app",
   "build": {
     "frontendDist": "../dist",
     "devUrl": "http://localhost:3000",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "NebulaX AI",
+        "title": "HexaLLM AI",
         "width": 1280,
         "height": 800,
         "minWidth": 400,
@@ -48,7 +48,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDhBOThGOTgxMkQ4ODY3RjgKUldUNFo0Z3RnZm1ZaXJuc1d5MkhTSW9ybS9SdUhXN3FtdGh2T0pmRDVraElsV25CMis5OFpaakcK",
       "endpoints": [
-        "https://github.com/godsloveamajay-bit/nebulaxai/releases/latest/download/latest.json"
+        "https://github.com/godsloveamajay-bit/hexallm/releases/latest/download/latest.json"
       ],
       "dialog": false
     }

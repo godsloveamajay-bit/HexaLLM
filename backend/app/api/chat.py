@@ -35,7 +35,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # not a hard security boundary. Tokens are charged after each reply, so the
 # message that crosses the budget still completes; the next one is blocked.
 GUEST_DAILY_TOKENS = int(os.getenv("GUEST_DAILY_TOKENS", "5000"))
-GUEST_DEFAULT_MODEL = os.getenv("GUEST_DEFAULT_MODEL", "nebulax:balanced")
+GUEST_DEFAULT_MODEL = os.getenv("GUEST_DEFAULT_MODEL", "hex-5.1-prime")
 
 # Context window / output budget. Ollama defaults to a tiny 2048-token context,
 # which truncates long prompts and — most visibly — reasoning models' chain-of-
@@ -151,7 +151,7 @@ _CLI_TOOLS = {
 _CLI_TOOLS_PROMPT = """\
 
 ---
-You have live terminal access to the user's machine via nebula-cli.
+You have live terminal access to the user's machine via hexallm-cli.
 Use these tools when the user asks you to run commands, read/write files, or interact with their system.
 Only use tools when genuinely needed — answer simple questions directly.
 
@@ -397,7 +397,7 @@ async def _retrieve_kb_context(
 
 
 async def _apply_router(req: ChatRequest):
-    """If req.model is a nebulax:* variant, resolve it. Returns
+    """If req.model is a hex-* variant, resolve it. Returns
     (effective_model, variant_system_prompt, temperature, num_ctx, num_predict, route_meta).
     For non-variant models, returns the request values unchanged with route_meta=None.
     """
@@ -510,7 +510,7 @@ async def chat_completions(
     images = _resolve_attachment(req, messages)
     start = time.time()
 
-    # Route nebulax:* variants → concrete Ollama model + variant params.
+    # Route hex-* variants → concrete Ollama model + variant params.
     eff_model, variant_prompt, eff_temp, eff_ctx, eff_max, route_meta = await _apply_router(req)
 
     # Web-grounded answers are extractive synthesis from sources we inject, so a
@@ -555,7 +555,7 @@ async def chat_completions(
 
     # Decide chain-of-thought per the CPU reality (skip if already forced off by a
     # trivial msg / the user's reasoning pref). Force it ON only for the small fast
-    # reasoner (deepseek-r1:1.5b → NebulaX Think), where <think> streams in seconds.
+    # reasoner (deepseek-r1:1.5b → HexaLLM Reason), where <think> streams in seconds.
     # SUPPRESS it on heavy reasoners (qwen3:14B behind Balanced, larger deepseeks):
     # a forced pass there takes minutes to the first token and can burn the whole
     # budget thinking — the "warming forever, no answer" the user hit.
@@ -1025,7 +1025,7 @@ async def generate_greeting(
     current_user: Optional[User] = Depends(get_optional_user),
 ):
     prompt = (
-        "Generate exactly one short welcome greeting for the AI assistant NebulaX. "
+        "Generate exactly one short welcome greeting for the AI assistant HexaLLM. "
         "One sentence only. Warm, unique, creative. Vary it each time. "
         "Do not include multiple options or any extra text — just the single greeting."
     )

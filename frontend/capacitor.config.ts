@@ -1,8 +1,8 @@
 import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
-  appId: 'ai.nebulax.app',
-  appName: 'NebulaX AI',
+  appId: 'ai.hexallm.app',
+  appName: 'HexaLLM AI',
   webDir: 'dist',
   server: {
     // Point to your hosted backend in production.

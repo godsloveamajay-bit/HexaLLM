@@ -22,7 +22,7 @@ interface Persona { id: number; name: string; emoji?: string; base_model: string
 const apiBase = `${window.location.origin}/v1`
 
 function snippets(key: string, model: string) {
-  const m = model || 'nebulax:balanced'
+  const m = model || 'hex-5.1-prime'
   return {
     curl: `curl ${apiBase}/chat/completions \\
   -H "Authorization: Bearer ${key}" \\
@@ -92,7 +92,7 @@ export default function ApiKeysPage() {
     }
   }, [personas])
 
-  const newKeyModel = useMemo(() => newKey?.model_name || models[0]?.value || 'nebulax:balanced', [newKey, models])
+  const newKeyModel = useMemo(() => newKey?.model_name || models[0]?.value || 'hex-5.1-prime', [newKey, models])
 
   const createKey = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -129,7 +129,7 @@ export default function ApiKeysPage() {
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-100">API Keys</h1>
-        <p className="text-gray-400 mt-1">Expose your models and personas as an OpenAI-compatible API. Point any OpenAI client at NebulaX.</p>
+        <p className="text-gray-400 mt-1">Expose your models and personas as an OpenAI-compatible API. Point any OpenAI client at HexaLLM.</p>
       </div>
 
       {/* New key banner with ready-to-use snippets */}
@@ -182,7 +182,7 @@ export default function ApiKeysPage() {
                 </optgroup>
               )}
               {models.length > 0 && (
-                <optgroup label={user?.is_admin ? 'Models' : 'NebulaX'}>
+                <optgroup label={user?.is_admin ? 'Models' : 'HexaLLM'}>
                   {models.map((m) => <option key={m.value} value={`model:${m.value}`}>{m.label}</option>)}
                 </optgroup>
               )}

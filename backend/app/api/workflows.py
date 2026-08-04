@@ -142,7 +142,7 @@ async def _run_workflow_bg(workflow_id: int, user_id: int):
         wf = db.query(Workflow).filter(Workflow.id == workflow_id, Workflow.user_id == user_id).first()
         if not wf:
             return
-        # Resolve a NebulaX variant selection to a concrete model for the run.
+        # Resolve a HexaLLM variant selection to a concrete model for the run.
         eff_model = wf.model
         if model_router.is_variant(wf.model):
             try:

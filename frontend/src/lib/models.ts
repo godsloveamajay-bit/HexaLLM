@@ -9,17 +9,17 @@ import api from './api'
 
 export interface ModelOption { value: string; label: string; group: string }
 
-// Static fallback labels so we can pretty-print a NebulaX variant id even on
+// Static fallback labels so we can pretty-print a HexaLLM variant id even on
 // pages that don't fetch the variant list. Kept in sync with the backend.
 export const VARIANT_LABELS: Record<string, string> = {
-  'nebulax:code': 'NebulaX Code',
-  'nebulax:chat': 'NebulaX Chat',
-  'nebulax:write': 'NebulaX Write',
-  'nebulax:think': 'NebulaX Think',
-  'nebulax:balanced': 'NebulaX Balanced',
-  'nebulax:custom': 'NebulaX Custom',
-  'nebulax:vision': 'NebulaX Vision',
-  'nebulax:math': 'NebulaX Math',
+  'hex-4.2-code': 'HexaLLM Code',
+  'hex-4.2-turbo': 'HexaLLM Turbo',
+  'hex-4.3-write': 'HexaLLM Write',
+  'hex-6.0-reason': 'HexaLLM Reason',
+  'hex-5.1-prime': 'HexaLLM Prime',
+  'hex-4.2-custom': 'HexaLLM Custom',
+  'hex-4.1-vision': 'HexaLLM Vision',
+  'hex-4.2-math': 'HexaLLM Math',
 }
 
 /** Human label for a model value. Variants → branded label; raw ids unchanged. */
@@ -29,15 +29,15 @@ export function prettyModel(value?: string | null): string {
 }
 
 /** Selectable models for the current user.
- *  Everyone gets the NebulaX variants; admins and Hyper+ users additionally
+ *  Everyone gets the HexaLLM variants; admins and Hyper+ users additionally
  *  get the raw Ollama models. Variants always come first. */
 export async function loadModelOptions(isAdmin: boolean, hasRawAccess?: boolean): Promise<ModelOption[]> {
   const opts: ModelOption[] = []
   try {
-    const { data } = await api.get('/models/nebulax/variants')
+    const { data } = await api.get('/models/hexallm/variants')
     for (const v of (data.variants || [])) {
       if (v.ready === false) continue
-      opts.push({ value: v.id, label: v.label, group: 'NebulaX' })
+      opts.push({ value: v.id, label: v.label, group: 'HexaLLM' })
     }
   } catch {}
   if (isAdmin || hasRawAccess) {
@@ -51,9 +51,9 @@ export async function loadModelOptions(isAdmin: boolean, hasRawAccess?: boolean)
   return opts
 }
 
-/** Sensible default selection: NebulaX Balanced if available, else first. */
+/** Sensible default selection: HexaLLM Prime if available, else first. */
 export function defaultModelValue(opts: ModelOption[]): string {
-  return opts.find((o) => o.value === 'nebulax:balanced')?.value || opts[0]?.value || 'nebulax:balanced'
+  return opts.find((o) => o.value === 'hex-5.1-prime')?.value || opts[0]?.value || 'hex-5.1-prime'
 }
 
 /** Render <option>s for a ModelOption[] grouped by their `group`. */

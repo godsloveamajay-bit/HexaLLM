@@ -215,11 +215,11 @@ export default function MCPServersPage() {
           <ExternalLink className="w-4 h-4" /> OpenAI-Compatible API
         </h2>
         <p className="text-sm text-gray-400 mb-3">
-          NebulaX exposes an OpenAI-compatible endpoint. Point any OpenAI SDK or tool at your instance:
+          HexaLLM exposes an OpenAI-compatible endpoint. Point any OpenAI SDK or tool at your instance:
         </p>
         <div className="bg-gray-900 rounded-lg p-3 font-mono text-xs text-gray-300 space-y-1">
           <p>Base URL: <span className="text-primary-400">http://your-server/api/v1/openai</span></p>
-          <p>API Key: <span className="text-primary-400">any active NebulaX API key (nai_...)</span></p>
+          <p>API Key: <span className="text-primary-400">any active HexaLLM API key (nai_...)</span></p>
           <p>Endpoint: <span className="text-primary-400">POST /api/v1/openai/chat/completions</span></p>
         </div>
       </div>

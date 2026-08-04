@@ -178,8 +178,8 @@ function PersonaCard({ persona, onEdit, onDelete, onFork, onDuplicate, onToggleF
 }) {
   const { user } = useAuth()
   // Show the branded variant label; hide raw base names from non-admins.
-  const baseLabel = (user?.is_admin || persona.base_model?.startsWith('nebulax:'))
-    ? prettyModel(persona.base_model) : 'NebulaX model'
+  const baseLabel = (user?.is_admin || persona.base_model?.startsWith('hex-'))
+    ? prettyModel(persona.base_model) : 'HexaLLM model'
   return (
     <div className={clsx('card flex flex-col gap-3', persona.is_favorite && 'ring-1 ring-secondary-500/40')}>
       <div className="flex items-start justify-between gap-2">

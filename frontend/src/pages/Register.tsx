@@ -40,7 +40,7 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       await register(form)
-      toast.success('Welcome to NebulaX AI!')
+      toast.success('Welcome to HexaLLM AI!')
       const { user } = useAuth.getState()
       navigate(user?.is_admin ? '/dashboard' : '/chat', { replace: true })
     } catch (err: any) {
@@ -59,7 +59,7 @@ export default function RegisterPage() {
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-2xl shadow-primary-900/60 mb-4">
             <Brain className="w-8 h-8 text-white" />
           </div>
-          <h1 className="text-2xl font-bold text-gray-100">NebulaX AI</h1>
+          <h1 className="text-2xl font-bold text-gray-100">HexaLLM AI</h1>
           <p className="text-gray-500 text-sm mt-1">Open-source AI Platform</p>
         </div>
 

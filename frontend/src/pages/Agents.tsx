@@ -260,7 +260,7 @@ function ThoughtDrawer({ steps, running }: { steps: Step[]; running: boolean }) 
 export default function AgentsPage() {
   const { user } = useAuth()
   const [task, setTask] = useState('')
-  const [model, setModel] = useState('nebulax:balanced')
+  const [model, setModel] = useState('hex-5.1-prime')
   const [persona, setPersona] = useState<string>('research')
   const [selectedTools, setSelectedTools] = useState(PERSONAS[0].tools)
   const [customPrompt, setCustomPrompt] = useState('')

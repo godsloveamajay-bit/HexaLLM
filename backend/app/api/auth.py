@@ -341,11 +341,11 @@ def create_api_key(data: APIKeyCreate, db: Session = Depends(get_db), current_us
 
     persona_id = None
     model_name = data.model
-    # Non-admins bind keys to NebulaX variants, not raw Ollama models.
+    # Non-admins bind keys to HexaLLM variants, not raw Ollama models.
     if model_name and not current_user.is_admin:
         from ..services import model_router
         if not model_router.is_variant(model_name):
-            raise HTTPException(status_code=400, detail="Choose a NebulaX model to bind this key to.")
+            raise HTTPException(status_code=400, detail="Choose a HexaLLM model to bind this key to.")
     if data.persona_id is not None:
         persona = db.query(SavedPersona).filter(
             SavedPersona.id == data.persona_id, SavedPersona.user_id == current_user.id

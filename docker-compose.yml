@@ -8,7 +8,7 @@ services:
     ports:
       - "8000:8000"
     environment:
-      - DATABASE_URL=postgresql://nebulaxai:nebulaxai@db:5432/nebulaxai
+      - DATABASE_URL=postgresql://hexallm:hexallm@db:5432/hexallm
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_BASE_URL=http://ollama:11434
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
@@ -29,7 +29,7 @@ services:
       dockerfile: Dockerfile
     command: celery -A app.worker worker --loglevel=info
     environment:
-      - DATABASE_URL=postgresql://nebulaxai:nebulaxai@db:5432/nebulaxai
+      - DATABASE_URL=postgresql://hexallm:hexallm@db:5432/hexallm
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_BASE_URL=http://ollama:11434
     volumes:
@@ -53,13 +53,13 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      - POSTGRES_USER=nebulaxai
-      - POSTGRES_PASSWORD=nebulaxai
-      - POSTGRES_DB=nebulaxai
+      - POSTGRES_USER=hexallm
+      - POSTGRES_PASSWORD=hexallm
+      - POSTGRES_DB=hexallm
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U nebulaxai"]
+      test: ["CMD-SHELL", "pg_isready -U hexallm"]
       interval: 5s
       timeout: 5s
       retries: 5

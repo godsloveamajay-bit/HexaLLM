@@ -16,7 +16,7 @@ The same GGUF model blobs run on CPU and GPU, and they're bind-mounted in — so
 ```bash
 sudo apt-get install -y docker-compose-plugin          # compose plugin (not yet installed)
 sudo systemctl disable --now ollama.service            # free port 11434 + the model files
-cd /home/ubuntu/nebulaxai/infra/ollama
+cd /home/ubuntu/hexallm/infra/ollama
 docker compose up -d
 curl -s localhost:11434/api/tags | head               # same models, no re-pull
 ```
@@ -47,7 +47,7 @@ To revert: `docker compose down && sudo systemctl enable --now ollama.service`.
 
 Ollama auto-detects the GPU and offloads layers — tok/s jumps from the ~1.7
 CPU ceiling. Models are unchanged; only the runtime moved. If you'd rather run
-vLLM for throughput, this is also where it slots in (see [[nebulax-vllm-migration]]).
+vLLM for throughput, this is also where it slots in (see [[hexallm-vllm-migration]]).
 
 ## Gotchas
 - **Never publish 11434 beyond 127.0.0.1** — the Ollama API is unauthenticated.
@@ -55,4 +55,4 @@ vLLM for throughput, this is also where it slots in (see [[nebulax-vllm-migratio
   bind-mounted `models/` stays owned by host `ollama:ollama` and is read fine.
 - Keep exactly one of {native service, container} running — both want port 11434.
 - No `mem_limit`: a hard cap can OOM-kill pinned models. Let the 64GB host +
-  `vm.swappiness=10` be the guardrail (see [[nebulax-ollama-models]]).
+  `vm.swappiness=10` be the guardrail (see [[hexallm-ollama-models]]).

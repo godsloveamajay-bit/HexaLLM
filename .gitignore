@@ -1,5 +1,7 @@
 # Python
 backend/.venv/
+.venv/
+
 backend/__pycache__/
 backend/**/__pycache__/
 backend/*.pyc
@@ -22,7 +24,7 @@ frontend/ios/App/Pods/
 frontend/ios/App/build/
 
 # Database (production data — don't commit)
-backend/data/nebulaxai.db
+backend/data/hexallm.db
 
 # CLI build output
 dist/

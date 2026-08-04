@@ -66,7 +66,7 @@ export default function SharePage() {
     <div className="min-h-screen bg-gray-950 text-gray-100">
       <header className="border-b border-gray-800 px-6 py-4 flex items-center gap-3">
         <Sparkle className="w-5 h-5 text-primary-400 fill-primary-400" />
-        <span className="font-semibold text-gray-100">NebulaX AI</span>
+        <span className="font-semibold text-gray-100">HexaLLM AI</span>
         <span className="text-gray-600 text-sm ml-2">Shared conversation</span>
         <Link to="/login" className="ml-auto text-sm text-primary-400 hover:text-primary-300">
           Sign in →

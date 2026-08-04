@@ -2036,7 +2036,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "nebulax-ai"
+name = "hexallm-ai"
 version = "0.13.6"
 dependencies = [
  "log",

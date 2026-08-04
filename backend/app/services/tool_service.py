@@ -141,8 +141,8 @@ def build_script(code: str, input_str: str) -> str:
         "\n\n"
         "import sys as _sys\n"
         "try:\n"
-        f"    _nebula_result = run({literal})\n"
-        "    _sys.stdout.write('' if _nebula_result is None else str(_nebula_result))\n"
+        f"    _hexallm_result = run({literal})\n"
+        "    _sys.stdout.write('' if _hexallm_result is None else str(_hexallm_result))\n"
         "except Exception as _e:\n"
         "    _sys.stdout.write('Tool error: ' + repr(_e))\n"
     )

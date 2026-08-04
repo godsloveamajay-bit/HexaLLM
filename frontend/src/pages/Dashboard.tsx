@@ -84,8 +84,8 @@ export default function DashboardPage() {
             <AreaChart data={dailyData}>
               <defs>
                 <linearGradient id="grad" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="#6366f1" stopOpacity={0.3} />
-                  <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
+                  <stop offset="5%" stopColor="#A78BFA" stopOpacity={0.3} />
+                  <stop offset="95%" stopColor="#A78BFA" stopOpacity={0} />
                 </linearGradient>
               </defs>
               <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false}
@@ -93,7 +93,7 @@ export default function DashboardPage() {
               <YAxis tick={{ fill: '#6b7280', fontSize: 11 }} tickLine={false} axisLine={false} />
               <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: '1px solid #334155', borderRadius: '8px' }}
                 labelStyle={{ color: '#e5e7eb' }} itemStyle={{ color: '#818cf8' }} />
-              <Area type="monotone" dataKey="requests" stroke="#6366f1" fill="url(#grad)" strokeWidth={2} />
+              <Area type="monotone" dataKey="requests" stroke="#A78BFA" fill="url(#grad)" strokeWidth={2} />
             </AreaChart>
           </ResponsiveContainer>
         ) : (
