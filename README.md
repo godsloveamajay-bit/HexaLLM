@@ -1,4 +1,4 @@
-# HexaLLM AI Platform
+# HexaLLM 
 
 **HexaLLM AI is a platform where you can interact with AI, share and create your own models, run sandboxed workflows and more.**
 
@@ -83,3 +83,10 @@ UI: **HexaPanel**, **HexaPrompt**, **HexaCanvas**, **HexaBlocks**, **HexaShell**
 ## License
 
 MIT
+
+
+## Disclamer 
+
+Some files/apps may still be called NebulaX or variations. **This is an old trademark of the company, software still belonging to us.** HexaLLM and NebulaX are both trademarks. 
+
+
