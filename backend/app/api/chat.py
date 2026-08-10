@@ -3,7 +3,6 @@ import base64
 import io
 import json
 import os
-import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -15,12 +14,10 @@ from ..core.database import get_db
 from ..core.security import get_current_user, get_optional_user
 from ..models.user import User
 from ..models.chat import ChatSession, ChatMessage, RequestLog
-from ..models.knowledge import KnowledgeBase
 from ..schemas.chat import (
     ChatRequest, ChatSessionCreate, ChatSessionOut, ChatMessageOut,
 )
 from ..services.ollama_service import ollama
-from ..services.retrieval_service import search as kb_search, format_context
 from ..services import model_router
 from ..services import web_search as web_search_svc
 from ..core import personality as personality_engine
@@ -30,7 +27,7 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 # ── Guest (unauthenticated) chat ──────────────────────────────────────────
 # Visitors can try the chat before signing up: unlimited messages, but a soft
 # per-IP daily *token* budget, with all account-bound features (history, memory,
-# KB, attachments, CLI, media gen) disabled. Usage is tallied in-memory (single
+# attachments, media gen) disabled. Usage is tallied in-memory (single
 # uvicorn process) and resets at UTC midnight — a deliberately lightweight gate,
 # not a hard security boundary. Tokens are charged after each reply, so the
 # message that crosses the budget still completes; the next one is blocked.
@@ -45,10 +42,11 @@ CHAT_NUM_CTX = int(os.getenv("CHAT_NUM_CTX", "8192"))
 REASON_NUM_CTX = int(os.getenv("CHAT_REASON_NUM_CTX", "16384"))
 REASON_MIN_PREDICT = int(os.getenv("CHAT_REASON_MAX_TOKENS", "8192"))
 
-# Web search grounding. CPU prefill on this box is ~2 tok/s, so the sources we
-# inject dominate latency — a big context = minutes of "reading" before the first
-# answer token. Keep the injected set small, route synthesis to a fast small model
-# (extractive Q&A doesn't need a big one), and cap the answer length. All env-tunable.
+# ── Web search grounding ─────────────────────────────────────────────────────
+# CPU prefill on this box is ~2 tok/s, so the sources we inject dominate
+# latency — a big context = minutes of "reading" before the first answer token.
+# Keep the injected set small, route synthesis to a fast small model (extractive
+# Q&A doesn't need a big one), and cap the answer length. All env-tunable.
 WEB_MAX_RESULTS = int(os.getenv("WEB_SEARCH_MAX_RESULTS", "3"))
 WEB_MAX_PREDICT = int(os.getenv("WEB_SEARCH_MAX_TOKENS", "600"))
 WEB_FAST_MODEL = os.getenv("WEB_SEARCH_MODEL", "")  # "" → pick the router's fast model
@@ -137,198 +135,8 @@ def _sse_data(value: str) -> str:
 
 
 # ── CLI-backed tool descriptions ───────────────────────────────────────────────
-
-_CLI_TOOLS = {
-    "run_command":  "Run a shell command and return stdout+stderr. Input: command string.",
-    "bash_exec":    "Run a bash command. Input: bash command string.",
-    "read_file":    "Read a file's contents. Input: file path.",
-    "write_file":   'Create or overwrite a file. Input: JSON {"path": "...", "content": "..."}',
-    "patch_file":   'Replace text in a file. Input: JSON {"path": "...", "old": "...", "new": "..."}',
-    "list_files":   'List a directory. Input: path (default ".").',
-    "search_files": 'Search for text in files. Input: JSON {"pattern": "...", "path": "."}',
-}
-
-_CLI_TOOLS_PROMPT = """\
-
----
-You have live terminal access to the user's machine via hexallm-cli.
-Use these tools when the user asks you to run commands, read/write files, or interact with their system.
-Only use tools when genuinely needed — answer simple questions directly.
-
-Available tools:
-{tools}
-
-STRICT FORMAT — every reply must be ONLY a valid JSON object, no markdown fences:
-  Use a tool: {{"thought": "<brief reasoning>", "tool": "<name>", "input": "<input>"}}
-  Final reply:{{"thought": "<brief reasoning>", "tool": "done",   "input": "<your response>"}}
----"""
-
-
-def _extract_json_chat(text: str) -> Optional[dict]:
-    """Pull a JSON object out of model output using 3 fallback strategies."""
-    # Strip reasoning-model <think>…</think> first — its stray braces and example
-    # JSON derail the parser and bury the real tool call (deepseek-r1, qwen3).
-    text = re.sub(r"<think>.*?</think>", "", text or "", flags=re.DOTALL | re.IGNORECASE)
-    if "</think>" in text:
-        text = text.rsplit("</think>", 1)[-1]
-    text = text.strip()
-    try:
-        return json.loads(text)
-    except json.JSONDecodeError:
-        pass
-    stripped = re.sub(r"```(?:json)?\s*|\s*```", "", text).strip()
-    try:
-        return json.loads(stripped)
-    except json.JSONDecodeError:
-        pass
-    start = text.find("{")
-    if start != -1:
-        depth, in_str, esc = 0, False, False
-        for i, ch in enumerate(text[start:], start):
-            if esc:
-                esc = False
-                continue
-            if ch == "\\" and in_str:
-                esc = True
-                continue
-            if ch == '"':
-                in_str = not in_str
-                continue
-            if in_str:
-                continue
-            if ch == "{":
-                depth += 1
-            elif ch == "}":
-                depth -= 1
-                if depth == 0:
-                    try:
-                        return json.loads(text[start: i + 1])
-                    except json.JSONDecodeError:
-                        break
-    return None
-
-
-async def _dispatch_cli_tool(
-    session,
-    tool_name: str,
-    tool_input: str,
-    timeout: float = 60.0,
-) -> str:
-    """Send a single tool call to the CLI daemon and await its result."""
-    task_id = str(uuid.uuid4())
-    q: asyncio.Queue = asyncio.Queue()
-    session.task_queues[task_id] = q
-    try:
-        await session.ws.send_json({
-            "type":    "run_tool",
-            "task_id": task_id,
-            "tool":    tool_name,
-            "input":   tool_input,
-        })
-        msg = await asyncio.wait_for(q.get(), timeout=timeout)
-        return msg.get("output", "(no output)")
-    except asyncio.TimeoutError:
-        return f"Tool '{tool_name}' timed out after {timeout:.0f}s"
-    except Exception as exc:
-        return f"Tool dispatch error: {exc}"
-    finally:
-        session.task_queues.pop(task_id, None)
-
-
-async def _cli_agent_stream(
-    messages: List[Dict],
-    system_prompt: str,
-    model: str,
-    cli_session_id: str,
-    user_id: int,
-    collected: Dict,
-    max_steps: int = 15,
-) -> AsyncIterator[str]:
-    """
-    ReAct loop that runs LLM reasoning locally but dispatches every tool call
-    to the connected CLI daemon.  Yields SSE-formatted strings:
-      event: step  (tool call + output)
-      data: token  (final answer streamed char-by-char style)
-    """
-    from .cli_tunnel import _registry
-
-    user_sessions = _registry.get(user_id, {})
-    cli_session = user_sessions.get(cli_session_id)
-    if not cli_session:
-        collected["text"] = "(CLI session not found or disconnected)"
-        yield _sse_data(collected['text'])
-        return
-
-    tool_list = "\n".join(f"  {k}: {v}" for k, v in _CLI_TOOLS.items())
-    augmented_system = (system_prompt or "") + _CLI_TOOLS_PROMPT.format(tools=tool_list)
-
-    # Reasoning models must answer the JSON tool protocol directly — let them
-    # reason for minutes per step on this CPU box and the chain-of-thought also
-    # pollutes the JSON. think=False keeps each step fast and parseable.
-    agent_think = False if model_router.is_reasoning_model(model) else None
-
-    agent_messages = list(messages)
-    final_text = ""
-    fix_prompt = (
-        "Your reply was not valid JSON. Reply with ONLY a JSON object:\n"
-        '{"thought": "...", "tool": "<tool or done>", "input": "..."}'
-    )
-
-    for _ in range(max_steps):
-        raw = ""
-        async for chunk in ollama.chat_stream(model, agent_messages, augmented_system, temperature=0.1, think=agent_think):
-            raw += chunk
-
-        parsed = _extract_json_chat(raw)
-        if not parsed:
-            fix_msgs = agent_messages + [
-                {"role": "assistant", "content": raw or "(empty)"},
-                {"role": "user",      "content": fix_prompt},
-            ]
-            raw2 = ""
-            async for chunk in ollama.chat_stream(model, fix_msgs, augmented_system, temperature=0.1, think=agent_think):
-                raw2 += chunk
-            parsed = _extract_json_chat(raw2)
-            if not parsed:
-                final_text = f"(Model returned malformed response: {raw[:200]})"
-                yield _sse_data(final_text)
-                collected["text"] = final_text
-                return
-
-        agent_messages.append({"role": "assistant", "content": raw})
-        tool_name  = parsed.get("tool", "")
-        tool_input = str(parsed.get("input", ""))
-        thought    = parsed.get("thought", "")
-
-        if tool_name == "done":
-            final_text = tool_input
-            # stream the answer in reasonable chunks
-            chunk_size = max(4, len(final_text) // 80)
-            for i in range(0, len(final_text), chunk_size):
-                yield _sse_data(final_text[i:i + chunk_size])
-            collected["text"] = final_text
-            return
-
-        if tool_name not in _CLI_TOOLS:
-            output = f"Unknown tool '{tool_name}'. Available: {', '.join(_CLI_TOOLS)}"
-        else:
-            output = await _dispatch_cli_tool(cli_session, tool_name, tool_input)
-
-        step_obj = {
-            "name":    tool_name,
-            "input":   tool_input,
-            "output":  output,
-            "thought": thought,
-        }
-        collected.setdefault("steps", []).append(step_obj)
-        yield f"event: step\ndata: {json.dumps(step_obj)}\n\n"
-
-        agent_messages.append({"role": "user", "content": f"Tool result:\n{output}"})
-
-    final_text = "Reached maximum steps without completing the task."
-    yield _sse_data(final_text)
-    collected["text"] = final_text
-
+# The Remote CLI feature has moved to the dev variant; chat no longer runs
+# ReAct agent loops against a connected daemon.
 
 def log_request(db: Session, user_id: int, endpoint: str, method: str, status_code: int,
                 model_name: str = None, prompt_tokens: int = 0, completion_tokens: int = 0,
@@ -346,54 +154,6 @@ def log_request(db: Session, user_id: int, endpoint: str, method: str, status_co
     )
     db.add(log)
     db.commit()
-
-
-async def _retrieve_kb_context(
-    db: Session, user: User, req: ChatRequest
-) -> Tuple[str, list]:
-    """Return (augmented_system_prompt, citation_payload).
-
-    If no KB requested, returns the original system_prompt unchanged and an empty list.
-    """
-    if not req.knowledge_base_id:
-        return req.system_prompt or "", []
-
-    kb = db.query(KnowledgeBase).filter(
-        KnowledgeBase.id == req.knowledge_base_id,
-        KnowledgeBase.user_id == user.id,
-    ).first()
-    if not kb:
-        raise HTTPException(status_code=404, detail="Knowledge base not found")
-
-    last_user_msg = next((m for m in reversed(req.messages) if m.role == "user"), None)
-    if not last_user_msg:
-        return req.system_prompt or "", []
-
-    matches = await kb_search(db, kb, last_user_msg.content, req.top_k)
-    if not matches:
-        return req.system_prompt or "", []
-
-    context_block = format_context(matches)
-    rag_prompt = (
-        "You are a helpful assistant. Use the following retrieved context to "
-        "answer the user's question. Cite sources using [1], [2], ... when "
-        "relevant. If the context does not contain the answer, say so.\n\n"
-        f"--- CONTEXT ---\n{context_block}\n--- END CONTEXT ---"
-    )
-    augmented = f"{req.system_prompt}\n\n{rag_prompt}" if req.system_prompt else rag_prompt
-
-    citations = [
-        {
-            "index": i + 1,
-            "chunk_id": chunk.id,
-            "document_id": chunk.document_id,
-            "document_filename": chunk.document.filename if chunk.document else "unknown",
-            "score": round(score, 4),
-            "snippet": chunk.content[:240],
-        }
-        for i, (chunk, score) in enumerate(matches)
-    ]
-    return augmented, citations
 
 
 async def _apply_router(req: ChatRequest):
@@ -488,8 +248,6 @@ async def chat_completions(
             )
         req.session_id = None
         req.system_prompt = None
-        req.knowledge_base_id = None
-        req.cli_session_id = None
         req.web_search = False
         req.attachment_base64 = req.attachment_type = req.attachment_name = None
         # Don't let a guest hand-pick an arbitrary/expensive direct model.
@@ -580,10 +338,9 @@ async def chat_completions(
         eff_max = WEB_MAX_PREDICT
 
     # In-chat text-to-image: "generate an image of …" works
-    # in ANY chat. Skip when an image is attached (that's a vision query) or during
-    # a CLI agent run.
+    # in ANY chat. Skip when an image is attached (that's a vision query).
     img_prompt = None
-    if not images and not req.cli_session_id and not is_guest:
+    if not images and not is_guest:
         img_prompt = model_router.detect_image_request(_last_user)
 
     user_supplied_prompt = req.system_prompt
@@ -618,9 +375,9 @@ async def chat_completions(
             if pspec["max_tokens"] and req.max_tokens is None:
                 eff_max = pspec["max_tokens"]
 
-    # Build a derived request so _retrieve_kb_context sees the merged prompt.
-    req_for_kb = req.model_copy(update={"system_prompt": base_system_prompt})
-    system_prompt, citations = await _retrieve_kb_context(db, current_user, req_for_kb)
+    # KB RAG was a dev-variant feature; prod chat grounds only on live web search.
+    system_prompt = base_system_prompt
+    citations: list = []
 
     if req.stream:
         async def generate():
@@ -634,10 +391,9 @@ async def chat_completions(
                 if citations:
                     yield f"event: citations\ndata: {json.dumps(citations)}\n\n"
 
-                collected: Dict = {}
                 if img_prompt:
                     # Text-to-image short-circuit: stream a status note, generate
-                    # via Pollinations, then stream the image as a one-line markdown
+                    # via Stability AI, then stream the image as a one-line markdown
                     # data URL (no newlines — the SSE framing splits on \n\n).
                     from .image import generate_image_data_url
                     status = f"🎨 Generating an image of *{img_prompt}*… "
@@ -650,25 +406,6 @@ async def chat_completions(
                         chunk = f"⚠️ Image generation failed: {exc}"
                     full_response += chunk
                     yield _sse_data(chunk)
-                elif req.cli_session_id:
-                    # The ReAct loop runs the LLM on this (slow, CPU-only) server and
-                    # emits nothing during each generation. Without keepalives,
-                    # Cloudflare 524s the stream after ~100s and the agent appears to
-                    # "do nothing" — so interleave pings like the normal chat path.
-                    cli_agen = _cli_agent_stream(
-                        messages=messages,
-                        system_prompt=system_prompt,
-                        model=eff_model,
-                        cli_session_id=req.cli_session_id,
-                        user_id=current_user.id,
-                        collected=collected,
-                    )
-                    async for kind, value in _stream_with_keepalive(cli_agen, interval=15.0):
-                        if kind == "ping":
-                            yield ": keepalive\n\n"
-                        else:
-                            yield value
-                    full_response = collected.get("text", "")
                 else:
                     # Web search grounding: search the web for the user's question,
                     # inject the results into the system prompt, and surface them as
@@ -749,7 +486,6 @@ async def chat_completions(
                         session_id=session.id, role="assistant", content=full_response,
                         latency_ms=latency,
                         tokens_used=(prompt_tok + completion_tok) or None,
-                        steps=(collected.get("steps") or None),
                     ))
                     session.updated_at = datetime.now(timezone.utc)
                     db.commit()

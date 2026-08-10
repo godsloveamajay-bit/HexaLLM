@@ -2,6 +2,7 @@ import { Suspense, lazy } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import { isCapacitor } from './lib/platform'
+import { DEV_FEATURES } from './lib/devFeatures'
 import Layout from './components/layout/Layout'
 import MobileLayout from './components/layout/MobileLayout'
 import CommandPalette from './components/ui/CommandPalette'
@@ -25,27 +26,31 @@ const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallback'))
 
 // Authenticated pages — all lazy-loaded so the initial bundle stays tiny
 const ChatPage       = lazy(() => import('./pages/Chat'))
-const DashboardPage  = lazy(() => import('./pages/Dashboard'))
-const AgentsPage     = lazy(() => import('./pages/Agents'))
 const ModelsPage     = lazy(() => import('./pages/Models'))
-const TrainPage      = lazy(() => import('./pages/Train'))
-const AnalyticsPage  = lazy(() => import('./pages/Analytics'))
-const LogsPage       = lazy(() => import('./pages/Logs'))
-const ApiKeysPage    = lazy(() => import('./pages/ApiKeys'))
 const AdminPage      = lazy(() => import('./pages/Admin'))
 const SettingsPage   = lazy(() => import('./pages/Settings'))
 const PricingPage    = lazy(() => import('./pages/Pricing'))
 const BillingPage    = lazy(() => import('./pages/Billing'))
-const KnowledgePage  = lazy(() => import('./pages/Knowledge'))
 const ImageGenPage   = lazy(() => import('./pages/ImageGen'))
 const MemoryPage     = lazy(() => import('./pages/Memory'))
-const MemoryGraphPage = lazy(() => import('./pages/MemoryGraph'))
-const ToolsPage      = lazy(() => import('./pages/Tools'))
-const PersonasPage   = lazy(() => import('./pages/Personas'))
-const WorkflowsPage  = lazy(() => import('./pages/Workflows'))
-const MCPServersPage = lazy(() => import('./pages/MCPServers'))
-const RemoteCLIPage  = lazy(() => import('./pages/RemoteCLI'))
-const DownloadsPage  = lazy(() => import('./pages/Downloads'))
+const TrainPage      = lazy(() => import('./pages/Train'))
+
+// Dev-variant pages — only bundled/routed when VITE_DEV_FEATURES=1.
+const DevPages: Record<string, React.LazyExoticComponent<() => JSX.Element>> = DEV_FEATURES ? {
+  Dashboard: lazy(() => import('./pages/Dashboard')),
+  Agents:    lazy(() => import('./pages/Agents')),
+  Analytics: lazy(() => import('./pages/Analytics')),
+  ApiKeys:   lazy(() => import('./pages/ApiKeys')),
+  Knowledge: lazy(() => import('./pages/Knowledge')),
+  MemoryGraph: lazy(() => import('./pages/MemoryGraph')),
+  Tools:     lazy(() => import('./pages/Tools')),
+  Personas:  lazy(() => import('./pages/Personas')),
+  Workflows: lazy(() => import('./pages/Workflows')),
+  MCPServers: lazy(() => import('./pages/MCPServers')),
+  RemoteCLI: lazy(() => import('./pages/RemoteCLI')),
+  Downloads: lazy(() => import('./pages/Downloads')),
+  Logs:      lazy(() => import('./pages/Logs')),
+} : {}
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { token } = useAuth()
@@ -80,25 +85,30 @@ export default function App() {
             <Route path="/"           element={<Navigate to="/chat" replace />} />
             <Route path="/chat"       element={<ChatPage />} />
             <Route path="/admin"      element={<PrivateRoute><AdminRoute><AdminPage /></AdminRoute></PrivateRoute>} />
-            <Route path="/dashboard"  element={<PrivateRoute><AdminRoute><DashboardPage /></AdminRoute></PrivateRoute>} />
             <Route path="/image"      element={<PrivateRoute><ImageGenPage /></PrivateRoute>} />
-            <Route path="/agents"     element={<PrivateRoute><AgentsPage /></PrivateRoute>} />
             <Route path="/models"     element={<PrivateRoute><ModelsPage /></PrivateRoute>} />
             <Route path="/train"      element={<PrivateRoute><TrainPage /></PrivateRoute>} />
-            <Route path="/knowledge"  element={<PrivateRoute><KnowledgePage /></PrivateRoute>} />
             <Route path="/memory"     element={<PrivateRoute><MemoryPage /></PrivateRoute>} />
-            <Route path="/memory-graph" element={<PrivateRoute><MemoryGraphPage /></PrivateRoute>} />
-            <Route path="/tools"      element={<PrivateRoute><ToolsPage /></PrivateRoute>} />
-            <Route path="/personas"   element={<PrivateRoute><PersonasPage /></PrivateRoute>} />
-            <Route path="/workflows"  element={<PrivateRoute><WorkflowsPage /></PrivateRoute>} />
-            <Route path="/mcp"        element={<PrivateRoute><MCPServersPage /></PrivateRoute>} />
-            <Route path="/remote-cli" element={<PrivateRoute><RemoteCLIPage /></PrivateRoute>} />
-            <Route path="/downloads"  element={<PrivateRoute><DownloadsPage /></PrivateRoute>} />
-            <Route path="/analytics"  element={<PrivateRoute><AnalyticsPage /></PrivateRoute>} />
-            <Route path="/logs"       element={<PrivateRoute><AdminRoute><LogsPage /></AdminRoute></PrivateRoute>} />
-            <Route path="/api-keys"   element={<PrivateRoute><ApiKeysPage /></PrivateRoute>} />
             <Route path="/settings"   element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
             <Route path="/billing"    element={<PrivateRoute><BillingPage /></PrivateRoute>} />
+
+            {DEV_FEATURES && (
+              <>
+                <Route path="/dashboard"  element={<PrivateRoute><AdminRoute><DevPages.Dashboard /></AdminRoute></PrivateRoute>} />
+                <Route path="/agents"     element={<PrivateRoute><DevPages.Agents /></PrivateRoute>} />
+                <Route path="/knowledge"  element={<PrivateRoute><DevPages.Knowledge /></PrivateRoute>} />
+                <Route path="/memory-graph" element={<PrivateRoute><DevPages.MemoryGraph /></PrivateRoute>} />
+                <Route path="/tools"      element={<PrivateRoute><DevPages.Tools /></PrivateRoute>} />
+                <Route path="/personas"   element={<PrivateRoute><DevPages.Personas /></PrivateRoute>} />
+                <Route path="/workflows"  element={<PrivateRoute><DevPages.Workflows /></PrivateRoute>} />
+                <Route path="/mcp"        element={<PrivateRoute><DevPages.MCPServers /></PrivateRoute>} />
+                <Route path="/remote-cli" element={<PrivateRoute><DevPages.RemoteCLI /></PrivateRoute>} />
+                <Route path="/downloads"  element={<PrivateRoute><DevPages.Downloads /></PrivateRoute>} />
+                <Route path="/analytics"  element={<PrivateRoute><DevPages.Analytics /></PrivateRoute>} />
+                <Route path="/api-keys"   element={<PrivateRoute><DevPages.ApiKeys /></PrivateRoute>} />
+                <Route path="/logs"       element={<PrivateRoute><AdminRoute><DevPages.Logs /></AdminRoute></PrivateRoute>} />
+              </>
+            )}
           </Route>
         </Routes>
       </Suspense>

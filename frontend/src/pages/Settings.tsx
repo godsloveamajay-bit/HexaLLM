@@ -32,20 +32,17 @@ export default function SettingsPage() {
 
   // AI preferences
   const [variants, setVariants] = useState<{ id: string; label: string; ready: boolean }[]>([])
-  const [kbs, setKbs] = useState<{ id: number; name: string }[]>([])
   const [aiForm, setAiForm] = useState({
     ai_instructions: user?.ai_instructions || '',
     ai_default_model: user?.ai_default_model || '',
     ai_temperature: typeof user?.ai_temperature === 'number' ? user!.ai_temperature! : 0.7,
     ai_max_tokens: typeof user?.ai_max_tokens === 'number' ? user!.ai_max_tokens! : 0, // 0 = model default
-    ai_default_kb_id: user?.ai_default_kb_id ?? 0,                                      // 0 = none
     ai_reasoning: user?.ai_reasoning !== false,                                         // default on
   })
   const [aiSaving, setAiSaving] = useState(false)
 
   useEffect(() => {
     api.get('/models/hexallm/variants').then(({ data }) => setVariants(data.variants || [])).catch(() => {})
-    api.get('/knowledge').then(({ data }) => setKbs(data || [])).catch(() => {})
   }, [])
 
   const saveAI = async (e: React.FormEvent) => {
@@ -57,7 +54,6 @@ export default function SettingsPage() {
         ai_default_model: aiForm.ai_default_model,
         ai_temperature: aiForm.ai_temperature,
         ai_max_tokens: aiForm.ai_max_tokens || null,        // 0 → model default
-        ai_default_kb_id: aiForm.ai_default_kb_id || null,  // 0 → no default KB
         ai_reasoning: aiForm.ai_reasoning,
       })
       await fetchMe()
@@ -301,19 +297,6 @@ export default function SettingsPage() {
               {LENGTH_PRESETS.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
             </select>
             <p className="text-xs text-gray-500 mt-1">Caps how long replies can get. Leave on “Model default” for reasoning models — a low cap can cut off their thinking.</p>
-          </div>
-
-          <div>
-            <label className="label">Default knowledge base</label>
-            <select
-              className="input"
-              value={aiForm.ai_default_kb_id}
-              onChange={(e) => setAiForm((f) => ({ ...f, ai_default_kb_id: parseInt(e.target.value) }))}
-            >
-              <option value={0}>None</option>
-              {kbs.map((k) => <option key={k.id} value={k.id}>{k.name}</option>)}
-            </select>
-            <p className="text-xs text-gray-500 mt-1">New chats start grounded in this knowledge base (RAG). You can change it per-chat.</p>
           </div>
 
           <div className="flex items-center justify-between gap-4">

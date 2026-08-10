@@ -102,9 +102,24 @@ def run_training_job(job_id: int, model_base: str, dataset_path: str, config: di
 
         max_len = config.get("max_seq_length", 512)
 
-        def tokenize(example):
-            text = example.get("text") or example.get("instruction", "") + " " + example.get("output", "")
-            return tokenizer(text, truncation=True, max_length=max_len, padding="max_length")
+        def tokenize(examples):
+            # `examples` is a batch (dict of lists) because we map with
+            # batched=True — build one text per example from "text" or an
+            # "instruction"/"output" pair, then tokenize the whole batch.
+            texts = []
+            first_key = next(iter(examples), None)
+            if first_key is None:
+                return {}
+            for i in range(len(examples[first_key])):
+                text = examples.get("text")
+                if text:
+                    item = text[i]
+                else:
+                    instr = (examples.get("instruction") or [""] * len(examples[first_key]))[i]
+                    out = (examples.get("output") or [""] * len(examples[first_key]))[i]
+                    item = f"{instr} {out}".strip()
+                texts.append(item)
+            return tokenizer(texts, truncation=True, max_length=max_len, padding="max_length")
 
         tokenized = dataset.map(tokenize, batched=True, remove_columns=dataset.column_names)
         update_job(logs=f"[INFO] Dataset loaded: {len(dataset)} examples. Starting training...")
@@ -121,16 +136,6 @@ def run_training_job(job_id: int, model_base: str, dataset_path: str, config: di
         )
 
         total_steps = len(tokenized) * config.get("epochs", 3) // config.get("batch_size", 4)
-
-        class ProgressCallback:
-            def on_log(self, args, state, control, logs=None, **kwargs):
-                if logs and state.global_step:
-                    progress = min(state.global_step / max(total_steps, 1), 1.0)
-                    loss = logs.get("loss", 0)
-                    update_job(
-                        progress=progress * 100,
-                        logs=f"[STEP {state.global_step}] loss={loss:.4f}",
-                    )
 
         from transformers import TrainerCallback
         class _Callback(TrainerCallback):

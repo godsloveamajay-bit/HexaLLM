@@ -4,14 +4,15 @@ import { useState } from 'react'
 import { clsx } from 'clsx'
 import ThemeToggle from '../ui/ThemeToggle'
 import { useAuth } from '../../store/auth'
+import { DEV_FEATURES } from '../../lib/devFeatures'
 
 const PRIMARY_TABS = [
-  { to: '/chat',      icon: MessageSquare, label: 'Chat'      },
-  { to: '/agents',    icon: Bot,           label: 'Agents'    },
-  { to: '/memory',    icon: Brain,         label: 'Memory'    },
-  { to: '/workflows', icon: Zap,           label: 'Workflows' },
-  { to: '/settings',  icon: Settings,      label: 'Settings'  },
-]
+  { to: '/chat',      icon: MessageSquare, label: 'Chat',      dev: false },
+  { to: '/agents',    icon: Bot,           label: 'Agents',    dev: true },
+  { to: '/memory',    icon: Brain,         label: 'Memory',    dev: false },
+  { to: '/workflows', icon: Zap,           label: 'Workflows', dev: true },
+  { to: '/settings',  icon: Settings,      label: 'Settings',  dev: false },
+].filter(i => DEV_FEATURES || !i.dev)
 
 export default function MobileLayout() {
   const { user, logout } = useAuth()

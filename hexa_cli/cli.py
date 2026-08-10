@@ -17,6 +17,7 @@ from prompt_toolkit.formatted_text import HTML
 from prompt_toolkit.history import FileHistory
 from prompt_toolkit.styles import Style
 
+from . import __version__
 from .agent import Agent, OllamaClient
 from .config import CONFIG_DIR, load_config, save_config
 from .tools import TOOL_DESCRIPTIONS, TOOL_FUNCS
@@ -510,7 +511,7 @@ async def _google_login(url: str) -> None:
 # ── Click entry points ─────────────────────────────────────────────────────
 
 @click.group(invoke_without_command=True, context_settings={"help_option_names": ["-h", "--help"]})
-@click.version_option("0.8.0", "-V", "--version")
+@click.version_option(__version__, "-V", "--version")
 @click.option("--model", "-m", default=None, help="Model to use (overrides config).")
 @click.option("--ollama-url", default=None, help="Ollama base URL (overrides config).")
 @click.pass_context

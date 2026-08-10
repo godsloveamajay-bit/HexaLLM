@@ -120,7 +120,6 @@ async def subscribe(data: SubscribeRequest, db: Session = Depends(get_db),
     if not paypal_id:
         raise HTTPException(status_code=400, detail="Plan is not configured for this billing interval yet")
 
-    interval = "MONTH" if data.interval == "month" else "YEAR"
     return_url = f"{settings.APP_URL}/billing?success=true"
     cancel_url = f"{settings.APP_URL}/billing?cancelled=true"
 

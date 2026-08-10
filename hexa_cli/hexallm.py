@@ -11,6 +11,8 @@ from typing import AsyncIterator, Dict, List, Optional
 
 import httpx
 
+from . import __version__
+
 
 class HexaLLMClient:
     def __init__(self, base_url: str, token: str, api_key: Optional[str] = None) -> None:
@@ -261,7 +263,7 @@ class PollinationsClient:
                 json=payload,
                 headers={
                     "Content-Type": "application/json",
-                    "User-Agent": "HexaLLM/0.8",
+                    "User-Agent": f"HexaLLM/{__version__}",
                 },
             ) as r:
                 r.raise_for_status()

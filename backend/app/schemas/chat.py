@@ -16,12 +16,9 @@ class ChatRequest(BaseModel):
     temperature: Optional[float] = None
     max_tokens: Optional[int] = None
     stream: bool = True
-    knowledge_base_id: Optional[int] = None
-    top_k: int = 4
     attachment_base64: Optional[str] = None  # data URL or raw base64
     attachment_type: Optional[str] = None    # "image" | "pdf" | "text"
     attachment_name: Optional[str] = None
-    cli_session_id: Optional[str] = None     # hexallm daemon session for live tool execution
     personality: Optional[Dict[str, int]] = None  # Personality Engine sliders (0–100)
     regenerate: bool = False                 # re-roll the last answer: replace it in history, don't re-append the user turn
     web_search: bool = False                 # ground the answer with live web results

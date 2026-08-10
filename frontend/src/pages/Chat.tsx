@@ -1,9 +1,9 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  Send, Plus, Trash2, Bot, User, Loader2, ChevronDown, BookOpen,
+  Send, Plus, Trash2, Bot, User, Loader2, ChevronDown,
   FileText, Sparkles, Zap, Scale, Brain, Settings2, Menu,
   X, Paperclip, Share2, BookMarked, Clipboard, ClipboardCheck,
-  Mic, MicOff, Square, Download, RotateCcw, Search, Terminal,
+  Mic, MicOff, Square, Download, RotateCcw, Search,
   ChevronRight, Wrench, Lock, Sparkle, SlidersHorizontal, Globe, Sigma,
   Sliders,
 } from 'lucide-react'
@@ -69,8 +69,6 @@ interface Template { id: number; name: string; content: string }
 interface Attachment { type: 'image' | 'pdf' | 'text'; name: string; base64: string; preview?: string }
 interface Session { id: number; title: string; model_name: string; updated_at: string }
 interface ContentMatch { id: number; title: string; model_name: string; updated_at: string; match_count: number; snippet: string; role: string | null }
-interface KB { id: number; name: string; document_count: number; chunk_count: number }
-interface CliSession { session_id: string; hostname: string; cwd: string; platform: string }
 interface HexaLLMVariant {
   id: string; label: string; description: string; ready: boolean
   available_bases: string[]; missing_bases: string[]
@@ -498,17 +496,13 @@ export default function ChatPage() {
   const [searching, setSearching] = useState(false)
   const [systemPrompt, setSystemPrompt] = useState('')
   const [showSystem, setShowSystem] = useState(false)
-  const [kbs, setKbs] = useState<KB[]>([])
-  const [kbId, setKbId] = useState<number | null>(null)
   const [variants, setVariants] = useState<HexaLLMVariant[]>([])
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [attachment, setAttachment] = useState<Attachment | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
   const [showTemplates, setShowTemplates] = useState(false)
   const [newTemplateName, setNewTemplateName] = useState('')
-  const [personas, setPersonas] = useState<any[]>([])
-  const [showPersonas, setShowPersonas] = useState(false)
-  // Per-message temperature override (applied when a persona is selected).
+  // Per-message temperature override.
   const [temperature, setTemperature] = useState<number | null>(typeof user?.ai_temperature === 'number' ? user.ai_temperature : null)
   // Personality Engine — sliders shaping the model's voice + sampling.
   const [personality, setPersonality] = useState<Record<TraitKey, number>>(normalizeTraits(user?.ai_personality))
@@ -516,8 +510,6 @@ export default function ChatPage() {
   const [savingPersonality, setSavingPersonality] = useState(false)
   const [listening, setListening] = useState(false)     // mic is recording
   const [transcribing, setTranscribing] = useState(false) // uploading → Whisper
-  const [cliSessions, setCliSessions] = useState<CliSession[]>([])
-  const [activeCli, setActiveCli] = useState<string>('')
   const [greeting, setGreeting] = useState<string | null>(null)
   const [greetingLoading, setGreetingLoading] = useState(false)
 
@@ -559,14 +551,8 @@ export default function ChatPage() {
     // Model lists are public; everything else is account-bound, so guests skip it.
     loadVariants(); loadOllamaModels()
     if (!isGuest) {
-      loadSessions(); loadKbs(); loadTemplates(); loadPersonas(); loadCliSessions()
+      loadSessions(); loadTemplates()
     }
-  }, [isGuest])
-
-  useEffect(() => {
-    if (isGuest) return
-    const id = setInterval(loadCliSessions, 8000)
-    return () => clearInterval(id)
   }, [isGuest])
 
   useEffect(() => {
@@ -599,14 +585,8 @@ export default function ChatPage() {
     return () => { cancelled = true }
   }, [messages.length === 0])
 
-  const loadCliSessions = async () => {
-    try { const { data } = await api.get('/cli/sessions'); setCliSessions(data || []) } catch {}
-  }
   const loadVariants = async () => {
     try { const { data } = await api.get('/models/hexallm/variants'); setVariants(data.variants || []) } catch {}
-  }
-  const loadPersonas = async () => {
-    try { const { data } = await api.get('/personas'); setPersonas(data || []) } catch {}
   }
   const loadTemplates = async () => {
     try { const { data } = await api.get('/templates'); setTemplates(data) } catch {}
@@ -660,15 +640,6 @@ export default function ChatPage() {
         const { data: msgs } = await api.get(`/chat/sessions/${first.id}/messages`)
         setMessages(msgs.map((m: any) => ({ role: m.role as Message['role'], content: m.content, steps: m.steps || undefined })))
       }
-    } catch {}
-  }
-  const loadKbs = async () => {
-    try {
-      const { data } = await api.get('/knowledge'); setKbs(data)
-      // Apply the user's default knowledge base if it still exists and the user
-      // hasn't already picked one this session.
-      const def = user?.ai_default_kb_id
-      if (def && data.some((k: KB) => k.id === def)) setKbId(prev => prev ?? def)
     } catch {}
   }
 
@@ -812,7 +783,7 @@ export default function ChatPage() {
       const resp = await fetch(`${baseURL}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), ...(personalityActive(personality) ? { personality } : {}), ...(opts.regenerate ? { regenerate: true } : {}), ...(webSearch ? { web_search: true } : {}), knowledge_base_id: kbId, attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, cli_session_id: activeCli || null, ...(Object.keys(ollamaOptions).length > 0 ? { ollama_options: ollamaOptions } : {}) }),
+        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), ...(personalityActive(personality) ? { personality } : {}), ...(opts.regenerate ? { regenerate: true } : {}), ...(webSearch ? { web_search: true } : {}), attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, ...(Object.keys(ollamaOptions).length > 0 ? { ollama_options: ollamaOptions } : {}) }),
         signal: abortRef.current.signal,
       })
 
@@ -927,7 +898,7 @@ export default function ChatPage() {
         }).catch(() => {})
       }
     }
-  }, [model, systemPrompt, kbId, attachment, activeCli])
+  }, [model, systemPrompt, attachment])
 
   const sendMessage = async () => {
     if (!input.trim() || streamPhase !== 'idle' || sending) return
@@ -1075,18 +1046,6 @@ export default function ChatPage() {
   }
 
   const applyTemplate = (t: Template) => { setSystemPrompt(t.content); setShowSystem(true); setShowTemplates(false); if (model !== CUSTOM_VARIANT_ID) setModel(CUSTOM_VARIANT_ID) }
-  const applyPersona = (p: any) => {
-    // A persona is a saved chat config: model + system prompt + KB + temperature.
-    if (p.base_model) setModel(p.base_model)
-    setSystemPrompt(p.system_prompt || '')
-    setShowSystem(true)
-    if (p.knowledge_base_id) setKbId(p.knowledge_base_id)
-    setTemperature(typeof p.temperature === 'number' ? p.temperature : null)
-    if (p.personality) setPersonality(normalizeTraits(p.personality))
-    setShowPersonas(false)
-    toast.success(`Persona "${p.name}" applied`)
-    if (p.id) api.post(`/personas/${p.id}/use`).catch(() => {})
-  }
   const saveTemplate = async () => {
     if (!newTemplateName.trim() || !systemPrompt.trim()) return
     try { const { data } = await api.post('/templates', { name: newTemplateName.trim(), content: systemPrompt }); setTemplates(t => [data, ...t]); setNewTemplateName(''); toast.success('Template saved!') } catch { toast.error('Failed to save') }
@@ -1095,7 +1054,6 @@ export default function ChatPage() {
     e.stopPropagation(); await api.delete(`/templates/${id}`); setTemplates(t => t.filter(x => x.id !== id))
   }
 
-  const activeKb = kbs.find((k) => k.id === kbId)
   // Search message *content* across all sessions (debounced). Titles are still
   // matched locally for instant feedback; this adds full-text body matches.
   useEffect(() => {
@@ -1250,29 +1208,6 @@ export default function ChatPage() {
               <Globe className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Web</span>
             </button>
-            {/* Personas */}
-            <div className="relative flex items-center flex-shrink-0">
-              <button onClick={() => setShowPersonas(!showPersonas)} className="btn-ghost text-xs gap-1 p-1.5" title="Personas">
-                <Bot className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Personas</span>
-              </button>
-              {showPersonas && (
-                <div className="absolute right-0 top-full mt-1 w-72 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 p-3 space-y-1">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide pb-1">Personas</p>
-                  {personas.length === 0 && <p className="text-xs text-gray-600">No personas yet. Create one on the Personas page.</p>}
-                  {personas.map((p) => (
-                    <div key={p.id} onClick={() => applyPersona(p)} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-gray-800">
-                      <span className="text-base leading-none">{p.emoji || '🤖'}</span>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-gray-200 truncate">{p.name}</p>
-                        <p className="text-xs text-gray-500 truncate">{p.base_model}{p.description ? ` · ${p.description}` : ''}</p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
             {/* Templates */}
             <div className="relative flex items-center gap-1 flex-shrink-0" data-templates-panel>
               <button onClick={() => setShowTemplates(!showTemplates)} className="btn-ghost text-xs gap-1 p-1.5" title="Prompt templates">
@@ -1371,33 +1306,6 @@ export default function ChatPage() {
             </div>
             </>)}
           </div>
-
-          {!isGuest && kbs.length > 0 && (
-            <div className="flex items-center gap-2 px-3 pb-2">
-              <BookOpen className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-              <select value={kbId ?? ''} onChange={e => setKbId(e.target.value ? parseInt(e.target.value) : null)}
-                className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-500">
-                <option value="">No knowledge base</option>
-                {kbs.map((k) => <option key={k.id} value={k.id}>{k.name} ({k.chunk_count} chunks)</option>)}
-              </select>
-              {activeKb && <span className="badge bg-primary-900/30 text-primary-400 text-xs flex-shrink-0">RAG</span>}
-            </div>
-          )}
-
-          {!isGuest && (
-          <div className="flex items-center gap-2 px-3 pb-2">
-            <Terminal className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />
-            <select value={activeCli} onChange={e => setActiveCli(e.target.value)}
-              className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-xs text-gray-200 focus:outline-none focus:ring-1 focus:ring-emerald-500">
-              <option value="">No terminal (chat only)</option>
-              {cliSessions.map((s) => (
-                <option key={s.session_id} value={s.session_id}>{s.hostname} — {s.cwd}</option>
-              ))}
-            </select>
-            {activeCli && <span className="badge bg-emerald-900/30 text-emerald-400 text-xs flex-shrink-0">CLI</span>}
-            {cliSessions.length === 0 && <span className="text-xs text-gray-600">Run <code className="font-mono">hexallm daemon</code> to connect</span>}
-          </div>
-          )}
         </div>
 
         {/* Guest trial banner */}
@@ -1497,7 +1405,7 @@ export default function ChatPage() {
                     isActive={(streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
                     streamPhase={streamPhase} warmingModel={warmingModel} sending={sending}
                     onRegenerate={regenerate}
-                    isCliActive={!!activeCli && (streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
+                    isCliActive={false}
                     activity={i === messages.length - 1 ? streamActivity : null}
                     activitySince={i === messages.length - 1 ? activitySince : null}
                     reasoningPhase={reasoningPhase && i === messages.length - 1}
@@ -1539,7 +1447,7 @@ export default function ChatPage() {
             <div className="max-w-xl mx-auto text-center py-3 px-4 rounded-xl border border-primary-800/50 bg-primary-900/20">
               <Lock className="w-5 h-5 text-primary-400 mx-auto mb-2" />
               <p className="text-sm text-gray-200 font-medium">You've used today's free guest tokens</p>
-              <p className="text-xs text-gray-400 mt-1">Create a free account to keep chatting — plus saved history, file uploads, knowledge bases, and image generation.</p>
+              <p className="text-xs text-gray-400 mt-1">Create a free account to keep chatting — plus saved history, file uploads, and image generation.</p>
               <div className="flex items-center justify-center gap-2 mt-3">
                 <Link to="/register" className="btn-primary py-1.5 px-4 text-sm">Create free account</Link>
                 <Link to="/login" className="btn-ghost py-1.5 px-3 text-sm">Sign in</Link>

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import api from '../../lib/api'
 import { useAuth } from '../../store/auth'
+import { DEV_FEATURES } from '../../lib/devFeatures'
 
 interface NavItem {
   id: string
@@ -15,6 +16,7 @@ interface NavItem {
   icon: React.ReactNode
   keywords?: string
   adminOnly?: boolean
+  dev?: boolean
 }
 
 interface Session {
@@ -25,22 +27,22 @@ interface Session {
 const NAV_ITEMS: NavItem[] = [
   { id: 'chat',       label: 'Chat',           path: '/chat',       icon: <MessageSquare className="w-4 h-4" />, keywords: 'message talk ai' },
   { id: 'image',      label: 'Image Gen',      path: '/image',      icon: <Image className="w-4 h-4" />,         keywords: 'generate picture draw' },
-  { id: 'agents',     label: 'Agents',         path: '/agents',     icon: <Bot className="w-4 h-4" />,           keywords: 'automation run' },
+  { id: 'agents',     label: 'Agents',         path: '/agents',     icon: <Bot className="w-4 h-4" />,           keywords: 'automation run', dev: true },
   { id: 'models',     label: 'Models',         path: '/models',     icon: <Brain className="w-4 h-4" />,         keywords: 'ollama llm' },
   { id: 'train',      label: 'Train',          path: '/train',      icon: <Cpu className="w-4 h-4" />,           keywords: 'fine-tune finetune dataset' },
-  { id: 'knowledge',  label: 'Knowledge',      path: '/knowledge',  icon: <Database className="w-4 h-4" />,      keywords: 'kb rag documents files' },
+  { id: 'knowledge',  label: 'Knowledge',      path: '/knowledge',  icon: <Database className="w-4 h-4" />,      keywords: 'kb rag documents files', dev: true },
   { id: 'memory',     label: 'Memory',         path: '/memory',     icon: <BookOpen className="w-4 h-4" />,      keywords: 'remember context' },
-  { id: 'personas',   label: 'Personas',       path: '/personas',   icon: <User className="w-4 h-4" />,          keywords: 'character system prompt' },
-  { id: 'workflows',  label: 'Workflows',      path: '/workflows',  icon: <Workflow className="w-4 h-4" />,      keywords: 'pipeline chain steps' },
-  { id: 'mcp',        label: 'MCP Servers',    path: '/mcp',        icon: <Server className="w-4 h-4" />,        keywords: 'model context protocol plugin' },
-  { id: 'remote-cli', label: 'Remote CLI',     path: '/remote-cli', icon: <Terminal className="w-4 h-4" />,      keywords: 'cli terminal hexallm daemon' },
-  { id: 'downloads',  label: 'Downloads',      path: '/downloads',  icon: <Download className="w-4 h-4" />,      keywords: 'apps install desktop mobile' },
-  { id: 'analytics',  label: 'Analytics',      path: '/analytics',  icon: <BarChart2 className="w-4 h-4" />,     keywords: 'stats usage metrics', adminOnly: true },
-  { id: 'logs',       label: 'Logs',           path: '/logs',       icon: <FileText className="w-4 h-4" />,      keywords: 'history requests debug', adminOnly: true },
-  { id: 'api-keys',   label: 'API Keys',       path: '/api-keys',   icon: <Key className="w-4 h-4" />,           keywords: 'token access' },
+  { id: 'personas',   label: 'Personas',       path: '/personas',   icon: <User className="w-4 h-4" />,          keywords: 'character system prompt', dev: true },
+  { id: 'workflows',  label: 'Workflows',      path: '/workflows',  icon: <Workflow className="w-4 h-4" />,      keywords: 'pipeline chain steps', dev: true },
+  { id: 'mcp',        label: 'MCP Servers',    path: '/mcp',        icon: <Server className="w-4 h-4" />,        keywords: 'model context protocol plugin', dev: true },
+  { id: 'remote-cli', label: 'Remote CLI',     path: '/remote-cli', icon: <Terminal className="w-4 h-4" />,      keywords: 'cli terminal hexallm daemon', dev: true },
+  { id: 'downloads',  label: 'Downloads',      path: '/downloads',  icon: <Download className="w-4 h-4" />,      keywords: 'apps install desktop mobile', dev: true },
+  { id: 'analytics',  label: 'Analytics',      path: '/analytics',  icon: <BarChart2 className="w-4 h-4" />,     keywords: 'stats usage metrics', adminOnly: true, dev: true },
+  { id: 'logs',       label: 'Logs',           path: '/logs',       icon: <FileText className="w-4 h-4" />,      keywords: 'history requests debug', adminOnly: true, dev: true },
+  { id: 'api-keys',   label: 'API Keys',       path: '/api-keys',   icon: <Key className="w-4 h-4" />,           keywords: 'token access', dev: true },
   { id: 'settings',   label: 'Settings',       path: '/settings',   icon: <Settings className="w-4 h-4" />,      keywords: 'profile password account' },
-  { id: 'dashboard',  label: 'Dashboard',      path: '/dashboard',  icon: <BarChart2 className="w-4 h-4" />,     keywords: 'admin overview', adminOnly: true },
-]
+  { id: 'dashboard',  label: 'Dashboard',      path: '/dashboard',  icon: <BarChart2 className="w-4 h-4" />,     keywords: 'admin overview', adminOnly: true, dev: true },
+].filter(i => DEV_FEATURES || !i.dev)
 
 export default function CommandPalette() {
   const [open, setOpen] = useState(false)

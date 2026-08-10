@@ -5,6 +5,8 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.text import Text
 
+from . import __version__
+
 console = Console(highlight=False)
 
 TOOL_STYLE: dict = {
@@ -36,7 +38,7 @@ def print_welcome(model: str, backend_label: str) -> None:
         Panel(
             Text.assemble(
                 ("HexaLLM", "bold white"),
-                ("  v0.8.0\n", "dim"),
+                (f"  v{__version__}\n", "dim"),
                 ("model    ", "dim"),
                 (model, "cyan"),
                 ("\nbackend  ", "dim"),

@@ -278,5 +278,6 @@ class Sandbox:
     # ── Helpers ─────────────────────────────────────────────────────────────
 
     def _safe_path(self, path: str) -> Optional[str]:
-        resolved = os.path.normpath(os.path.join(self.workspace, path.lstrip("/")))
-        return resolved if resolved.startswith(self.workspace) else None
+        ws = os.path.realpath(self.workspace)
+        resolved = os.path.realpath(os.path.join(ws, path.lstrip("/")))
+        return resolved if resolved == ws or resolved.startswith(ws + os.sep) else None

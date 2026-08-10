@@ -7,6 +7,7 @@ import {
 } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { useTheme } from '../../lib/theme'
+import { DEV_FEATURES } from '../../lib/devFeatures'
 import { clsx } from 'clsx'
 
 interface Props {
@@ -14,28 +15,28 @@ interface Props {
   onClose: () => void
 }
 
-const BASE_NAV = [
-  { to: '/chat',      icon: MessageSquare, label: 'Chat'       },
-  { to: '/image',     icon: ImageIcon,     label: 'Image Gen'  },
-  { to: '/agents',    icon: Bot,           label: 'Agents'     },
-  { to: '/tools',     icon: Wrench,        label: 'AI Tools'   },
-  { to: '/personas',  icon: Users,         label: 'Personas'   },
-  { to: '/workflows', icon: Zap,           label: 'Workflows'  },
-  { to: '/memory',    icon: Brain,         label: 'Memory'     },
-  { to: '/memory-graph', icon: Network,    label: 'Knowledge Graph' },
-  { to: '/mcp',        icon: Server,        label: 'MCP Servers' },
-  { to: '/remote-cli', icon: Terminal,      label: 'Remote CLI'  },
-  { to: '/downloads', icon: Download,      label: 'Downloads'   },
-  { to: '/models',    icon: Cpu,           label: 'Model Hub'  },
-  { to: '/knowledge', icon: BookOpen,      label: 'Knowledge'  },
-  { to: '/train',     icon: Wand2,         label: 'Training'   },
-  { to: '/analytics', icon: BarChart3,     label: 'Analytics'  },
-  { to: '/api-keys',  icon: Key,           label: 'API Keys'   },
-]
+const NAV_ITEMS = [
+  { to: '/chat',      icon: MessageSquare, label: 'Chat',       dev: false },
+  { to: '/image',     icon: ImageIcon,     label: 'Image Gen',  dev: false },
+  { to: '/agents',    icon: Bot,           label: 'Agents',     dev: true },
+  { to: '/tools',     icon: Wrench,        label: 'AI Tools',   dev: true },
+  { to: '/personas',  icon: Users,         label: 'Personas',   dev: true },
+  { to: '/workflows', icon: Zap,           label: 'Workflows',  dev: true },
+  { to: '/memory',    icon: Brain,         label: 'Memory',     dev: false },
+  { to: '/memory-graph', icon: Network,    label: 'Knowledge Graph', dev: false },
+  { to: '/mcp',        icon: Server,        label: 'MCP Servers', dev: true },
+  { to: '/remote-cli', icon: Terminal,      label: 'Remote CLI',  dev: true },
+  { to: '/downloads', icon: Download,      label: 'Downloads',   dev: true },
+  { to: '/models',    icon: Cpu,           label: 'Model Hub',  dev: false },
+  { to: '/knowledge', icon: BookOpen,      label: 'Knowledge',  dev: true },
+  { to: '/train',     icon: Wand2,         label: 'Training',   dev: false },
+  { to: '/analytics', icon: BarChart3,     label: 'Analytics',  dev: true },
+  { to: '/api-keys',  icon: Key,           label: 'API Keys',   dev: true },
+].filter(i => DEV_FEATURES || !i.dev)
 
 const ADMIN_EXTRA = [
   { to: '/admin',     icon: LayoutDashboard, label: 'Admin'    },
-  { to: '/logs',      icon: FileText,         label: 'Logs'     },
+  ...(DEV_FEATURES ? [{ to: '/logs', icon: FileText as any, label: 'Logs' }] : []),
 ]
 
 export default function Sidebar({ isOpen, onClose }: Props) {
@@ -53,7 +54,7 @@ export default function Sidebar({ isOpen, onClose }: Props) {
   // Guests (not logged in) only get Chat — the rest is account-gated.
   const navItems = !user
     ? [{ to: '/chat', icon: MessageSquare, label: 'Chat' }]
-    : user.is_admin ? [...BASE_NAV, ...ADMIN_EXTRA] : BASE_NAV
+    : user.is_admin ? [...NAV_ITEMS, ...ADMIN_EXTRA] : NAV_ITEMS
 
   return (
     <aside

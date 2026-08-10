@@ -9,15 +9,11 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import inspect, text
 from .core.config import settings
 from .core.database import Base, engine
-from .models import user, model, chat, knowledge, template, memory, persona, workflow, mcp_server, tool, billing, ip_whitelist  # noqa: F401
+from .models import user, chat, template, memory, billing  # noqa: F401
 from .api import (
-    auth, models, chat as chat_api, agents, analytics,
-    knowledge as knowledge_api, image as image_api,
+    auth, models, chat as chat_api, image as image_api,
     templates as templates_api, memory as memory_api,
-    personas as personas_api, workflows as workflows_api,
-    openai_compat, mcp as mcp_api, cli_tunnel as cli_tunnel_api,
-    downloads as downloads_api, transcribe as transcribe_api,
-    tools as tools_api, billing as billing_api,
+    transcribe as transcribe_api, billing as billing_api,
     admin as admin_api,
 )
 
@@ -32,34 +28,6 @@ def _migrate_db():
                 "CREATE UNIQUE INDEX IF NOT EXISTS ix_chat_sessions_share_token "
                 "ON chat_sessions (share_token)"
             ))
-
-        if "api_keys" in inspector.get_table_names():
-            key_cols = {c["name"] for c in inspector.get_columns("api_keys")}
-            for col, ddl in [
-                ("persona_id", "ALTER TABLE api_keys ADD COLUMN persona_id INTEGER"),
-                ("model_name", "ALTER TABLE api_keys ADD COLUMN model_name VARCHAR"),
-                ("request_count", "ALTER TABLE api_keys ADD COLUMN request_count INTEGER DEFAULT 0"),
-                ("prompt_tokens", "ALTER TABLE api_keys ADD COLUMN prompt_tokens INTEGER DEFAULT 0"),
-                ("completion_tokens", "ALTER TABLE api_keys ADD COLUMN completion_tokens INTEGER DEFAULT 0"),
-            ]:
-                if col not in key_cols:
-                    conn.execute(text(ddl))
-
-        if "agent_runs" in inspector.get_table_names():
-            agent_cols = {c["name"] for c in inspector.get_columns("agent_runs")}
-            if "prompt_tokens" not in agent_cols:
-                conn.execute(text("ALTER TABLE agent_runs ADD COLUMN prompt_tokens INTEGER DEFAULT 0"))
-            if "completion_tokens" not in agent_cols:
-                conn.execute(text("ALTER TABLE agent_runs ADD COLUMN completion_tokens INTEGER DEFAULT 0"))
-
-        if "saved_personas" in inspector.get_table_names():
-            persona_cols = {c["name"] for c in inspector.get_columns("saved_personas")}
-            if "is_favorite" not in persona_cols:
-                conn.execute(text("ALTER TABLE saved_personas ADD COLUMN is_favorite BOOLEAN DEFAULT 0"))
-            if "last_used_at" not in persona_cols:
-                conn.execute(text("ALTER TABLE saved_personas ADD COLUMN last_used_at DATETIME"))
-            if "personality" not in persona_cols:
-                conn.execute(text("ALTER TABLE saved_personas ADD COLUMN personality JSON"))
 
         user_cols = {c["name"] for c in inspector.get_columns("users")}
         if "oauth_provider" not in user_cols:
@@ -182,22 +150,10 @@ async def security_headers(request: Request, call_next) -> Response:
 app.include_router(auth.router,           prefix="/api/v1")
 app.include_router(models.router,         prefix="/api/v1")
 app.include_router(chat_api.router,       prefix="/api/v1")
-app.include_router(agents.router,         prefix="/api/v1")
-app.include_router(analytics.router,      prefix="/api/v1")
-app.include_router(knowledge_api.router,  prefix="/api/v1")
 app.include_router(image_api.router,      prefix="/api/v1")
 app.include_router(templates_api.router,  prefix="/api/v1")
 app.include_router(memory_api.router,     prefix="/api/v1")
-app.include_router(personas_api.router,   prefix="/api/v1")
-app.include_router(workflows_api.router,  prefix="/api/v1")
-app.include_router(mcp_api.router,        prefix="/api/v1")
-# OpenAI-compatible API ("Expose as API"): clean /v1 base_url + back-compat path.
-app.include_router(openai_compat.router,  prefix="/v1")
-app.include_router(openai_compat.router,  prefix="/api/v1/openai")
-app.include_router(cli_tunnel_api.router, prefix="/api/v1")
-app.include_router(downloads_api.router,  prefix="/api/v1")
 app.include_router(transcribe_api.router, prefix="/api/v1")
-app.include_router(tools_api.router,      prefix="/api/v1")
 app.include_router(billing_api.router,    prefix="/api/v1")
 app.include_router(admin_api.router,      prefix="/api/v1")
 
