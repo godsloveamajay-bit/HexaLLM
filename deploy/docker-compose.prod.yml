@@ -1,0 +1,13 @@
+# Prod override. Run via deploy/deploy.sh (or manually):
+#   docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml up -d
+name: hexallm-prod
+
+services:
+  backend:
+    environment:
+      - SECRET_KEY=${SECRET_KEY:?set SECRET_KEY in /home/hexallm/HexaLLM/.env}
+      - APP_URL=https://ai.hexallm.co.uk
+
+  frontend:
+    ports:
+      - "3001:80"

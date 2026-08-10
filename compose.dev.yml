@@ -1,0 +1,12 @@
+# Dev override. Run with:
+#   docker compose -f docker-compose.yml -f compose.dev.yml up -d --build
+name: hexallm-dev
+
+services:
+  backend:
+    ports:
+      - "8000:8000"
+
+  frontend:
+    ports:
+      - "3000:80"

@@ -1,0 +1,14 @@
+[Unit]
+Description=HexaLLM Cloudflare Tunnel (config-as-code)
+After=network-online.target docker.service
+Wants=network-online.target
+
+[Service]
+User=hexallm
+ExecStart=/usr/bin/cloudflared tunnel --config /home/hexallm/HexaLLM/deploy/cloudflared/config.yml run
+Restart=on-failure
+RestartSec=5s
+TimeoutStartSec=30
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,27 @@
+# Single shared Ollama instance (one model store, one process — never two
+# containers fighting over /home/hexallm/.ollama). Both dev and prod reach it
+# via http://host.docker.internal:11434. Bring it up once:
+#   docker compose -p hexallm-ollama -f deploy/ollama/docker-compose.yml up -d
+name: hexallm-ollama
+
+services:
+  ollama:
+    image: ollama/ollama:0.32.6
+    ports:
+      - "11434:11434"
+    # Reuse the host's model store (all 11 models pulled on the host) so no
+    # blobs need re-downloading. The image runs as uid 1000 with HOME=/home/ubuntu.
+    volumes:
+      - /home/hexallm/.ollama:/home/ubuntu/.ollama
+    environment:
+      - HOME=/home/ubuntu
+    user: "1000:1000"
+    restart: unless-stopped
+    # Uncomment for GPU support:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]

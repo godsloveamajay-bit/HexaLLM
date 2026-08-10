@@ -1,17 +1,25 @@
-version: "3.9"
+# Base stack shared by dev and prod (both are overrides on top of this file).
+# - No host ports here: the frontend is reached through the Cloudflare tunnel,
+#   which routes each hostname to a per-environment published port.
+# - Images are pulled from GHCR when ${TAG} is set (CI builds); otherwise they
+#   are built locally from the `build:` context (offline deploy path).
+# - Ollama is shared infrastructure (deploy/ollama/docker-compose.yml) and is
+#   reached over host.docker.internal:11434 — each env does NOT run its own copy.
 
 services:
   backend:
+    image: ghcr.io/godsloveamajay-bit/hexallm-backend:${TAG:-local}
     build:
       context: ./backend
       dockerfile: Dockerfile
-    ports:
-      - "8000:8000"
     environment:
       - DATABASE_URL=postgresql://hexallm:hexallm@db:5432/hexallm
       - REDIS_URL=redis://redis:6379/0
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - APP_URL=${APP_URL:-http://localhost}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data/models:/app/models
       - ./data/datasets:/app/datasets
@@ -21,9 +29,16 @@ services:
         condition: service_healthy
       redis:
         condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     restart: unless-stopped
 
   worker:
+    image: ghcr.io/godsloveamajay-bit/hexallm-backend:${TAG:-local}
     build:
       context: ./backend
       dockerfile: Dockerfile
@@ -31,23 +46,30 @@ services:
     environment:
       - DATABASE_URL=postgresql://hexallm:hexallm@db:5432/hexallm
       - REDIS_URL=redis://redis:6379/0
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - ./data/models:/app/models
       - ./data/datasets:/app/datasets
     depends_on:
-      - redis
       - db
+      - redis
     restart: unless-stopped
 
   frontend:
+    image: ghcr.io/godsloveamajay-bit/hexallm-frontend:${TAG:-local}
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    ports:
-      - "3000:80"
     depends_on:
       - backend
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
     restart: unless-stopped
 
   db:
@@ -67,27 +89,11 @@ services:
 
   redis:
     image: redis:7-alpine
+    command: redis-server --appendonly yes
     volumes:
       - redisdata:/data
     restart: unless-stopped
 
-  ollama:
-    image: ollama/ollama:latest
-    ports:
-      - "11434:11434"
-    volumes:
-      - ollama_models:/root/.ollama
-    restart: unless-stopped
-    # Uncomment for GPU support:
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: all
-    #           capabilities: [gpu]
-
 volumes:
   pgdata:
   redisdata:
-  ollama_models:

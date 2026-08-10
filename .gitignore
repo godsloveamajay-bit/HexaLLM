@@ -49,6 +49,7 @@ backend/data/uploads/
 backend/data/.sandbox/
 
 # Desktop/mobile build artifacts (served at runtime, not source)
+backend/downloads/*.whl
 backend/downloads/*.dmg
 backend/downloads/*.deb
 backend/downloads/*.exe
@@ -59,3 +60,10 @@ backend/downloads/*.AppImage
 __pycache__/
 *.pyc
 hello_world.py
+
+# Deployment
+data/
+deploy/current.sha
+backups/
+deploy/cloudflared/credentials/
+

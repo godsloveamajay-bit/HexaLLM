@@ -1,0 +1,8 @@
+[Unit]
+Description=HexaLLM prod Postgres nightly backup
+After=docker.service
+
+[Service]
+Type=oneshot
+User=hexallm
+ExecStart=/home/hexallm/HexaLLM/deploy/backup.sh

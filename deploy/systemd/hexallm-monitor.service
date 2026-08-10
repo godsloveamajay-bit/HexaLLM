@@ -1,0 +1,8 @@
+[Unit]
+Description=HexaLLM uptime monitor (checks ai + dev health endpoints)
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=hexallm
+ExecStart=/home/hexallm/HexaLLM/deploy/monitor.sh

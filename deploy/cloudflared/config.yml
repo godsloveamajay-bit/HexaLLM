@@ -1,0 +1,13 @@
+# Cloudflare Tunnel ingress — config-as-code.
+# The credentials file (secret) lives OUTSIDE this repo at
+# ~/.cloudflared/cadbc9d3-a889-4e8b-af37-a1d5b3c2d146.json (recreate with
+# `cloudflared tunnel create hexallm-edge`).
+tunnel: hexallm-edge
+credentials-file: /home/hexallm/.cloudflared/cadbc9d3-a889-4e8b-af37-a1d5b3c2d146.json
+
+ingress:
+  - hostname: ai.hexallm.co.uk
+    service: http://localhost:3001
+  - hostname: dev.hexallm.co.uk
+    service: http://localhost:3000
+  - service: http_status:404
