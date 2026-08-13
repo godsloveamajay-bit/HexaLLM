@@ -255,8 +255,10 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" "/tmp/$NAME" --clobber --repo "${{ github.repository }}"
           echo "Uploaded: $NAME"
 
-  # Build the iOS app (.ipa) for App Store distribution on a macOS runner.
-  # Needs Apple Developer Program credentials as repo secrets:
+  # Build the iOS app (.ipa) on a macOS runner. With the Apple Developer
+  # credentials set (secrets below) the .ipa is signed for App Store
+  # distribution; without them it falls back to an unsigned .ipa for
+  # sideloading until the certs arrive.
   #   IOS_TEAM_ID                    – 10-char developer team ID
   #   IOS_CERTIFICATE_BASE64         – base64 of the App Store distribution .p12
   #   IOS_CERTIFICATE_PASSWORD       – .p12 password
@@ -308,6 +310,7 @@ jobs:
           echo "Version: $VERSION ($BUILD_NO)"
 
       - name: Import signing certificate
+        if: ${{ secrets.IOS_CERTIFICATE_BASE64 != '' }}
         env:
           IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
@@ -322,6 +325,7 @@ jobs:
           security list-keychains -d user -s build.keychain
 
       - name: Install provisioning profile
+        if: ${{ secrets.IOS_CERTIFICATE_BASE64 != '' }}
         env:
           IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
         run: |
@@ -329,7 +333,8 @@ jobs:
           echo "$IOS_PROVISIONING_PROFILE_BASE64" | tr -d '[:space:]' | base64 -d \
             > "$HOME/Library/MobileDevice/Provisioning Profiles/HexaLLM-Distribution.mobileprovision"
 
-      - name: Archive app
+      - name: Archive app (signed)
+        if: ${{ secrets.IOS_CERTIFICATE_BASE64 != '' }}
         working-directory: frontend/ios/App
         env:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
@@ -341,7 +346,17 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             archive
 
-      - name: Export .ipa
+      - name: Archive app (unsigned)
+        if: ${{ secrets.IOS_CERTIFICATE_BASE64 == '' }}
+        working-directory: frontend/ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
+            -archivePath /tmp/HexaLLM.xcarchive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            archive
+
+      - name: Export .ipa (signed)
+        if: ${{ secrets.IOS_CERTIFICATE_BASE64 != '' }}
         working-directory: frontend/ios/App
         env:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
@@ -356,6 +371,14 @@ jobs:
           plutil -insert provisioningProfiles.ai.hexallm.app -string "$UUID" /tmp/ExportOptions.plist
           xcodebuild -exportArchive -archivePath /tmp/HexaLLM.xcarchive \
             -exportPath /tmp/ipa -exportOptionsPlist /tmp/ExportOptions.plist
+
+      - name: Package .ipa (unsigned)
+        if: ${{ secrets.IOS_CERTIFICATE_BASE64 == '' }}
+        run: |
+          mkdir -p /tmp/ipa/Payload
+          cp -r /tmp/HexaLLM.xcarchive/Products/Applications/*.app /tmp/ipa/Payload/
+          cd /tmp/ipa && zip -r HexaLLM.ipa Payload
+          ls -lh /tmp/ipa/HexaLLM.ipa
 
       - name: Upload .ipa to release
         env:
