@@ -52,6 +52,7 @@ class APIKey(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    workspace_id = Column(Integer, nullable=True, index=True)   # optional dev-workspace scoping
     name = Column(String, nullable=False)
     key = Column(String, unique=True, index=True, nullable=False)
     is_active = Column(Boolean, default=True)

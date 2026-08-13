@@ -1,6 +1,8 @@
-import { useState } from 'react'
-import { Play, Braces, Copy, Check } from 'lucide-react'
+import { useEffect, useState } from 'react'
+import { Play, Braces, Copy, Check, Save, FolderOpen } from 'lucide-react'
 import { api } from '../lib/api'
+import { useDevStore, type Workspace, type WorkspaceItem } from './devStore'
+import { fetchWorkspaces, saveItem, fetchItems, createWorkspace } from './workspacesApi'
 
 const ENDPOINTS = [
   { id: 'health', label: 'GET /health', method: 'GET', path: '/health', body: '' },
@@ -36,6 +38,50 @@ export default function ApiExplorer() {
   const [status, setStatus] = useState<number | null>(null)
   const [loading, setLoading] = useState(false)
   const [copied, setCopied] = useState(false)
+  const [savedFlash, setSavedFlash] = useState(false)
+
+  const { activeWorkspaceId, setActiveWorkspace, pendingRequest, loadRequest } = useDevStore()
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [requests, setRequests] = useState<WorkspaceItem[]>([])
+
+  useEffect(() => {
+    fetchWorkspaces().then((list) => {
+      setWorkspaces(list)
+      if (!activeWorkspaceId && list.length) setActiveWorkspace(list[0].id)
+    }).catch(() => {})
+  }, [activeWorkspaceId, setActiveWorkspace])
+
+  useEffect(() => {
+    if (activeWorkspaceId !== null) {
+      fetchItems(activeWorkspaceId, 'request').then(setRequests).catch(() => {})
+    }
+  }, [activeWorkspaceId])
+
+  useEffect(() => {
+    if (pendingRequest) {
+      const p = pendingRequest.payload as Record<string, unknown>
+      if (typeof p.endpointId === 'string') select(p.endpointId)
+      if (typeof p.body === 'string') setBody(p.body)
+      loadRequest(null)
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingRequest, loadRequest])
+
+  const save = async () => {
+    let wsId = activeWorkspaceId
+    if (wsId === null) {
+      const ws = await createWorkspace('default', 'auto-created by api explorer')
+      setWorkspaces((prev) => [...prev, ws])
+      setActiveWorkspace(ws.id)
+      wsId = ws.id
+    }
+    if (!wsId) return
+    const name = `${ep.method} ${ep.path} · ${new Date().toLocaleTimeString()}`
+    await saveItem(wsId, 'request', name, { endpointId: active, body })
+    setRequests(await fetchItems(wsId, 'request'))
+    setSavedFlash(true)
+    setTimeout(() => setSavedFlash(false), 2000)
+  }
 
   const ep = ENDPOINTS.find((e) => e.id === active)!
 
@@ -85,13 +131,51 @@ export default function ApiExplorer() {
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <Braces size={18} style={{ color: '#4ade80' }} />
-        <div>
+        <div className="mr-auto">
           <h1 className="font-mono font-bold text-lg" style={{ color: '#e6edf3' }}>api explorer</h1>
           <p className="font-mono text-xs" style={{ color: '#8b949e' }}>
             hit the backend directly — every response comes back as raw JSON
           </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 font-mono text-xs">
+          <select
+            value={activeWorkspaceId ?? ''}
+            onChange={(e) => setActiveWorkspace(e.target.value ? Number(e.target.value) : null)}
+            className="font-mono text-xs px-2 py-1.5 rounded border outline-none focus:border-[#4ade80]"
+            style={{ background: '#0d1117', borderColor: '#30363d', color: '#8b949e' }}
+            title="active workspace"
+          >
+            <option value="">no workspace</option>
+            {workspaces.map((w) => (
+              <option key={w.id} value={w.id}>{w.name}</option>
+            ))}
+          </select>
+          <select
+            value=""
+            onChange={(e) => {
+              const item = requests.find((r) => r.id === Number(e.target.value))
+              if (item) loadRequest(item)
+            }}
+            className="font-mono text-xs px-2 py-1.5 rounded border outline-none focus:border-[#4ade80] max-w-[180px]"
+            style={{ background: '#0d1117', borderColor: '#30363d', color: '#8b949e' }}
+            title="load a saved request"
+          >
+            <option value="">load request…</option>
+            {requests.map((r) => (
+              <option key={r.id} value={r.id}>{r.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={save}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border transition-colors hover:bg-[#0d1117]"
+            style={{ borderColor: savedFlash ? 'rgba(74,222,128,0.6)' : '#30363d', color: savedFlash ? '#4ade80' : '#8b949e' }}
+            title="save this request to the active workspace"
+          >
+            <Save size={13} /> {savedFlash ? 'saved' : 'save'}
+          </button>
         </div>
       </div>
 

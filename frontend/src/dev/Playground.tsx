@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react'
-import { Play, Square, Copy, Check, Trash2, Terminal } from 'lucide-react'
+import { Play, Square, Copy, Check, Trash2, Terminal, Save, FolderOpen } from 'lucide-react'
 import ReactMarkdown from 'react-markdown'
 import { api, baseURL } from '../lib/api'
+import { useDevStore, type Workspace, type WorkspaceItem } from './devStore'
+import { fetchWorkspaces, saveItem, fetchItems, createWorkspace } from './workspacesApi'
 
 type Variant = { name: string; context_size?: number; description?: string }
 type RawModel = { name: string; size?: number; details?: { quantization_level?: string; family?: string } }
@@ -102,9 +104,14 @@ export default function Playground() {
   const [phase, setPhase] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
+  const [savedFlash, setSavedFlash] = useState<string | null>(null)
 
   const abortRef = useRef<AbortController | null>(null)
   const outputRef = useRef<HTMLDivElement | null>(null)
+
+  const { activeWorkspaceId, setActiveWorkspace, pendingPreset, loadPreset } = useDevStore()
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([])
+  const [presets, setPresets] = useState<WorkspaceItem[]>([])
 
   useEffect(() => {
     api.get('/models/hexallm/variants').then(({ data }) => {
@@ -116,6 +123,49 @@ export default function Playground() {
       setRawModels(data?.models ?? [])
     }).catch(() => {})
   }, [])
+
+  useEffect(() => {
+    fetchWorkspaces().then((list) => {
+      setWorkspaces(list)
+      if (!activeWorkspaceId && list.length) setActiveWorkspace(list[0].id)
+    }).catch(() => {})
+  }, [activeWorkspaceId, setActiveWorkspace])
+
+  useEffect(() => {
+    if (activeWorkspaceId !== null) {
+      fetchItems(activeWorkspaceId, 'playground').then(setPresets).catch(() => {})
+    }
+  }, [activeWorkspaceId])
+
+  useEffect(() => {
+    if (pendingPreset) {
+      const p = pendingPreset.payload as Record<string, unknown>
+      if (typeof p.model === 'string') setModel(p.model)
+      if (typeof p.system === 'string') setSystem(p.system)
+      if (typeof p.prompt === 'string') setPrompt(p.prompt)
+      if (typeof p.temperature === 'number') setTemperature(p.temperature)
+      if (typeof p.topP === 'number') setTopP(p.topP)
+      if (typeof p.maxTokens === 'number') setMaxTokens(p.maxTokens)
+      if (typeof p.stream === 'boolean') setStream(p.stream)
+      loadPreset(null)
+    }
+  }, [pendingPreset, loadPreset])
+
+  const savePreset = async () => {
+    let wsId = activeWorkspaceId
+    if (wsId === null) {
+      const ws = await createWorkspace('default', 'auto-created by playground')
+      setWorkspaces((prev) => [...prev, ws])
+      setActiveWorkspace(ws.id)
+      wsId = ws.id
+    }
+    if (!wsId || !model) return
+    const name = `preset · ${pretty(model)} · ${new Date().toLocaleTimeString()}`
+    await saveItem(wsId, 'playground', name, { model, system, prompt, temperature, topP, maxTokens, stream })
+    setPresets(await fetchItems(wsId, 'playground'))
+    setSavedFlash(name)
+    setTimeout(() => setSavedFlash(null), 2000)
+  }
 
   const ollamaOptions = { top_p: topP }
 
@@ -257,15 +307,53 @@ export default function Playground() {
 
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
-      <div className="flex items-center gap-3 mb-4">
+      <div className="flex items-center gap-3 mb-4 flex-wrap">
         <Terminal size={18} style={{ color: '#4ade80' }} />
-        <div>
+        <div className="mr-auto">
           <h1 className="font-mono font-bold text-lg" style={{ color: '#e6edf3' }}>
             model playground
           </h1>
           <p className="font-mono text-xs" style={{ color: '#8b949e' }}>
             fire raw requests at any model — params, streaming, timings, curl
           </p>
+        </div>
+
+        <div className="flex items-center gap-1.5 font-mono text-xs">
+          <select
+            value={activeWorkspaceId ?? ''}
+            onChange={(e) => setActiveWorkspace(e.target.value ? Number(e.target.value) : null)}
+            className="font-mono text-xs px-2 py-1.5 rounded border outline-none focus:border-[#4ade80]"
+            style={{ background: '#0d1117', borderColor: '#30363d', color: '#8b949e' }}
+            title="active workspace"
+          >
+            <option value="">no workspace</option>
+            {workspaces.map((w) => (
+              <option key={w.id} value={w.id}>{w.name}</option>
+            ))}
+          </select>
+          <select
+            value=""
+            onChange={(e) => {
+              const item = presets.find((p) => p.id === Number(e.target.value))
+              if (item) loadPreset(item)
+            }}
+            className="font-mono text-xs px-2 py-1.5 rounded border outline-none focus:border-[#4ade80] max-w-[180px]"
+            style={{ background: '#0d1117', borderColor: '#30363d', color: '#8b949e' }}
+            title="load a saved preset"
+          >
+            <option value="">load preset…</option>
+            {presets.map((p) => (
+              <option key={p.id} value={p.id}>{p.name}</option>
+            ))}
+          </select>
+          <button
+            onClick={savePreset}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border transition-colors hover:bg-[#0d1117]"
+            style={{ borderColor: savedFlash ? 'rgba(74,222,128,0.6)' : '#30363d', color: savedFlash ? '#4ade80' : '#8b949e' }}
+            title="save current config to the active workspace"
+          >
+            <Save size={13} /> {savedFlash ? 'saved' : 'save'}
+          </button>
         </div>
       </div>
 

@@ -96,6 +96,7 @@ class APIKeyOut(BaseModel):
     name: str
     key: str
     is_active: bool
+    workspace_id: Optional[int] = None
     persona_id: Optional[int] = None
     persona_name: Optional[str] = None
     model_name: Optional[str] = None

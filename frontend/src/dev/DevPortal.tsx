@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, NavLink, Outlet } from 'react-router-dom'
-import { FlaskConical, Braces, Server, Activity, LogOut, LogIn, TerminalSquare } from 'lucide-react'
+import { FlaskConical, Braces, Server, Activity, LogOut, LogIn, TerminalSquare, FolderKanban } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { baseURL } from '../lib/api'
 import { isDevSite } from './isDev'
@@ -9,6 +9,7 @@ const PlaygroundPage = lazy(() => import('./Playground'))
 const ApiExplorerPage = lazy(() => import('./ApiExplorer'))
 const LiveModelsPage = lazy(() => import('./LiveModels'))
 const StatusPage = lazy(() => import('./Status'))
+const WorkspacesPage = lazy(() => import('./Workspaces'))
 
 const LoginPage = lazy(() => import('../pages/Login'))
 const RegisterPage = lazy(() => import('../pages/Register'))
@@ -16,6 +17,7 @@ const OAuthCallbackPage = lazy(() => import('../pages/OAuthCallback'))
 
 const NAV = [
   { to: '/playground', label: 'Playground', icon: FlaskConical },
+  { to: '/workspaces', label: 'Workspaces', icon: FolderKanban },
   { to: '/api', label: 'API Explorer', icon: Braces },
   { to: '/models', label: 'Live Models', icon: Server },
   { to: '/status', label: 'Status', icon: Activity },
@@ -190,6 +192,7 @@ export default function DevPortal() {
       <Route path="/" element={<Shell />}>
         <Route index element={<Navigate to="/playground" replace />} />
         <Route path="playground" element={<PlaygroundPage />} />
+        <Route path="workspaces" element={<WorkspacesPage />} />
         <Route path="api" element={<ApiExplorerPage />} />
         <Route path="models" element={<LiveModelsPage />} />
         <Route path="status" element={<StatusPage />} />

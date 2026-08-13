@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import inspect, text
 from .core.config import settings
 from .core.database import Base, engine
-from .models import user, chat, template, memory, billing  # noqa: F401
+from .models import user, chat, template, memory, billing, workspace  # noqa: F401
 from .api import (
     auth, models, chat as chat_api, image as image_api,
     templates as templates_api, memory as memory_api,
@@ -17,7 +17,7 @@ from .api import (
     admin as admin_api, agents as agents_api, mcp as mcp_api,
     workflows as workflows_api, knowledge as knowledge_api,
     tools as tools_api, personas as personas_api,
-    analytics as analytics_api, downloads as downloads_api,
+    analytics as analytics_api, downloads as downloads_api, workspaces as workspaces_api,
     openai_compat as openai_compat_api, cli_tunnel as cli_tunnel_api,
 )
 
@@ -97,6 +97,11 @@ def _migrate_db():
         if "paypal_customer_id" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN paypal_customer_id VARCHAR"))
 
+        # Dev workspaces — api_keys gains an optional workspace_id column
+        key_cols = {c["name"] for c in inspector.get_columns("api_keys")}
+        if "workspace_id" not in key_cols:
+            conn.execute(text("ALTER TABLE api_keys ADD COLUMN workspace_id INTEGER"))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -174,6 +179,7 @@ app.include_router(tools_api.router,      prefix="/api/v1")
 app.include_router(personas_api.router,   prefix="/api/v1")
 app.include_router(analytics_api.router,  prefix="/api/v1")
 app.include_router(downloads_api.router,  prefix="/api/v1")
+app.include_router(workspaces_api.router, prefix="/api/v1")
 # OpenAI-compatible API — clean /v1 base (frontend advertises ${origin}/v1)
 # plus /api/v1/openai back-compat alias. Mounted after the chat router so the
 # dedicated OpenAI paths don't collide with the UI ones.
