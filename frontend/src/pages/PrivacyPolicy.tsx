@@ -10,7 +10,7 @@ export default function PrivacyPolicyPage() {
           <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center">
             <Sparkle className="w-5 h-5 text-white fill-white" />
           </div>
-          <span className="font-bold text-lg text-gray-100">HexaLLM AI</span>
+          <span className="font-bold text-lg text-gray-100">HexaLLM</span>
         </div>
 
         <Link to="/login" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-gray-300 mb-8 transition-colors">
@@ -26,7 +26,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-base font-semibold text-gray-200 mb-3">1. Overview</h2>
             <p>
-              HexaLLM AI is an open-source, self-hosted AI platform. When you run HexaLLM AI on your own
+              HexaLLM is an open-source, self-hosted AI platform. When you run HexaLLM on your own
               infrastructure, all data stays on your server. This policy describes what data is collected,
               how it is used, and your rights as a user.
             </p>
@@ -91,7 +91,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-base font-semibold text-gray-200 mb-3">7. Cookies and Local Storage</h2>
             <p>
-              HexaLLM AI uses browser local storage to store your authentication token. No third-party
+              HexaLLM uses browser local storage to store your authentication token. No third-party
               cookies or tracking pixels are used.
             </p>
           </section>
@@ -99,7 +99,7 @@ export default function PrivacyPolicyPage() {
           <section>
             <h2 className="text-base font-semibold text-gray-200 mb-3">8. Children's Privacy</h2>
             <p>
-              HexaLLM AI is not directed at children under 13. We do not knowingly collect data from
+              HexaLLM is not directed at children under 13. We do not knowingly collect data from
               anyone under 13 years of age.
             </p>
           </section>
@@ -123,7 +123,7 @@ export default function PrivacyPolicyPage() {
                 rel="noopener noreferrer"
                 className="text-primary-400 hover:text-primary-300 underline underline-offset-2"
               >
-                HexaLLM AI GitHub repository
+                HexaLLM GitHub repository
               </a>.
             </p>
           </section>

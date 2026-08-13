@@ -62,7 +62,7 @@ export default function LoginPage() {
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
           <LogoMark size={56} className="mb-4" />
-          <h1 className="text-2xl font-bold text-gray-100">HexaLLM AI</h1>
+          <h1 className="text-2xl font-bold text-gray-100">HexaLLM</h1>
           <p className="text-gray-500 text-sm mt-1">Open-source AI Platform</p>
         </div>
 

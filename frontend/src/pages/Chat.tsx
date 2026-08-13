@@ -977,7 +977,7 @@ export default function ChatPage() {
     const title = activeSession?.title || 'conversation'
     const md = messages
       .filter(m => m.role !== 'system')
-      .map(m => `## ${m.role === 'user' ? 'You' : 'HexaLLM AI'}\n\n${m.content}`)
+      .map(m => `## ${m.role === 'user' ? 'You' : 'HexaLLM'}\n\n${m.content}`)
       .join('\n\n---\n\n')
     const blob = new Blob([`# ${title}\n\n${md}`], { type: 'text/markdown' })
     const a = document.createElement('a'); a.href = URL.createObjectURL(blob)

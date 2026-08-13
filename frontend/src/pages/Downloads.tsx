@@ -276,10 +276,10 @@ function DesktopCard({ assets, version }: { assets: GHAsset[]; version: string }
             The app isn’t Apple-notarized yet, so macOS blocks it on first launch. To open it:
           </p>
           <ul className="list-disc ml-4 space-y-1 text-gray-400">
-            <li>Drag <span className="text-gray-200">HexaLLM AI</span> to Applications, then <span className="text-gray-200">right-click it → Open → Open</span> (only needed once), or</li>
+            <li>Drag <span className="text-gray-200">HexaLLM</span> to Applications, then <span className="text-gray-200">right-click it → Open → Open</span> (only needed once), or</li>
             <li>run this once in Terminal:
               <code className="block mt-1 bg-gray-900 border border-gray-700/60 rounded-lg px-2 py-1 font-mono text-emerald-400 select-all">
-                xattr -dr com.apple.quarantine "/Applications/HexaLLM AI.app"
+                xattr -dr com.apple.quarantine "/Applications/HexaLLM.app"
               </code>
             </li>
           </ul>
@@ -372,7 +372,7 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
-    version: '14.0.0',
+    version: '14.0.1',
     date: '2026-06-06',
     summary: 'Web search is dramatically faster and shows live progress instead of looking stuck.',
     changes: [
@@ -625,7 +625,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '14.0.0'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '14.0.1'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 

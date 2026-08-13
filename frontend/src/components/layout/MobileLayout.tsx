@@ -3,6 +3,7 @@ import { MessageSquare, Cpu, Bot, BookOpen, Settings, Brain, Zap } from 'lucide-
 import { useState } from 'react'
 import { clsx } from 'clsx'
 import ThemeToggle from '../ui/ThemeToggle'
+import { LogoMark } from '../Logo'
 import { useAuth } from '../../store/auth'
 import { DEV_FEATURES } from '../../lib/devFeatures'
 
@@ -29,20 +30,8 @@ export default function MobileLayout() {
               style={{ paddingTop: 'env(safe-area-inset-top)', height: 'calc(env(safe-area-inset-top) + 52px)' }}>
         <div className="flex items-center gap-2.5 mt-auto pb-1 w-full justify-between">
           <div className="flex items-center gap-2">
-            <div className="w-7 h-7 flex items-center justify-center">
-              <svg viewBox="0 0 24 24" className="w-5 h-5">
-                <defs>
-                  <linearGradient id="mob-topbar-hex" x1="0.15" y1="0" x2="0.85" y2="1">
-                    <stop offset="0%" stopColor="#4FF3FF"/>
-                    <stop offset="50%" stopColor="#A78BFA"/>
-                    <stop offset="100%" stopColor="#3B82F6"/>
-                  </linearGradient>
-                </defs>
-                <path d="M12 2L20.66 7L20.66 17L12 22L3.34 17L3.34 7Z" fill="url(#mob-topbar-hex)"/>
-                <path d="M12 6.5L16.76 9.25L16.76 14.75L12 17.5L7.24 14.75L7.24 9.25Z" fill="rgb(var(--g-950))"/>
-              </svg>
-            </div>
-            <span className="font-bold text-gray-100 light:text-gray-950 text-sm tracking-wide">HexaLLM AI</span>
+            <LogoMark size={26} className="shrink-0" />
+            <span className="font-bold text-gray-100 light:text-gray-950 text-sm tracking-wide">HexaLLM</span>
           </div>
           {user && (
             <div className="flex items-center gap-2">

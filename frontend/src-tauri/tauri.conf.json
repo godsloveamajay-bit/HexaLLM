@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "HexaLLM AI",
-  "version": "14.0.0",
+  "productName": "HexaLLM",
+  "version": "14.0.1",
   "identifier": "ai.hexallm.app",
   "build": {
     "frontendDist": "../dist",
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "HexaLLM AI",
+        "title": "HexaLLM",
         "width": 1280,
         "height": 800,
         "minWidth": 400,

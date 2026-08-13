@@ -5,7 +5,7 @@
 	<key>CFBundleDevelopmentRegion</key>
 	<string>en</string>
 	<key>CFBundleDisplayName</key>
-        <string>HexaLLM AI</string>
+        <string>HexaLLM</string>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundleIdentifier</key>
@@ -46,10 +46,10 @@
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
 	<key>NSMicrophoneUsageDescription</key>
-	<string>HexaLLM AI uses the microphone for voice input in chat.</string>
+	<string>HexaLLM uses the microphone for voice input in chat.</string>
 	<key>NSCameraUsageDescription</key>
-	<string>HexaLLM AI uses the camera to capture images for upload.</string>
+	<string>HexaLLM uses the camera to capture images for upload.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>HexaLLM AI uses your photo library to attach images to conversations.</string>
+	<string>HexaLLM uses your photo library to attach images to conversations.</string>
 </dict>
 </plist>

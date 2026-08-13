@@ -2,7 +2,7 @@ import type { CapacitorConfig } from '@capacitor/cli';
 
 const config: CapacitorConfig = {
   appId: 'ai.hexallm.app',
-  appName: 'HexaLLM AI',
+  appName: 'HexaLLM',
   webDir: 'dist',
   server: {
     // Point to your hosted backend in production.

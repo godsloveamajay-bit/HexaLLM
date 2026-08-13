@@ -100,7 +100,7 @@ export default function PricingPage() {
       <div className="text-center mb-12">
         <h1 className="text-3xl font-bold text-foreground mb-3">Choose Your Plan</h1>
         <p className="text-secondary max-w-xl mx-auto">
-          Unlock more features as your needs grow. All plans include access to HexaLLM AI's core models.
+          Unlock more features as your needs grow. All plans include access to HexaLLM's core models.
         </p>
       </div>
 

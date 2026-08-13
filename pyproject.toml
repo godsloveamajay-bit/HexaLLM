@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "hexallm"
-version = "14.0.0"
+version = "14.0.1"
 summary = "HexaLLM — AI coding assistant for the terminal"
 description = "HexaLLM — AI coding assistant for the terminal"
 readme = "README_CLI.md"
