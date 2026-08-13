@@ -307,8 +307,8 @@ jobs:
           IFS='.' read -r major minor patch <<< "$VERSION"
           patch=${patch:-0}
           BUILD_NO=$(( major * 10000 + minor * 100 + patch ))
-          sed -i "s/MARKETING_VERSION = [0-9.]*/MARKETING_VERSION = $VERSION/" frontend/ios/App/App.xcodeproj/project.pbxproj
-          sed -i "s/CURRENT_PROJECT_VERSION = [0-9]*/CURRENT_PROJECT_VERSION = $BUILD_NO/" frontend/ios/App/App.xcodeproj/project.pbxproj
+          sed -i '' "s/MARKETING_VERSION = [0-9.]*/MARKETING_VERSION = $VERSION/" frontend/ios/App/App.xcodeproj/project.pbxproj
+          sed -i '' "s/CURRENT_PROJECT_VERSION = [0-9]*/CURRENT_PROJECT_VERSION = $BUILD_NO/" frontend/ios/App/App.xcodeproj/project.pbxproj
           echo "Version: $VERSION ($BUILD_NO)"
 
       - name: Import signing certificate
