@@ -14,6 +14,7 @@ import { prettyModel } from '../lib/models'
 import PersonalitySliders from '../components/PersonalitySliders'
 import { normalizeTraits, isActive as personalityActive, type TraitKey } from '../lib/personality'
 import AiSparkle from '../components/AiSparkle'
+import { LogoMark } from '../components/Logo'
 import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
 import remarkMath from 'remark-math'
 import remarkGfm from 'remark-gfm'
@@ -1335,9 +1336,7 @@ export default function ChatPage() {
         <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
           <div className="min-h-full flex flex-col items-center justify-center px-4 py-10">
             <div className="max-w-2xl w-full flex flex-col items-center">
-              <div className="w-16 h-16 mb-5 rounded-2xl bg-gradient-to-br from-primary-500/20 to-secondary-500/20 flex items-center justify-center">
-                <AiSparkle size={32} active />
-              </div>
+              <LogoMark size={64} className="mb-5" />
               {greetingLoading ? (
                 <div className="flex flex-col items-center justify-center gap-3 py-6">
                   <span className="inline-block w-5 h-5 border-2 border-gray-600 border-t-primary-400 rounded-full animate-spin" />

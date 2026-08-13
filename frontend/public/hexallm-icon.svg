@@ -1,11 +1,14 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" fill="none">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024">
   <defs>
-    <linearGradient id="hex" x1="0.15" y1="0" x2="0.85" y2="1">
-      <stop offset="0%" stop-color="#4FF3FF"/>
-      <stop offset="50%" stop-color="#A78BFA"/>
-      <stop offset="100%" stop-color="#3B82F6"/>
-    </linearGradient>
+    <filter id="glow" x="-60%" y="-60%" width="220%" height="220%">
+      <feGaussianBlur stdDeviation="28" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
   </defs>
-  <!-- Central hexagon only — clean and recognizable at 16px (favicon). -->
-  <path d="M256 36 L446.5 146 L446.5 366 L256 476 L65.5 366 L65.5 146 Z" fill="url(#hex)"/>
+  <rect width="1024" height="1024" fill="#0F172A"/>
+  <path d="M512 212 L771.8 362 L771.8 662 L512 812 L252.2 662 L252.2 362 Z"
+        fill="none" stroke="#4FF3FF" stroke-width="36" stroke-linejoin="round" filter="url(#glow)"/>
 </svg>

@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
-import { Brain, Loader2, Eye, EyeOff } from 'lucide-react'
+import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { baseURL } from '../lib/api'
 import toast from 'react-hot-toast'
+import { LogoMark } from '../components/Logo'
 
 const PROVIDERS = [
   { id: 'google', label: 'Google' },
@@ -56,9 +57,7 @@ export default function RegisterPage() {
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
       <div className="w-full max-w-md">
         <div className="flex flex-col items-center mb-8">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-2xl shadow-primary-900/60 mb-4">
-            <Brain className="w-8 h-8 text-white" />
-          </div>
+          <LogoMark size={56} className="mb-4" />
           <h1 className="text-2xl font-bold text-gray-100">HexaLLM AI</h1>
           <p className="text-gray-500 text-sm mt-1">Open-source AI Platform</p>
         </div>

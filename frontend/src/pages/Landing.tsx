@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom'
 import {
   Hexagon, Cpu, Cloud, Code2, Github, Twitter, Check, ArrowRight,
 } from 'lucide-react'
+import { Logo as BrandLogo } from '../components/Logo'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    HexaLLM Brand Landing — Palette:
@@ -152,17 +153,7 @@ function highlight(line: string, key: number) {
 }
 
 function Logo({ size = 36 }: { size?: number }) {
-  return (
-    <div className="flex items-center gap-3">
-      <div className="relative flex items-center justify-center" style={{ width: size, height: size }}>
-        <div className="absolute inset-0 rounded-full bg-primary-400/25 blur-md" />
-        <Hexagon className="relative text-primary-400" style={{ width: size, height: size }} strokeWidth={1.5} />
-      </div>
-      <span className="font-display font-semibold tracking-tight text-white text-lg">
-        Hexa<span className="text-primary-400">LLM</span>
-      </span>
-    </div>
-  )
+  return <BrandLogo size={size} textClassName="text-white text-lg" />
 }
 
 export default function LandingPage() {

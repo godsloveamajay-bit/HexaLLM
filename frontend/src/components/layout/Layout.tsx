@@ -3,6 +3,7 @@ import { Outlet, Link } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import ThemeToggle from '../ui/ThemeToggle'
 import { Menu, Search } from 'lucide-react'
+import { LogoMark } from '../Logo'
 import { useAuth } from '../../store/auth'
 import { useAutoUpdate } from '../../hooks/useAutoUpdate'
 import { clsx } from 'clsx'
@@ -39,19 +40,7 @@ export default function Layout() {
         </button>
 
         <Link to="/chat" className="flex items-center gap-2.5 select-none px-1">
-          <div className="w-7 h-7 flex items-center justify-center">
-            <svg viewBox="0 0 24 24" className="w-5 h-5">
-              <defs>
-                <linearGradient id="topbar-hex" x1="0.15" y1="0" x2="0.85" y2="1">
-                  <stop offset="0%" stopColor="#4FF3FF"/>
-                  <stop offset="50%" stopColor="#A78BFA"/>
-                  <stop offset="100%" stopColor="#3B82F6"/>
-                </linearGradient>
-              </defs>
-              <path d="M12 2L20.66 7L20.66 17L12 22L3.34 17L3.34 7Z" fill="url(#topbar-hex)"/>
-              <path d="M12 6.5L16.76 9.25L16.76 14.75L12 17.5L7.24 14.75L7.24 9.25Z" fill="rgb(var(--g-950))"/>
-            </svg>
-          </div>
+          <LogoMark size={26} className="shrink-0" />
           <span className="font-bold text-gray-100 light:text-gray-950 text-sm tracking-wide hidden sm:inline">
             HexaLLM <span className="text-primary-400">AI</span>
           </span>
