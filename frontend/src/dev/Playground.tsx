@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Play, Square, Copy, Check, Trash2, Terminal, Save, FolderOpen } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
+import Markdown from '../components/ui/Markdown'
 import { api, baseURL } from '../lib/api'
 import { useDevStore, type Workspace, type WorkspaceItem } from './devStore'
 import { fetchWorkspaces, saveItem, fetchItems, createWorkspace } from './workspacesApi'
@@ -472,8 +472,8 @@ export default function Playground() {
                 ✗ {error}
               </div>
             ) : output ? (
-              <div className="prose prose-invert prose-sm max-w-none font-mono" style={{ color: '#e6edf3' }}>
-                <ReactMarkdown>{output}</ReactMarkdown>
+              <div className="prose prose-invert prose-sm max-w-none" style={{ color: '#e6edf3' }}>
+                <Markdown streaming={running}>{output}</Markdown>
               </div>
             ) : (
               <div className="font-mono text-sm flex flex-col items-center justify-center h-full gap-1" style={{ color: '#6e7681' }}>

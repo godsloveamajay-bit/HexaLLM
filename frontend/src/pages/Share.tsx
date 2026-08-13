@@ -1,39 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams, Link } from 'react-router-dom'
 import { Bot, User, Sparkle, Loader2, AlertCircle } from 'lucide-react'
-import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
-import remarkMath from 'remark-math'
-import remarkGfm from 'remark-gfm'
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
-import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import js from 'react-syntax-highlighter/dist/esm/languages/prism/javascript'
-import ts from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
-import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx'
-import jsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx'
-import py from 'react-syntax-highlighter/dist/esm/languages/prism/python'
-import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash'
-import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
-import css from 'react-syntax-highlighter/dist/esm/languages/prism/css'
-import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup'
-import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust'
-import go from 'react-syntax-highlighter/dist/esm/languages/prism/go'
-import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql'
-SyntaxHighlighter.registerLanguage('javascript', js)
-SyntaxHighlighter.registerLanguage('typescript', ts)
-SyntaxHighlighter.registerLanguage('tsx', tsx)
-SyntaxHighlighter.registerLanguage('jsx', jsx)
-SyntaxHighlighter.registerLanguage('python', py)
-SyntaxHighlighter.registerLanguage('bash', bash)
-SyntaxHighlighter.registerLanguage('shell', bash)
-SyntaxHighlighter.registerLanguage('json', json)
-SyntaxHighlighter.registerLanguage('css', css)
-SyntaxHighlighter.registerLanguage('html', markup)
-SyntaxHighlighter.registerLanguage('xml', markup)
-SyntaxHighlighter.registerLanguage('rust', rust)
-SyntaxHighlighter.registerLanguage('go', go)
-SyntaxHighlighter.registerLanguage('sql', sql)
+import Markdown from '../components/ui/Markdown'
 import { baseURL } from '../lib/api'
 
 interface Message { role: 'user' | 'assistant'; content: string }
@@ -113,45 +81,7 @@ export default function SharePage() {
                     </div>
                   ) : (
                     <div className="max-w-2xl text-sm text-gray-200 pt-1 prose prose-sm">
-                      <ReactMarkdown
-                        remarkPlugins={[remarkMath, remarkGfm]}
-                        urlTransform={(url) =>
-                          url.startsWith('data:') ? url : defaultUrlTransform(url)
-                        }
-                        components={{
-                          inlineMath({ value }: { value: string }) {
-                            const html = katex.renderToString(value, { throwOnError: false, displayMode: false })
-                            return <span dangerouslySetInnerHTML={{ __html: html }} />
-                          },
-                          math({ value }: { value: string }) {
-                            const html = katex.renderToString(value, { throwOnError: false, displayMode: true })
-                            return <span dangerouslySetInnerHTML={{ __html: html }} />
-                          },
-                          code({ className, children }: { className?: string; children?: React.ReactNode }) {
-                            const lang = /language-(\w+)/.exec(className || '')?.[1]
-                            return lang ? (
-                              <SyntaxHighlighter style={oneDark as any} language={lang} PreTag="div">
-                                {String(children).replace(/\n$/, '')}
-                              </SyntaxHighlighter>
-                            ) : (
-                              <code className={className}>{children}</code>
-                            )
-                          },
-                          img({ src, alt }: { src?: string; alt?: string }) {
-                            return (
-                              <img
-                                src={src}
-                                alt={alt || ''}
-                                loading="lazy"
-                                className="rounded-lg border border-gray-700/60 max-w-full my-2"
-                                style={{ maxHeight: '512px' }}
-                              />
-                            )
-                          },
-                        } as any}
-                      >
-                        {msg.content}
-                      </ReactMarkdown>
+                      <Markdown>{msg.content}</Markdown>
                     </div>
                   )}
                 </div>

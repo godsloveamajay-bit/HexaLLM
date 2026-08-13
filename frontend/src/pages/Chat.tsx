@@ -15,39 +15,7 @@ import PersonalitySliders from '../components/PersonalitySliders'
 import { normalizeTraits, isActive as personalityActive, type TraitKey } from '../lib/personality'
 import AiSparkle from '../components/AiSparkle'
 import { LogoMark } from '../components/Logo'
-import ReactMarkdown, { defaultUrlTransform } from 'react-markdown'
-import remarkMath from 'remark-math'
-import remarkGfm from 'remark-gfm'
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
-import { PrismLight as SyntaxHighlighter } from 'react-syntax-highlighter'
-import { oneDark } from 'react-syntax-highlighter/dist/esm/styles/prism'
-import js from 'react-syntax-highlighter/dist/esm/languages/prism/javascript'
-import ts from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
-import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx'
-import jsx from 'react-syntax-highlighter/dist/esm/languages/prism/jsx'
-import py from 'react-syntax-highlighter/dist/esm/languages/prism/python'
-import bash from 'react-syntax-highlighter/dist/esm/languages/prism/bash'
-import json from 'react-syntax-highlighter/dist/esm/languages/prism/json'
-import css from 'react-syntax-highlighter/dist/esm/languages/prism/css'
-import markup from 'react-syntax-highlighter/dist/esm/languages/prism/markup'
-import rust from 'react-syntax-highlighter/dist/esm/languages/prism/rust'
-import go from 'react-syntax-highlighter/dist/esm/languages/prism/go'
-import sql from 'react-syntax-highlighter/dist/esm/languages/prism/sql'
-SyntaxHighlighter.registerLanguage('javascript', js)
-SyntaxHighlighter.registerLanguage('typescript', ts)
-SyntaxHighlighter.registerLanguage('tsx', tsx)
-SyntaxHighlighter.registerLanguage('jsx', jsx)
-SyntaxHighlighter.registerLanguage('python', py)
-SyntaxHighlighter.registerLanguage('bash', bash)
-SyntaxHighlighter.registerLanguage('shell', bash)
-SyntaxHighlighter.registerLanguage('json', json)
-SyntaxHighlighter.registerLanguage('css', css)
-SyntaxHighlighter.registerLanguage('html', markup)
-SyntaxHighlighter.registerLanguage('xml', markup)
-SyntaxHighlighter.registerLanguage('rust', rust)
-SyntaxHighlighter.registerLanguage('go', go)
-SyntaxHighlighter.registerLanguage('sql', sql)
+import Markdown from '../components/ui/Markdown'
 import api, { baseURL } from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -106,46 +74,6 @@ interface StreamEntry {
   onComplete: Array<(c: string, ci: Citation[], r: RouteInfo | undefined, u: StreamEntry['usage'], l: number) => void>
 }
 const liveStreams = new Map<number, StreamEntry>()
-
-// ── Math renderer (inline $…$ and block $$…$$) ──────────────────────────
-function InlineMath({ value }: { value: string }) {
-  const html = katex.renderToString(value, { throwOnError: false, displayMode: false })
-  return <span dangerouslySetInnerHTML={{ __html: html }} />
-}
-function BlockMath({ value }: { value: string }) {
-  const html = katex.renderToString(value, { throwOnError: false, displayMode: true })
-  return <span dangerouslySetInnerHTML={{ __html: html }} />
-}
-
-// ── Code block with copy button ───────────────────────────────────────────
-function CodeBlock({ language, children }: { language?: string; children: string }) {
-  const [copied, setCopied] = useState(false)
-  const copy = () => {
-    navigator.clipboard.writeText(children).then(() => {
-      setCopied(true)
-      setTimeout(() => setCopied(false), 2000)
-    })
-  }
-  return (
-    <div className="relative group/code my-3">
-      <div className="flex items-center justify-between bg-gray-800 px-4 py-1.5 rounded-t-lg border border-gray-700/60 border-b-0">
-        <span className="text-xs text-gray-500 font-mono">{language || 'code'}</span>
-        <button onClick={copy} className="flex items-center gap-1 text-xs text-gray-500 hover:text-gray-300 transition-colors">
-          {copied ? <><ClipboardCheck className="w-3.5 h-3.5 text-green-400" /><span className="text-green-400">Copied</span></>
-                  : <><Clipboard className="w-3.5 h-3.5" />Copy</>}
-        </button>
-      </div>
-      <SyntaxHighlighter
-        style={oneDark as any}
-        language={language || 'text'}
-        PreTag="div"
-        customStyle={{ margin: 0, borderRadius: '0 0 0.5rem 0.5rem', border: '1px solid rgba(51,65,85,0.6)', borderTop: 'none' }}
-      >
-        {children}
-      </SyntaxHighlighter>
-    </div>
-  )
-}
 
 // ── CLI Thought Drawer ────────────────────────────────────────────────────
 function ChatThoughtDrawer({ steps, reasoning, running, label = 'Agent Thinking' }: { steps: StepEvent[]; reasoning?: string; running: boolean; label?: string }) {
@@ -346,57 +274,12 @@ function MessageBubble({
             />
           ) : (isTyping || isFastStream) ? (
             <div className="bg-gray-800/30 rounded-2xl px-4 py-3 prose prose-sm">
-              <ReactMarkdown
-                remarkPlugins={[remarkMath, remarkGfm]}
-                components={{
-                  inlineMath: InlineMath,
-                  math: BlockMath,
-                  code({ className, children }: { className?: string; children?: React.ReactNode }) {
-                    const code = String(children).replace(/\n$/, '')
-                    return (
-                      <code className={className || 'bg-gray-800 text-primary-300 px-1.5 py-0.5 rounded-md text-[0.85em] font-mono'}>
-                        {children}
-                      </code>
-                    )
-                  },
-                } as any}
-              >
-                {clean}
-              </ReactMarkdown>
+              <Markdown streaming>{clean}</Markdown>
               <span className="stream-cursor text-primary-500" />
             </div>
           ) : (
             <div className="bg-gray-800/30 rounded-2xl px-4 py-3 prose prose-sm">
-              <ReactMarkdown
-                remarkPlugins={[remarkMath, remarkGfm]}
-                urlTransform={(url) =>
-                  url.startsWith('data:') ? url : defaultUrlTransform(url)
-                }
-                components={{
-                  inlineMath: InlineMath,
-                  math: BlockMath,
-                  code({ className, children }: { className?: string; children?: React.ReactNode }) {
-                    const lang = /language-(\w+)/.exec(className || '')?.[1]
-                    const code = String(children).replace(/\n$/, '')
-                    return lang
-                      ? <CodeBlock language={lang}>{code}</CodeBlock>
-                      : <code className={className}>{children}</code>
-                  },
-                  img({ src, alt }: { src?: string; alt?: string }) {
-                    return (
-                      <img
-                        src={src}
-                        alt={alt || ''}
-                        loading="lazy"
-                        className="rounded-lg border border-gray-700/60 max-w-full my-2"
-                        style={{ maxHeight: '512px' }}
-                      />
-                    )
-                  },
-                } as any}
-              >
-                {clean}
-              </ReactMarkdown>
+              <Markdown>{clean}</Markdown>
             </div>
           )}
 
@@ -456,7 +339,7 @@ function MessageBubble({
       ) : (
         <div className="max-w-3xl">
           <div className="px-1 py-1 text-sm prose prose-sm prose-invert max-w-none">
-            <ReactMarkdown remarkPlugins={[remarkMath]} components={{ inlineMath: InlineMath, math: BlockMath } as any}>{msg.content}</ReactMarkdown>
+            <Markdown>{msg.content}</Markdown>
           </div>
           {/* Copy for user message */}
           {msg.content && (

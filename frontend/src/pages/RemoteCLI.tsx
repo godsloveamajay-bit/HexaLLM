@@ -7,11 +7,7 @@ import api, { baseURL } from '../lib/api'
 import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
-import ReactMarkdown from 'react-markdown'
-import remarkMath from 'remark-math'
-import remarkGfm from 'remark-gfm'
-import katex from 'katex'
-import 'katex/dist/katex.min.css'
+import Markdown from '../components/ui/Markdown'
 
 interface CliSession {
   session_id: string
@@ -384,16 +380,7 @@ export default function RemoteCLIPage() {
                 <div className="border border-green-800/50 rounded-xl bg-green-900/10 p-4">
                   <p className="text-xs text-green-400 mb-2 font-medium">Result</p>
                   <div className="prose prose-sm prose-invert max-w-none">
-                    <ReactMarkdown remarkPlugins={[remarkMath, remarkGfm]} components={{
-                      inlineMath({ value }: { value: string }) {
-                        const html = katex.renderToString(value, { throwOnError: false, displayMode: false })
-                        return <span dangerouslySetInnerHTML={{ __html: html }} />
-                      },
-                      math({ value }: { value: string }) {
-                        const html = katex.renderToString(value, { throwOnError: false, displayMode: true })
-                        return <span dangerouslySetInnerHTML={{ __html: html }} />
-                      },
-                    } as any}>{runState.result}</ReactMarkdown>
+                    <Markdown>{runState.result}</Markdown>
                   </div>
                 </div>
               )}
