@@ -26,6 +26,8 @@ class User(Base):
     ai_personality = Column(JSON, nullable=True)       # default Personality Engine sliders {trait: 0..100}
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
+    # Session revocation — bumped on logout to invalidate all issued JWTs at once
+    token_version = Column(Integer, default=0)
     # Billing / plan
     plan_id = Column(Integer, ForeignKey("plans.id"), nullable=True)
     paypal_customer_id = Column(String, nullable=True)

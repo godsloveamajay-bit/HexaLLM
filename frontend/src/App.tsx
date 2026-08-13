@@ -56,8 +56,8 @@ const DevPages: Record<string, React.LazyExoticComponent<() => JSX.Element>> = D
 } : {}
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
-  const { token } = useAuth()
-  return token ? <>{children}</> : <Navigate to="/login" replace />
+  const { user } = useAuth()
+  return user ? <>{children}</> : <Navigate to="/login" replace />
 }
 
 function AdminRoute({ children }: { children: React.ReactNode }) {

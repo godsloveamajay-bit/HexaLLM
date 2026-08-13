@@ -96,6 +96,8 @@ def _migrate_db():
             conn.execute(text("ALTER TABLE users ADD COLUMN plan_id INTEGER"))
         if "paypal_customer_id" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN paypal_customer_id VARCHAR"))
+        if "token_version" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN token_version INTEGER DEFAULT 0"))
 
         # Dev workspaces — api_keys gains an optional workspace_id column
         key_cols = {c["name"] for c in inspector.get_columns("api_keys")}

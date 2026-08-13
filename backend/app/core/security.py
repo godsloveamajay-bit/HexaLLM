@@ -3,7 +3,7 @@ from typing import Optional
 import secrets
 from jose import JWTError, jwt
 from passlib.context import CryptContext
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from .config import settings
@@ -11,6 +11,11 @@ from .database import get_db
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 bearer_scheme = HTTPBearer(auto_error=False)
+
+# Shared session cookie — scoped to the parent domain so ai.hexallm.co.uk and
+# dev.hexallm.co.uk (same registrable domain) share one account.
+SESSION_COOKIE = "hexa_session"
+SESSION_COOKIE_DOMAIN = ".hexallm.co.uk"
 
 
 def hash_password(password: str) -> str:
@@ -34,16 +39,9 @@ def generate_api_key() -> str:
     return "nai_" + secrets.token_urlsafe(32)
 
 
-def get_current_user(
-    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
-    db: Session = Depends(get_db),
-):
+def _resolve_user(token: str, db: Session):
+    """Validate a JWT or API key and return the user. Shared by Bearer and cookie auth."""
     from ..models.user import User, APIKey
-
-    if not credentials:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
-
-    token = credentials.credentials
 
     # Check if it's an API key
     if token.startswith("nai_"):
@@ -72,20 +70,41 @@ def get_current_user(
     user = db.query(User).filter(User.id == user_id).first()
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+    # Session revocation: logout bumps token_version, invalidating every
+    # issued token (any site) so one account means one session everywhere.
+    if (payload.get("tv") or 0) != (user.token_version or 0):
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Session revoked — please sign in again")
     return user
 
 
+def get_current_user(
+    request: Request,
+    credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
+    db: Session = Depends(get_db),
+):
+    token = credentials.credentials if credentials else None
+    if not token:
+        token = request.cookies.get(SESSION_COOKIE)
+    if not token:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Not authenticated")
+    return _resolve_user(token, db)
+
+
 def get_optional_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ):
     """Like get_current_user, but returns None instead of raising when there are
     no/invalid credentials. Used for endpoints that allow limited guest access
     (e.g. chatting before login)."""
-    if not credentials:
+    token = credentials.credentials if credentials else None
+    if not token:
+        token = request.cookies.get(SESSION_COOKIE)
+    if not token:
         return None
     try:
-        return get_current_user(credentials=credentials, db=db)
+        return _resolve_user(token, db)
     except HTTPException:
         return None
 

@@ -5,7 +5,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, Response
 from fastapi.responses import RedirectResponse
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -15,7 +15,7 @@ from ..core.config import settings
 from ..core.database import get_db
 from ..core.security import (
     hash_password, verify_password, create_access_token,
-    generate_api_key, get_current_user,
+    generate_api_key, get_current_user, get_optional_user, SESSION_COOKIE, SESSION_COOKIE_DOMAIN,
 )
 from ..models.user import User, APIKey, PasswordResetToken
 from ..schemas.auth import UserRegister, UserLogin, UserOut, UserUpdate, PasswordChange, TokenResponse, APIKeyCreate, APIKeyOut
@@ -199,9 +199,23 @@ limiter = Limiter(key_func=get_remote_address)
 _RESET_TOKEN_EXPIRE_HOURS = 1
 
 
+def _set_session_cookie(response: Response, token: str) -> None:
+    """Shared cross-subdomain session cookie (one account for every hexallm.co.uk site)."""
+    response.set_cookie(
+        key=SESSION_COOKIE,
+        value=token,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        httponly=True,
+        secure=True,
+        samesite="lax",
+        domain=SESSION_COOKIE_DOMAIN,
+        path="/",
+    )
+
+
 @router.post("/register", response_model=TokenResponse, status_code=201)
 @limiter.limit("10/minute")
-def register(request: Request, data: UserRegister, db: Session = Depends(get_db)):
+def register(request: Request, data: UserRegister, response: Response, db: Session = Depends(get_db)):
     if db.query(User).filter(User.email == data.email).first():
         raise HTTPException(status_code=400, detail="Email already registered")
     if db.query(User).filter(User.username == data.username).first():
@@ -221,13 +235,14 @@ def register(request: Request, data: UserRegister, db: Session = Depends(get_db)
     db.commit()
     db.refresh(user)
 
-    token = create_access_token({"sub": str(user.id)})
+    token = create_access_token({"sub": str(user.id), "tv": user.token_version or 0})
+    _set_session_cookie(response, token)
     return TokenResponse(access_token=token, user=UserOut.model_validate(user))
 
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("20/minute")
-def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
+def login(request: Request, data: UserLogin, response: Response, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.email == data.email).first()
     if not user or not user.hashed_password or not verify_password(data.password, user.hashed_password):
         if user and user.oauth_provider and not user.hashed_password:
@@ -236,8 +251,18 @@ def login(request: Request, data: UserLogin, db: Session = Depends(get_db)):
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
 
-    token = create_access_token({"sub": str(user.id)})
+    token = create_access_token({"sub": str(user.id), "tv": user.token_version or 0})
+    _set_session_cookie(response, token)
     return TokenResponse(access_token=token, user=UserOut.model_validate(user))
+
+
+@router.post("/logout", status_code=204)
+def logout(response: Response, current_user: Optional[User] = Depends(get_optional_user), db: Session = Depends(get_db)):
+    if current_user:
+        # Revoke every token ever issued to this account (all sites, all devices)
+        current_user.token_version = (current_user.token_version or 0) + 1
+        db.commit()
+    response.delete_cookie(key=SESSION_COOKIE, domain=SESSION_COOKIE_DOMAIN, path="/")
 
 
 @router.get("/me", response_model=UserOut)
@@ -428,7 +453,7 @@ def _handle_oauth_callback(provider: str, code: str, state: str, db: Session, us
         return _oauth_error_redirect("no_email")
 
     user = _find_or_create_oauth_user(db, provider, info)
-    jwt = create_access_token({"sub": str(user.id)})
+    jwt = create_access_token({"sub": str(user.id), "tv": user.token_version or 0})
     qs = f"token={urllib.parse.quote(jwt)}"
 
     # CLI flow: state = "cli_{port}_{nonce}" → redirect to local server
@@ -441,7 +466,9 @@ def _handle_oauth_callback(provider: str, code: str, state: str, db: Session, us
 
     if state:
         qs += f"&state={urllib.parse.quote(state)}"
-    return RedirectResponse(url=f"{settings.APP_URL}/oauth/callback?{qs}", status_code=302)
+    resp = RedirectResponse(url=f"{settings.APP_URL}/oauth/callback?{qs}", status_code=302)
+    _set_session_cookie(resp, jwt)
+    return resp
 
 
 @router.get("/oauth/{provider}/callback")

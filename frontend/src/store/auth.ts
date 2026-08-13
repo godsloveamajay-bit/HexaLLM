@@ -70,6 +70,7 @@ export const useAuth = create<AuthState>((set) => ({
   },
 
   logout: () => {
+    api.post('/auth/logout').catch(() => {})
     localStorage.removeItem('token')
     localStorage.removeItem('user')
     set({ user: null, token: null })
