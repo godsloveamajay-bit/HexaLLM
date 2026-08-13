@@ -75,7 +75,7 @@ function TopBar() {
         <div className="flex items-center gap-1.5 font-mono text-xs">
           <span
             className="w-2 h-2 rounded-full inline-block"
-            style={{ background: healthy === null ? '#6e7681' : healthy ? '#4ade80' : '#f87171' }}
+            style={{ background: healthy === null ? '#6e7681' : healthy ? '#4ade80' : 'rgba(248,113,113,0.6)' }}
           />
           <span style={{ color: '#8b949e' }}>{healthy === null ? 'checking…' : healthy ? 'ollama online' : 'ollama down'}</span>
         </div>

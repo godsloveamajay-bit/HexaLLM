@@ -19,8 +19,21 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
       <Toaster
         position="top-right"
         toastOptions={{
-          className: 'dark:bg-gray-800 dark:text-gray-100 bg-white text-gray-900',
           duration: 3000,
+          className: 'dark:bg-gray-800 dark:text-gray-100 bg-white text-gray-900',
+          // Errors borrow the silent-hint language: tiny, muted, unobtrusive.
+          error: {
+            duration: 4000,
+            style: {
+              background: 'transparent',
+              boxShadow: 'none',
+              border: 'none',
+              padding: 0,
+              fontSize: '11px',
+              color: 'rgba(248,113,113,0.85)',
+              maxWidth: '300px',
+            },
+          },
         }}
       />
     </BrowserRouter>

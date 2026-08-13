@@ -16,6 +16,7 @@ import { normalizeTraits, isActive as personalityActive, type TraitKey } from '.
 import AiSparkle from '../components/AiSparkle'
 import { LogoMark } from '../components/Logo'
 import Markdown from '../components/ui/Markdown'
+import ErrorHint from '../components/ui/ErrorHint'
 import api, { baseURL } from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -385,6 +386,7 @@ export default function ChatPage() {
   // whether the daily cap has been hit (locks the composer behind a sign-up CTA).
   const [guestRemaining, setGuestRemaining] = useState<number | null>(null)
   const [guestBlocked, setGuestBlocked] = useState(false)
+  const [streamError, setStreamError] = useState<string | null>(null)
   const { sessions, activeId, loaded: sessionsLoaded, fetch: fetchSessions, create: createSession,
           remove: deleteSession, setActive: selectSessionId, update: updateSession } = useSessions()
   const activeSession = activeSessionOf({ sessions, activeId })
@@ -609,10 +611,11 @@ export default function ChatPage() {
     setMessages([])
     setInput('')
     setAttachment(null)
+    setStreamError(null)
     try {
       await createSession(model, systemPrompt)
     } catch {
-      toast.error('Could not start a new chat.')
+      setStreamError('Could not start a new chat.')
     }
   }
 
@@ -627,6 +630,7 @@ export default function ChatPage() {
 
     abortRef.current = new AbortController()
     setSending(true)
+    setStreamError(null)
     setReasoningPhase(false)
     setStreamPhase('thinking')
 
@@ -715,7 +719,7 @@ export default function ChatPage() {
         let detail = 'Failed to send message'
         try { detail = (await resp.json()).detail || detail } catch {}
         if (resp.status === 429 && isGuest) { setGuestBlocked(true); setGuestRemaining(0) }
-        toast.error(detail)
+        setStreamError(detail)
         errored = true
         liveStreams.delete(session.id)
         entry.done = true
@@ -791,7 +795,7 @@ export default function ChatPage() {
       errored = true
       if (rafId !== null) { cancelAnimationFrame(rafId); rafId = null }
       if (e?.name !== 'AbortError') {
-        toast.error('Failed to send message')
+        setStreamError('Failed to send message')
         if (mountedRef.current) setMessages((m) => m.slice(0, -1))
       } else if (mountedRef.current) {
         // User hit stop — reveal everything received so far (skip smoothing).
@@ -834,7 +838,7 @@ export default function ChatPage() {
     } catch {
       // Session couldn't be created — undo the optimistic user/assistant bubbles
       // so the composer isn't left in a half-sent state.
-      toast.error('Could not start the chat. Please try again.')
+      setStreamError('Could not start the chat. Please try again.')
       if (mountedRef.current) { setMessages(messages); setInput(userMsg.content) }
       return
     }
@@ -1229,6 +1233,7 @@ export default function ChatPage() {
               <button onClick={() => setAttachment(null)} className="text-gray-600 hover:text-gray-400"><X className="w-4 h-4" /></button>
             </div>
           )}
+          {streamError && <ErrorHint>{streamError}</ErrorHint>}
           {composer}
           {panels}
         </div>
@@ -1262,6 +1267,7 @@ export default function ChatPage() {
                     <button onClick={() => setAttachment(null)} className="text-gray-600 hover:text-gray-400"><X className="w-4 h-4" /></button>
                   </div>
                 )}
+                {streamError && <ErrorHint>{streamError}</ErrorHint>}
                 {composer}
                 {panels}
               </div>

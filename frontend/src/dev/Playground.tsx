@@ -482,8 +482,9 @@ export default function Playground() {
           </div>
           <div ref={outputRef} className="flex-1 overflow-y-auto p-4" style={{ background: '#0d1117' }}>
             {error ? (
-              <div className="font-mono text-sm whitespace-pre-wrap" style={{ color: '#f87171' }}>
-                ✗ {error}
+              <div className="font-mono text-[11px] flex items-start gap-1.5 whitespace-pre-wrap" style={{ color: 'rgba(248,113,113,0.85)' }}>
+                <Terminal size={12} className="mt-[1px] flex-shrink-0" style={{ color: 'rgba(248,113,113,0.6)' }} />
+                <span>{error}</span>
               </div>
             ) : output ? (
               <div className="prose prose-invert prose-sm max-w-none" style={{ color: '#e6edf3' }}>

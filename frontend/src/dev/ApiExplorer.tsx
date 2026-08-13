@@ -251,7 +251,7 @@ export default function ApiExplorer() {
               <span
                 className="font-mono text-[10px] px-1.5 py-0.5 rounded"
                 style={{
-                  color: status < 400 ? '#4ade80' : '#f87171',
+                  color: status < 400 ? '#4ade80' : 'rgba(248,113,113,0.85)',
                   background: 'rgba(74,222,128,0.08)',
                 }}
               >

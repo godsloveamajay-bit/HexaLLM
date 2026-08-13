@@ -18,7 +18,7 @@ export default {
         energy: ramp('e'),
       },
       fontFamily: {
-        sans: ['Inter', 'system-ui', 'sans-serif'],
+        sans: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
         display: ['Space Grotesk', 'Inter', 'system-ui', 'sans-serif'],
         mono: ['Roboto Mono', 'ui-monospace', 'monospace'],
       },

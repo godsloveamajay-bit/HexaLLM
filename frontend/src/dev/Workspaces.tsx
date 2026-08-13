@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { FolderKanban, Plus, Trash2, Pencil, Copy, Check, Play, KeyRound, Braces, FlaskConical, RefreshCw } from 'lucide-react'
+import { FolderKanban, Plus, Trash2, Pencil, Copy, Check, Play, KeyRound, Braces, FlaskConical, RefreshCw, AlertCircle } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { useDevStore, type Workspace, type WorkspaceItem, type WorkspaceKey } from './devStore'
 import {
@@ -181,8 +181,9 @@ export default function Workspaces() {
       </div>
 
       {error && (
-        <div className="font-mono text-xs p-3 rounded-lg border mb-4" style={{ borderColor: 'rgba(248,113,113,0.4)', color: '#f87171', background: 'rgba(248,113,113,0.06)' }}>
-          ✗ {error}
+        <div className="font-mono text-[11px] flex items-start gap-1.5 mb-4" style={{ color: 'rgba(248,113,113,0.85)' }}>
+          <AlertCircle size={12} className="mt-[1px] flex-shrink-0" style={{ color: 'rgba(248,113,113,0.6)' }} />
+          <span className="whitespace-pre-wrap">{error}</span>
         </div>
       )}
 

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { Activity, RefreshCw } from 'lucide-react'
+import { Activity, RefreshCw, AlertCircle } from 'lucide-react'
 import { api, baseURL } from '../lib/api'
 
 export default function Status() {
@@ -46,8 +46,9 @@ export default function Status() {
       </div>
 
       {error && (
-        <div className="font-mono text-xs p-3 rounded-lg border mb-4" style={{ borderColor: 'rgba(248,113,113,0.4)', color: '#f87171', background: 'rgba(248,113,113,0.06)' }}>
-          ✗ {error}
+        <div className="font-mono text-[11px] flex items-start gap-1.5 mb-4" style={{ color: 'rgba(248,113,113,0.85)' }}>
+          <AlertCircle size={12} className="mt-[1px] flex-shrink-0" style={{ color: 'rgba(248,113,113,0.6)' }} />
+          <span className="whitespace-pre-wrap">{error}</span>
         </div>
       )}
 

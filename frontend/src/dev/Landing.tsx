@@ -55,7 +55,7 @@ export default function Landing() {
         />
         <div className="relative">
           <div className="flex items-center gap-2 font-mono text-xs mb-4" style={{ color: '#8b949e' }}>
-            <span className="w-2 h-2 rounded-full inline-block" style={{ background: ok ? '#4ade80' : '#f87171' }} />
+            <span className="w-2 h-2 rounded-full inline-block" style={{ background: ok ? '#4ade80' : 'rgba(248,113,113,0.6)' }} />
             {ok ? 'backend online — ollama connected' : 'backend unreachable'}
             {health?.version && <span>· v{health.version}</span>}
             {latency !== null && <span>· {latency} ms</span>}
