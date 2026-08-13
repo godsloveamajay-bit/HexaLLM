@@ -5,17 +5,13 @@ import { api, baseURL } from '../lib/api'
 import { useDevStore, type Workspace, type WorkspaceItem } from './devStore'
 import { fetchWorkspaces, saveItem, fetchItems, createWorkspace } from './workspacesApi'
 
-type Variant = { name: string; context_size?: number; description?: string }
+type Variant = { id: string; label?: string; description?: string; ready?: boolean }
 type RawModel = { name: string; size?: number; details?: { quantization_level?: string; family?: string } }
 
 type Stats = {
   prompt_tokens: number
   completion_tokens: number
   latency_ms: number
-}
-
-function pretty(name: string): string {
-  return name.replace(/^hex-/i, 'hex-')
 }
 
 const LABEL_STYLE = {
@@ -117,7 +113,7 @@ export default function Playground() {
     api.get('/models/hexallm/variants').then(({ data }) => {
       const list: Variant[] = Array.isArray(data) ? data : data?.variants ?? []
       setVariants(list)
-      if (!model && list.length) setModel(list[0].name)
+      if (!model && list.length) setModel(list[0].id)
     }).catch(() => {})
     api.get('/models/ollama').then(({ data }) => {
       setRawModels(data?.models ?? [])
@@ -160,7 +156,7 @@ export default function Playground() {
       wsId = ws.id
     }
     if (!wsId || !model) return
-    const name = `preset · ${pretty(model)} · ${new Date().toLocaleTimeString()}`
+    const name = `preset · ${model} · ${new Date().toLocaleTimeString()}`
     await saveItem(wsId, 'playground', name, { model, system, prompt, temperature, topP, maxTokens, stream })
     setPresets(await fetchItems(wsId, 'playground'))
     setSavedFlash(name)
@@ -303,8 +299,6 @@ export default function Playground() {
     outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight })
   }, [output])
 
-  const selectedModel = [...variants, ...rawModels].find((m) => m.name === model)
-
   return (
     <div className="p-4 md:p-6 max-w-7xl mx-auto">
       <div className="flex items-center gap-3 mb-4 flex-wrap">
@@ -378,7 +372,7 @@ export default function Playground() {
                 {variants.length > 0 && (
                   <optgroup label="hexa virtual models">
                     {variants.map((v) => (
-                      <option key={v.name} value={v.name}>{pretty(v.name)}{v.context_size ? ` (${v.context_size} ctx)` : ''}</option>
+                      <option key={v.id} value={v.id}>{v.label || v.id}{!v.ready ? ' (warming)' : ''}</option>
                     ))}
                   </optgroup>
                 )}
@@ -390,11 +384,6 @@ export default function Playground() {
                   </optgroup>
                 )}
               </select>
-              {selectedModel && 'context_size' in selectedModel && (selectedModel as Variant).context_size && (
-                <div className="font-mono text-[10px] mt-1" style={{ color: '#6e7681' }}>
-                  context window {(selectedModel as Variant).context_size} tokens
-                </div>
-              )}
             </div>
 
             <div>

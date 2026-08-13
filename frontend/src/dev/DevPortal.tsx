@@ -6,6 +6,7 @@ import { baseURL } from '../lib/api'
 import { isDevSite } from './isDev'
 
 const PlaygroundPage = lazy(() => import('./Playground'))
+const LandingPage = lazy(() => import('./Landing'))
 const ApiExplorerPage = lazy(() => import('./ApiExplorer'))
 const LiveModelsPage = lazy(() => import('./LiveModels'))
 const StatusPage = lazy(() => import('./Status'))
@@ -190,7 +191,7 @@ export default function DevPortal() {
       <Route path="/register" element={<RegisterPage />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       <Route path="/" element={<Shell />}>
-        <Route index element={<Navigate to="/playground" replace />} />
+        <Route index element={<LandingPage />} />
         <Route path="playground" element={<PlaygroundPage />} />
         <Route path="workspaces" element={<WorkspacesPage />} />
         <Route path="api" element={<ApiExplorerPage />} />
