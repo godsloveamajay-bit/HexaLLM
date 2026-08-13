@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Play, Square, Copy, Check, Trash2, Terminal, Save, FolderOpen } from 'lucide-react'
 import Markdown from '../components/ui/Markdown'
+import { prettyModel } from '../lib/models'
 import { api, baseURL } from '../lib/api'
 import { useDevStore, type Workspace, type WorkspaceItem } from './devStore'
 import { fetchWorkspaces, saveItem, fetchItems, createWorkspace } from './workspacesApi'
@@ -98,6 +99,7 @@ export default function Playground() {
   const [running, setRunning] = useState(false)
   const [stats, setStats] = useState<Stats | null>(null)
   const [phase, setPhase] = useState<string | null>(null)
+  const [routeNote, setRouteNote] = useState<{ routed_variant?: string; reason?: string } | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [copied, setCopied] = useState(false)
   const [savedFlash, setSavedFlash] = useState<string | null>(null)
@@ -198,6 +200,7 @@ export default function Playground() {
     setOutput('')
     setStats(null)
     setError(null)
+    setRouteNote(null)
     setPhase('connecting')
 
     const abort = new AbortController()
@@ -225,6 +228,7 @@ export default function Playground() {
       if (!stream) {
         const data = await resp.json()
         setOutput(data.choices?.[0]?.message?.content ?? JSON.stringify(data, null, 2))
+        if (data.route?.routed_variant) setRouteNote(data.route)
         setStats({
           prompt_tokens: data.usage?.prompt_tokens ?? 0,
           completion_tokens: data.usage?.completion_tokens ?? 0,
@@ -269,6 +273,11 @@ export default function Playground() {
             } catch {}
           } else if (event === 'warming') {
             setPhase('warming — loading model into VRAM…')
+          } else if (event === 'route') {
+            try {
+              const r = JSON.parse(data)
+              if (r.routed_variant) setRouteNote(r)
+            } catch {}
           } else if (event === 'reasoning') {
             setPhase('reasoning…')
           } else if (event === 'searching') {
@@ -457,6 +466,11 @@ export default function Playground() {
           <div className="flex items-center justify-between px-3 py-2 border-b" style={{ borderColor: '#30363d' }}>
             <span className="font-mono text-xs font-semibold" style={{ color: '#e6edf3' }}>response</span>
             <div className="flex items-center gap-2 font-mono text-[10px]">
+              {routeNote?.routed_variant && (
+                <span style={{ color: '#4ade80' }} title={`reason: ${routeNote.reason || ''}`}>
+                  auto → {prettyModel(routeNote.routed_variant)}
+                </span>
+              )}
               {phase && <span style={{ color: '#fbbf24' }}>{phase}</span>}
               {stats && (
                 <span style={{ color: '#8b949e' }}>

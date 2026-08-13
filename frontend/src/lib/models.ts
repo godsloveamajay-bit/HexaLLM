@@ -12,6 +12,7 @@ export interface ModelOption { value: string; label: string; group: string }
 // Static fallback labels so we can pretty-print a HexaLLM variant id even on
 // pages that don't fetch the variant list. Kept in sync with the backend.
 export const VARIANT_LABELS: Record<string, string> = {
+  'hex-auto': 'HexaLLM Auto',
   'hex-4.2-code': 'HexaLLM Code',
   'hex-4.2-turbo': 'HexaLLM Turbo',
   'hex-4.3-write': 'HexaLLM Write',

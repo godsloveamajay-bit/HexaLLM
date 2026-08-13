@@ -268,6 +268,17 @@ async def list_hexallm_variants(user: Optional[User] = Depends(get_optional_user
     for vid, v in model_router.VARIANTS.items():
         candidates = v.all_candidates()
         ready = [c for c in candidates if c in available]
+        if v.id == model_router.AUTO_VARIANT_ID:
+            # Auto delegates to whichever variants are actually pulled, so it's
+            # ready as soon as ANY other variant has an available base.
+            ready = [
+                c for c in candidates if c in available
+            ] or [
+                c for other in model_router.VARIANTS.values()
+                if other.id != v.id
+                for c in other.all_candidates()
+                if c in available
+            ]
         entry = {
             "id": v.id,
             "label": v.label,

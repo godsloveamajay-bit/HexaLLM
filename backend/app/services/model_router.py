@@ -8,7 +8,7 @@ variant's system prompt + sampling parameters.
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Dict, List, Optional
 
 
@@ -91,6 +91,29 @@ def looks_like_heavy_code(text: str) -> bool:
     if not text:
         return False
     return looks_like_code(text) and (len(text) > 800 or bool(_HEAVY_CODE_RE.search(text)))
+
+
+# LaTeX delimiters are a strong math signal; word cues catch plain-language
+# maths ("solve for x", "integral", "derivative", …).
+_MATH_LATEX_RE = re.compile(r"\$[^$\n]{2,}\$")
+_MATH_HINT_RE = re.compile(
+    r"\b("
+    r"equation|integral|derivative|differentiat|calculus|algebra|geometry|"
+    r"matrix|vector|polynomial|fraction|probability|statistics|"
+    r"theorem|axiom|solve for|linear algebra|differential|"
+    r"trigonom|logarithm|exponent"
+    r")\b",
+    re.IGNORECASE,
+)
+
+
+def looks_like_math(text: str) -> bool:
+    """True for equations, proofs and step-by-step maths — routes to the math-tuned model."""
+    if not text:
+        return False
+    if _MATH_LATEX_RE.search(text):
+        return True
+    return bool(_MATH_HINT_RE.search(text))
 
 
 # ── variant definitions ──────────────────────────────────────────────────────
@@ -273,7 +296,27 @@ def vision_model_for(available_models: List[str]) -> Optional[str]:
 
 
 VARIANTS: Dict[str, Variant] = {
-    # ── 1. Code & Maths ──────────────────────────────────────────────────────
+    # ── 0. Auto ─────────────────────────────────────────────────────────────
+    # Meta-variant: picks the best VARIANT per message (code, maths, deep
+    # reasoning, vision, everyday chat), then delegates to that variant's own
+    # routing. Served to users as a normal variant.
+    "hex-auto": Variant(
+        id="hex-auto",
+        label="HexaLLM Auto",
+        description="Picks the best variant for each message — code, maths, deep reasoning, vision or everyday chat.",
+        default_model=_GENERAL,
+        routes=[],
+        system_prompt=(
+            "You are HexaLLM Auto, a versatile assistant that adapts to the task. "
+            "Match the depth and tone to what the user needs — concise for simple questions, "
+            "detailed for complex ones. Write clean code, reason through problems step by step, "
+            "and communicate clearly in plain language."
+        ),
+        temperature=0.7,
+        num_ctx=8192,
+        num_predict=2048,
+        fallbacks=[_LARGE, _GENERAL],
+    ),
     "hex-4.2-code": Variant(
         id="hex-4.2-code",
         label="HexaLLM Code",
@@ -460,6 +503,57 @@ def get_variant(model_id: str) -> Optional[Variant]:
     return VARIANTS.get(model_id)
 
 
+AUTO_VARIANT_ID = "hex-auto"
+
+
+def _variant_available(vid: str, avail_lc: Dict[str, str]) -> bool:
+    """True if at least one of the variant's candidate bases is pulled."""
+    v = VARIANTS.get(vid)
+    if not v:
+        return False
+    return any(c.lower() in avail_lc for c in v.all_candidates())
+
+
+def _auto_sub_variant(user_text: str, available_models: List[str], has_image: bool = False) -> str:
+    """Pick the best VARIANT for this prompt. Specific departments win over
+    general ones; each choice is skipped when none of its bases is pulled, so
+    Auto degrades gracefully on a partial Ollama install."""
+    avail_lc = {m.lower(): m for m in available_models}
+
+    code = looks_like_code(user_text)
+    heavy_code = looks_like_heavy_code(user_text)
+    reasoning = needs_reasoning(user_text)
+    deep = needs_deep_reasoning(user_text)
+    math = looks_like_math(user_text)
+
+    prefs: List[str] = []
+    if has_image:
+        prefs.append("hex-4.1-vision")
+    if math:
+        prefs.append("hex-4.2-math")
+    if deep:
+        prefs.append("hex-6.0-reason")
+    if heavy_code:
+        prefs.append("hex-4.2-code")
+    if code:
+        prefs.append("hex-4.2-code")
+    if reasoning:
+        prefs.append("hex-6.0-reason")
+    prefs += ["hex-4.2-turbo", "hex-5.1-prime"]
+
+    for pid in prefs:
+        if _variant_available(pid, avail_lc):
+            return pid
+
+    # Nothing in the preference chain is pulled — use any ready variant.
+    for vid in VARIANTS:
+        if vid != AUTO_VARIANT_ID and _variant_available(vid, avail_lc):
+            return vid
+
+    # route() raises a helpful "pull one of: …" error from here.
+    return "hex-4.2-turbo"
+
+
 def public_variants() -> List[Dict[str, str]]:
     """The variants as the UI should advertise them — id, label and a
     description with NO underlying Ollama model names. Safe to show to any
@@ -500,18 +594,25 @@ class RouteDecision:
     temperature: float
     num_ctx: int
     num_predict: Optional[int]
+    routed_variant: Optional[str] = None  # set only for hex-auto: the variant actually used
 
 
 def route(
     variant_id: str,
     user_text: str,
     available_models: List[str],
+    has_image: bool = False,
 ) -> RouteDecision:
     """Pick the best concrete model for this variant + prompt.
 
     available_models is the list of models actually pulled in Ollama
     (names from `/api/tags`). We never route to a model the user hasn't pulled.
     """
+    if variant_id == AUTO_VARIANT_ID:
+        sub = _auto_sub_variant(user_text, available_models, has_image)
+        inner = route(sub, user_text, available_models, has_image)
+        return replace(inner, variant_id=AUTO_VARIANT_ID, routed_variant=sub)
+
     v = VARIANTS[variant_id]
     # Case-insensitive resolution: Ollama reports tags with inconsistent casing
     # (qwen2.5:7B vs deepseek-r1:32b), so resolve a desired name to the ACTUAL

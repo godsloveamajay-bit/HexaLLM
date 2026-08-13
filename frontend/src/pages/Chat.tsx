@@ -5,7 +5,7 @@ import {
   X, Paperclip, BookMarked, Clipboard, ClipboardCheck,
   Mic, MicOff, Square, Download, RotateCcw,
   ChevronRight, Wrench, Lock, Sparkle, SlidersHorizontal, Globe, Sigma,
-  Sliders,
+  Sliders, Shuffle,
 } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../store/auth'
@@ -24,7 +24,7 @@ interface Citation {
   index: number; chunk_id: number | string; document_id?: number
   document_filename: string; score?: number; snippet: string; url?: string
 }
-interface RouteInfo { variant: string; chosen_model: string; reason: string }
+interface RouteInfo { variant: string; chosen_model: string; reason: string; routed_variant?: string }
 interface Message {
   role: 'user' | 'assistant' | 'system'
   content: string
@@ -43,6 +43,7 @@ interface HexaLLMVariant {
 }
 
 const VARIANT_ICONS: Record<string, any> = {
+  'hex-auto':         Shuffle,
   'hex-5.1-prime': Scale,
   'hex-4.2-code':     Zap,
   'hex-4.2-turbo':     Brain,
@@ -53,6 +54,7 @@ const VARIANT_ICONS: Record<string, any> = {
 }
 
 const CUSTOM_VARIANT_ID = 'hex-4.2-custom'
+const AUTO_VARIANT_ID = 'hex-auto'
 // Gemini-style starter prompts shown under the empty composer.
 const SUGGESTIONS = [
   'Explain a complex topic simply',
@@ -202,12 +204,12 @@ function ThinkingIndicator({ label, since }: { label?: string; since?: number })
 
 // ── Message bubble with copy/actions ────────────────────────────────────
 function MessageBubble({
-  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, isCliActive, activity, activitySince, reasoningPhase,
+  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, isCliActive, activity, activitySince, reasoningPhase, model, onModelChange,
 }: {
   msg: Message; index: number; isLast: boolean
   isActive: boolean; streamPhase: string; warmingModel?: string; sending: boolean
   onRegenerate: () => void; isCliActive: boolean; activity?: string | null; activitySince?: number | null
-  reasoningPhase?: boolean
+  reasoningPhase?: boolean; model: string; onModelChange: (m: string) => void
 }) {
   const [copied, setCopied] = useState(false)
   const isWarming   = streamPhase === 'warming'  && isLast && msg.role === 'assistant'
@@ -288,6 +290,24 @@ function MessageBubble({
             <div className="mt-1 flex items-center gap-2 text-xs text-gray-600">
               <span>{(msg.usage.prompt_tokens + msg.usage.completion_tokens).toLocaleString()} tokens</span>
               {msg.latency_ms ? <span>· {(msg.latency_ms / 1000).toFixed(1)}s</span> : null}
+            </div>
+          )}
+
+          {/* Auto variant: silent hint showing which variant this message was routed to */}
+          {!streaming && msg.route?.routed_variant && (
+            <div className="mt-1.5 flex items-center gap-1.5 text-[11px] text-gray-600">
+              <Shuffle className="w-3 h-3 text-primary-500/60" />
+              <span>
+                Auto routed to <span className="text-gray-400 font-medium">{prettyModel(msg.route.routed_variant)}</span>
+              </span>
+              {msg.route.routed_variant !== model && (
+                <button
+                  onClick={() => onModelChange(msg.route!.routed_variant!)}
+                  className="text-primary-400/80 hover:text-primary-300 underline underline-offset-2"
+                >
+                  use it for this chat
+                </button>
+              )}
             </div>
           )}
 
@@ -1273,6 +1293,8 @@ export default function ChatPage() {
                   activity={i === messages.length - 1 ? streamActivity : null}
                   activitySince={i === messages.length - 1 ? activitySince : null}
                   reasoningPhase={reasoningPhase && i === messages.length - 1}
+                  model={model}
+                  onModelChange={onModelChange}
                 />
               ))}
 

@@ -176,14 +176,23 @@ async def _apply_router(req: ChatRequest):
 
     last_user_msg = next((m for m in reversed(req.messages) if m.role == "user"), None)
     user_text = last_user_msg.content if last_user_msg else ""
+    has_image = bool(req.attachment_base64 and req.attachment_type == "image")
 
     available = await ollama.list_models()
     available_names = [m["name"] for m in available]
 
     try:
-        decision = model_router.route(req.model, user_text, available_names)
+        decision = model_router.route(req.model, user_text, available_names, has_image)
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
+
+    route_meta = {
+        "variant": decision.variant_id,
+        "chosen_model": decision.chosen_model,
+        "reason": decision.reason,
+    }
+    if decision.routed_variant:
+        route_meta["routed_variant"] = decision.routed_variant
 
     return (
         decision.chosen_model,
@@ -191,11 +200,7 @@ async def _apply_router(req: ChatRequest):
         req.temperature if req.temperature is not None else decision.temperature,
         decision.num_ctx,
         decision.num_predict if req.max_tokens is None else req.max_tokens,
-        {
-            "variant": decision.variant_id,
-            "chosen_model": decision.chosen_model,
-            "reason": decision.reason,
-        },
+        route_meta,
     )
 
 
