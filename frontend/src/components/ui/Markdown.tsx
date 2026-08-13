@@ -85,7 +85,24 @@ interface MarkdownProps {
  * external links. `streaming` swaps code highlighting for lightweight
  * inline rendering so partial chunks stay fast.
  */
+
+// remark-math only recognises $…$ and $$…$$. Model output (and pasted docs)
+// often uses TeX-style \[ … \] / \( … \) delimiters, so normalise those
+// before parsing. Fenced code blocks are left untouched — LaTeX there is code.
+function normalizeMathDelimiters(md: string): string {
+  return md
+    .split(/(```[\s\S]*?```)/)
+    .map((part, i) => {
+      if (i % 2 === 1) return part
+      return part
+        .replace(/\\\[([\s\S]*?)\\\]/g, '$$$$$1$$$$')
+        .replace(/\\\(([\s\S]*?)\\\)/g, '$$$1$')
+    })
+    .join('')
+}
+
 export default function Markdown({ children, streaming = false }: MarkdownProps) {
+  const source = normalizeMathDelimiters(children)
   return (
     <ReactMarkdown
       remarkPlugins={[remarkMath, remarkGfm]}
@@ -150,7 +167,7 @@ export default function Markdown({ children, streaming = false }: MarkdownProps)
         },
       } as any}
     >
-      {children}
+      {source}
     </ReactMarkdown>
   )
 }
