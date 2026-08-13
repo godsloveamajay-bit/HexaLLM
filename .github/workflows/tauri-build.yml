@@ -265,6 +265,8 @@ jobs:
   #   IOS_PROVISIONING_PROFILE_BASE64 – base64 of the App Store .mobileprovision
   #                                     (bundle id ai.hexallm.app)
   build-ios:
+    env:
+      IOS_SIGNED: ${{ secrets.IOS_CERTIFICATE_BASE64 != '' }}
     needs: build-tauri
     runs-on: macos-latest
     if: startsWith(github.ref, 'refs/tags/v')
@@ -310,7 +312,7 @@ jobs:
           echo "Version: $VERSION ($BUILD_NO)"
 
       - name: Import signing certificate
-        if: ${{ secrets.IOS_CERTIFICATE_BASE64 != '' }}
+        if: env.IOS_SIGNED == 'true'
         env:
           IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
           IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
@@ -325,7 +327,7 @@ jobs:
           security list-keychains -d user -s build.keychain
 
       - name: Install provisioning profile
-        if: ${{ secrets.IOS_CERTIFICATE_BASE64 != '' }}
+        if: env.IOS_SIGNED == 'true'
         env:
           IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
         run: |
@@ -334,7 +336,7 @@ jobs:
             > "$HOME/Library/MobileDevice/Provisioning Profiles/HexaLLM-Distribution.mobileprovision"
 
       - name: Archive app (signed)
-        if: ${{ secrets.IOS_CERTIFICATE_BASE64 != '' }}
+        if: env.IOS_SIGNED == 'true'
         working-directory: frontend/ios/App
         env:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
@@ -347,7 +349,7 @@ jobs:
             archive
 
       - name: Archive app (unsigned)
-        if: ${{ secrets.IOS_CERTIFICATE_BASE64 == '' }}
+        if: env.IOS_SIGNED != 'true'
         working-directory: frontend/ios/App
         run: |
           xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
@@ -356,7 +358,7 @@ jobs:
             archive
 
       - name: Export .ipa (signed)
-        if: ${{ secrets.IOS_CERTIFICATE_BASE64 != '' }}
+        if: env.IOS_SIGNED == 'true'
         working-directory: frontend/ios/App
         env:
           IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
@@ -373,7 +375,7 @@ jobs:
             -exportPath /tmp/ipa -exportOptionsPlist /tmp/ExportOptions.plist
 
       - name: Package .ipa (unsigned)
-        if: ${{ secrets.IOS_CERTIFICATE_BASE64 == '' }}
+        if: env.IOS_SIGNED != 'true'
         run: |
           mkdir -p /tmp/ipa/Payload
           cp -r /tmp/HexaLLM.xcarchive/Products/Applications/*.app /tmp/ipa/Payload/
