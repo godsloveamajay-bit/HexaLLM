@@ -4,6 +4,7 @@ import Sidebar from './Sidebar'
 import ThemeToggle from '../ui/ThemeToggle'
 import { Menu, Search } from 'lucide-react'
 import { LogoMark } from '../Logo'
+import UserAvatar from '../ui/UserAvatar'
 import { useAuth } from '../../store/auth'
 import { useAutoUpdate } from '../../hooks/useAutoUpdate'
 import { clsx } from 'clsx'
@@ -68,12 +69,11 @@ export default function Layout() {
 
           {user ? (
             <Link to="/settings" aria-label="Settings">
-              <div className={clsx(
-                'w-8 h-8 rounded-full bg-gradient-to-br from-primary-600 to-primary-800 flex items-center justify-center',
-                'text-xs font-bold text-white shadow hover:shadow-primary-900/40 transition-shadow',
-              )}>
-                {user.username?.[0]?.toUpperCase()}
-              </div>
+              <UserAvatar
+                user={user}
+                size={32}
+                className="shadow hover:shadow-primary-900/40 transition-shadow"
+              />
             </Link>
           ) : (
             <Link to="/login" className="hidden sm:flex items-center px-3 py-1.5 rounded-lg text-sm font-medium

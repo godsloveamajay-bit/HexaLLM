@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { clsx } from 'clsx'
 import ThemeToggle from '../ui/ThemeToggle'
 import { LogoMark } from '../Logo'
+import UserAvatar from '../ui/UserAvatar'
 import { useAuth } from '../../store/auth'
 import { DEV_FEATURES } from '../../lib/devFeatures'
 
@@ -38,10 +39,7 @@ export default function MobileLayout() {
               <span className="text-xs text-gray-500 light:text-gray-600">{user.username}</span>
               <ThemeToggle />
               <NavLink to="/settings">
-                <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-600 to-primary-800
-                                flex items-center justify-center text-xs font-bold text-white shadow">
-                  {user.username?.[0]?.toUpperCase()}
-                </div>
+                <UserAvatar user={user} size={28} className="shadow" />
               </NavLink>
             </div>
           )}

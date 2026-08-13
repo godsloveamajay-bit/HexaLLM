@@ -9,6 +9,7 @@ import { useAuth } from '../../store/auth'
 import { useSessions } from '../../store/sessions'
 import { useTheme } from '../../lib/theme'
 import { DEV_FEATURES } from '../../lib/devFeatures'
+import UserAvatar from '../ui/UserAvatar'
 import { clsx } from 'clsx'
 import { useState } from 'react'
 
@@ -242,10 +243,7 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
 
         {user && (
           <div className="mt-2 pt-2 border-t border-gray-800 light:border-gray-300/40 px-1 flex items-center gap-2">
-            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-600 to-primary-800
-                            flex items-center justify-center text-xs font-bold text-white flex-shrink-0">
-              {user.username?.[0]?.toUpperCase()}
-            </div>
+            <UserAvatar user={user} size={28} />
             <div className="min-w-0">
               <p className="text-xs font-semibold text-gray-200 light:text-gray-800 truncate">{user.username}</p>
               {user.is_admin && <p className="text-[10px] text-primary-500 font-medium">Admin</p>}

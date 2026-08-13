@@ -6,6 +6,7 @@ import toast from 'react-hot-toast'
 import { useNavigate } from 'react-router-dom'
 import { isTauri, isCapacitor } from '../lib/platform'
 import { useTheme, type Theme } from '../lib/theme'
+import UserAvatar from '../components/ui/UserAvatar'
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun; hint: string }[] = [
   { value: 'light', label: 'Light', icon: Sun, hint: 'Warm cream' },
@@ -181,9 +182,12 @@ export default function SettingsPage() {
           </div>
           <div>
             <label className="label">Avatar URL</label>
-            <input className="input" value={form.avatar_url}
-              onChange={(e) => setForm((f) => ({ ...f, avatar_url: e.target.value }))}
-              placeholder="https://..." />
+            <div className="flex items-center gap-3">
+              <UserAvatar user={{ username: user?.username, avatar_url: form.avatar_url }} size={40} />
+              <input className="input flex-1" value={form.avatar_url}
+                onChange={(e) => setForm((f) => ({ ...f, avatar_url: e.target.value }))}
+                placeholder="https://..." />
+            </div>
           </div>
           <button type="submit" disabled={saving} className="btn-primary">
             {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
