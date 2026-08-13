@@ -255,6 +255,123 @@ jobs:
           gh release upload "$GITHUB_REF_NAME" "/tmp/$NAME" --clobber --repo "${{ github.repository }}"
           echo "Uploaded: $NAME"
 
+  # Build the iOS app (.ipa) for App Store distribution on a macOS runner.
+  # Needs Apple Developer Program credentials as repo secrets:
+  #   IOS_TEAM_ID                    – 10-char developer team ID
+  #   IOS_CERTIFICATE_BASE64         – base64 of the App Store distribution .p12
+  #   IOS_CERTIFICATE_PASSWORD       – .p12 password
+  #   IOS_PROVISIONING_PROFILE_BASE64 – base64 of the App Store .mobileprovision
+  #                                     (bundle id ai.hexallm.app)
+  build-ios:
+    needs: build-tauri
+    runs-on: macos-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build web app
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_API_URL: ${{ secrets.VITE_API_URL || 'https://ai.hexallm.co.uk/api/v1' }}
+
+      - name: Sync Capacitor to iOS
+        working-directory: frontend
+        run: npx cap sync ios
+
+      - name: Install CocoaPods
+        working-directory: frontend/ios/App
+        run: pod install --repo-update 2>&1 | tail -5
+
+      - name: Sync version from tag
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          IFS='.' read -r major minor patch <<< "$VERSION"
+          patch=${patch:-0}
+          BUILD_NO=$(( major * 10000 + minor * 100 + patch ))
+          sed -i "s/MARKETING_VERSION = [0-9.]*/MARKETING_VERSION = $VERSION/" frontend/ios/App/App.xcodeproj/project.pbxproj
+          sed -i "s/CURRENT_PROJECT_VERSION = [0-9]*/CURRENT_PROJECT_VERSION = $BUILD_NO/" frontend/ios/App/App.xcodeproj/project.pbxproj
+          echo "Version: $VERSION ($BUILD_NO)"
+
+      - name: Import signing certificate
+        env:
+          IOS_CERTIFICATE_BASE64: ${{ secrets.IOS_CERTIFICATE_BASE64 }}
+          IOS_CERTIFICATE_PASSWORD: ${{ secrets.IOS_CERTIFICATE_PASSWORD }}
+        run: |
+          echo "$IOS_CERTIFICATE_BASE64" | tr -d '[:space:]' | base64 -d > /tmp/dist.p12
+          KEYCHAIN_PASS=$(openssl rand -base64 24)
+          security create-keychain -p "$KEYCHAIN_PASS" build.keychain
+          security default-keychain -s build.keychain
+          security unlock-keychain -p "$KEYCHAIN_PASS" build.keychain
+          security import /tmp/dist.p12 -P "$IOS_CERTIFICATE_PASSWORD" -A -t cert -f pkcs12 -k build.keychain
+          security set-key-partition-list -S apple-tool:,apple: -s -k "$KEYCHAIN_PASS" build.keychain
+          security list-keychains -d user -s build.keychain
+
+      - name: Install provisioning profile
+        env:
+          IOS_PROVISIONING_PROFILE_BASE64: ${{ secrets.IOS_PROVISIONING_PROFILE_BASE64 }}
+        run: |
+          mkdir -p "$HOME/Library/MobileDevice/Provisioning Profiles"
+          echo "$IOS_PROVISIONING_PROFILE_BASE64" | tr -d '[:space:]' | base64 -d \
+            > "$HOME/Library/MobileDevice/Provisioning Profiles/HexaLLM-Distribution.mobileprovision"
+
+      - name: Archive app
+        working-directory: frontend/ios/App
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
+            -archivePath /tmp/HexaLLM.xcarchive \
+            -allowProvisioningUpdates \
+            DEVELOPMENT_TEAM="$IOS_TEAM_ID" \
+            CODE_SIGN_STYLE=Manual \
+            archive
+
+      - name: Export .ipa
+        working-directory: frontend/ios/App
+        env:
+          IOS_TEAM_ID: ${{ secrets.IOS_TEAM_ID }}
+        run: |
+          PROFILE="$HOME/Library/MobileDevice/Provisioning Profiles/HexaLLM-Distribution.mobileprovision"
+          UUID=$(security cms -D -i "$PROFILE" | plutil -extract UUID raw -)
+          plutil -create xml1 /tmp/ExportOptions.plist
+          plutil -insert method -string app-store /tmp/ExportOptions.plist
+          plutil -insert signingStyle -string manual /tmp/ExportOptions.plist
+          plutil -insert teamID -string "$IOS_TEAM_ID" /tmp/ExportOptions.plist
+          plutil -insert provisioningProfiles -dictionary /tmp/ExportOptions.plist
+          plutil -insert provisioningProfiles.ai.hexallm.app -string "$UUID" /tmp/ExportOptions.plist
+          xcodebuild -exportArchive -archivePath /tmp/HexaLLM.xcarchive \
+            -exportPath /tmp/ipa -exportOptionsPlist /tmp/ExportOptions.plist
+
+      - name: Upload .ipa to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          IPA=$(find /tmp/ipa -name "*.ipa" | head -1)
+          [ -f "$IPA" ] || (echo "IPA not found" && exit 1)
+          VERSION="${GITHUB_REF_NAME#v}"
+          NAME="hexallm-ai-${VERSION}-ios.ipa"
+          cp "$IPA" "/tmp/$NAME"
+          gh release view "$GITHUB_REF_NAME" --repo "${{ github.repository }}" >/dev/null 2>&1 \
+            || gh release create "$GITHUB_REF_NAME" --repo "${{ github.repository }}" \
+                 --title "HexaLLM AI $GITHUB_REF_NAME" --notes "" --verify-tag || true
+          gh release upload "$GITHUB_REF_NAME" "/tmp/$NAME" --clobber --repo "${{ github.repository }}"
+          echo "Uploaded: $NAME"
+
   publish-updater-json:
     needs: build-tauri
     runs-on: ubuntu-22.04
