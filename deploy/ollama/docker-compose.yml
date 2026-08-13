@@ -8,7 +8,9 @@ services:
   ollama:
     image: ollama/ollama:0.32.6
     ports:
-      - "11434:11434"
+      # localhost-only — never expose 11434 publicly, it's an unauthenticated
+      # API. host.docker.internal still reaches it via the host loopback.
+      - "127.0.0.1:11434:11434"
     # Reuse the host's model store (all 11 models pulled on the host) so no
     # blobs need re-downloading. The image runs as uid 1000 with HOME=/home/ubuntu.
     volumes:

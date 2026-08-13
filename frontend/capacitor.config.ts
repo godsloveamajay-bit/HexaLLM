@@ -10,9 +10,13 @@ const config: CapacitorConfig = {
     // e.g. http://192.168.1.x:8001
     // Leave androidScheme as https for production builds.
     androidScheme: 'https',
+    // Only allow mixed content (http) when pointing at a LAN dev host.
+    // With androidScheme: 'https', allowing mixed content lets the production
+    // webview silently load http:// resources (MITM risk) — keep it off.
+    allowMixedContent: false,
   },
   android: {
-    allowMixedContent: true,
+    allowMixedContent: false,
   },
   ios: {
     contentInset: 'always',

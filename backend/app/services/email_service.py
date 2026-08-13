@@ -5,6 +5,7 @@ reset link to stdout so dev/self-hosted installs still work without mail.
 
 import logging
 import smtplib
+import html as html_mod
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 
@@ -19,22 +20,27 @@ def _smtp_configured() -> bool:
 
 def send_password_reset(to_email: str, reset_url: str, username: str) -> None:
     subject = "Reset your HexaLLM AI password"
+    # username is user-controlled — escape it so a hostile name can't inject
+    # markup/links into the mail. reset_url is server-built (token from
+    # secrets), but escaping it too is harmless defense in depth.
+    safe_user = html_mod.escape(username)
+    safe_url = html_mod.escape(reset_url)
     html = f"""
 <!DOCTYPE html>
 <html>
 <body style="font-family:sans-serif;background:#0f172a;color:#e2e8f0;padding:32px;">
   <div style="max-width:480px;margin:auto;background:#1e293b;border-radius:12px;padding:32px;">
     <h2 style="color:#a78bfa;margin-top:0;">HexaLLM AI</h2>
-    <p>Hi <strong>{username}</strong>,</p>
+    <p>Hi <strong>{safe_user}</strong>,</p>
     <p>We received a request to reset your password. Click the button below — this link expires in <strong>1 hour</strong>.</p>
-    <a href="{reset_url}"
+    <a href="{safe_url}"
        style="display:inline-block;margin:16px 0;padding:12px 24px;background:#7c3aed;
               color:#fff;border-radius:8px;text-decoration:none;font-weight:600;">
       Reset Password
     </a>
     <p style="color:#94a3b8;font-size:13px;">
       If you didn't request this, ignore this email — your password won't change.<br>
-      Or copy this link: <a href="{reset_url}" style="color:#a78bfa;">{reset_url}</a>
+      Or copy this link: <a href="{safe_url}" style="color:#a78bfa;">{safe_url}</a>
     </p>
   </div>
 </body>

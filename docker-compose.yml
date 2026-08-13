@@ -5,6 +5,9 @@
 #   are built locally from the `build:` context (offline deploy path).
 # - Ollama is shared infrastructure (deploy/ollama/docker-compose.yml) and is
 #   reached over host.docker.internal:11434 — each env does NOT run its own copy.
+#
+# Required .env entries: POSTGRES_PASSWORD, SECRET_KEY. Both fail closed with
+# :? so the stack refuses to start with public default credentials.
 
 services:
   backend:
@@ -13,11 +16,34 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     environment:
-      - DATABASE_URL=postgresql://hexallm:hexallm@db:5432/hexallm
+      - DATABASE_URL=postgresql://hexallm:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/hexallm
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
-      - SECRET_KEY=${SECRET_KEY:-change-me-in-production}
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
       - APP_URL=${APP_URL:-http://localhost}
+      - DEBUG=${DEBUG:-false}
+      - STABILITY_API_KEY=${STABILITY_API_KEY:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID:-}
+      - MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET:-}
+      - YAHOO_CLIENT_ID=${YAHOO_CLIENT_ID:-}
+      - YAHOO_CLIENT_SECRET=${YAHOO_CLIENT_SECRET:-}
+      - APPLE_CLIENT_ID=${APPLE_CLIENT_ID:-}
+      - APPLE_TEAM_ID=${APPLE_TEAM_ID:-}
+      - APPLE_KEY_ID=${APPLE_KEY_ID:-}
+      - APPLE_PRIVATE_KEY=${APPLE_PRIVATE_KEY:-}
+      - SAMSUNG_CLIENT_ID=${SAMSUNG_CLIENT_ID:-}
+      - SAMSUNG_CLIENT_SECRET=${SAMSUNG_CLIENT_SECRET:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-noreply@hexallm.local}
+      - PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID:-}
+      - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET:-}
+      - PAYPAL_WEBHOOK_ID=${PAYPAL_WEBHOOK_ID:-}
+      - PAYPAL_SANDBOX=${PAYPAL_SANDBOX:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
@@ -28,7 +54,7 @@ services:
       db:
         condition: service_healthy
       redis:
-        condition: service_started
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
       interval: 15s
@@ -44,17 +70,27 @@ services:
       dockerfile: Dockerfile
     command: celery -A app.worker worker --loglevel=info
     environment:
-      - DATABASE_URL=postgresql://hexallm:hexallm@db:5432/hexallm
+      - DATABASE_URL=postgresql://hexallm:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/hexallm
       - REDIS_URL=redis://redis:6379/0
       - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
+      - APP_URL=${APP_URL:-http://localhost}
+      - STABILITY_API_KEY=${STABILITY_API_KEY:-}
+      - PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID:-}
+      - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET:-}
+      - PAYPAL_WEBHOOK_ID=${PAYPAL_WEBHOOK_ID:-}
+      - PAYPAL_SANDBOX=${PAYPAL_SANDBOX:-true}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
       - ./data/models:/app/models
       - ./data/datasets:/app/datasets
+      - ./data/uploads:/app/uploads
     depends_on:
-      - db
-      - redis
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   frontend:
@@ -76,7 +112,7 @@ services:
     image: postgres:16-alpine
     environment:
       - POSTGRES_USER=hexallm
-      - POSTGRES_PASSWORD=hexallm
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
       - POSTGRES_DB=hexallm
     volumes:
       - pgdata:/var/lib/postgresql/data
@@ -92,6 +128,11 @@ services:
     command: redis-server --appendonly yes
     volumes:
       - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
     restart: unless-stopped
 
 volumes:

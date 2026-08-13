@@ -62,6 +62,25 @@ def _resolve(key: APIKey, req: OAIChatRequest):
             detail="No model specified. This key isn't bound to a model, so include a 'model' field.",
         )
 
+    # Raw (non-variant) model ids are a Hyper+ entitlement. Keys are always
+    # bound to a variant or persona unless the owner is admin/Hyper+, so a
+    # caller-supplied raw model on an unbound key is never honored for
+    # non-entitled users (mirrors the chat endpoint and ollama_list gate).
+    if not model_router.is_variant(model) and key.user and not key.user.is_admin:
+        owner_plan_ok = False
+        from ..core.database import SessionLocal
+        from ..services.billing_enforcement import get_user_limits
+        scope_db = SessionLocal()
+        try:
+            owner_plan_ok = bool(get_user_limits(scope_db, key.user).get("raw_models"))
+        finally:
+            scope_db.close()
+        if not owner_plan_ok:
+            raise HTTPException(
+                status_code=403,
+                detail="Direct model access is available on the Hyper plan and above.",
+            )
+
     # System prompt: persona identity first, then any caller system text.
     system_parts: List[str] = []
     if persona and persona.system_prompt:

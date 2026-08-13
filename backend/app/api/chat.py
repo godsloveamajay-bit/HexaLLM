@@ -54,10 +54,20 @@ _guest_usage: Dict[str, Tuple[str, int]] = {}  # ip -> (utc_date, tokens_used_to
 
 
 def _client_ip(request: Request) -> str:
-    """Real client IP, honoring the nginx/cloudflared X-Forwarded-For header."""
+    """Real client IP, honoring the nginx/cloudflared headers.
+
+    Prefers X-Real-IP (set by nginx from the socket peer) over the
+    X-Forwarded-For chain — a client can spoof its own entry in the chain
+    (nginx appends to it with $proxy_add_x_forwarded_for), so the first entry
+    is attacker-controlled. The LAST XFF entry is the one closest to us and,
+    when only one hop appends, the same value nginx put in X-Real-IP.
+    """
+    real = request.headers.get("x-real-ip")
+    if real:
+        return real.strip()
     xff = request.headers.get("x-forwarded-for")
     if xff:
-        return xff.split(",")[0].strip()
+        return xff.split(",")[-1].strip()
     return request.client.host if request.client else "unknown"
 
 
@@ -254,6 +264,19 @@ async def chat_completions(
         if not model_router.is_variant(req.model):
             req.model = GUEST_DEFAULT_MODEL
 
+    # Raw (non-variant) Ollama models are a Hyper+ entitlement, matching the
+    # gate enforced on /models/ollama/list and at API-key creation. Admins and
+    # users whose plan grants raw_models pass; everyone else gets a clean error.
+    if not is_guest and not model_router.is_variant(req.model):
+        if not current_user.is_admin:
+            from ..services.billing_enforcement import get_user_limits
+            if not get_user_limits(db, current_user).get("raw_models"):
+                raise HTTPException(
+                    status_code=403,
+                    detail="Direct model access is available on the Hyper plan and above. " 
+                           "Pick a HexaLLM model instead.",
+                )
+
     if not is_guest:
         from ..services.billing_enforcement import check_chat_limit
         check_chat_limit(db, current_user, client_ip=_client_ip(request))
@@ -411,7 +434,9 @@ async def chat_completions(
                     # inject the results into the system prompt, and surface them as
                     # citations. Emits a "searching" status so the UI can say so.
                     sys_for_llm = system_prompt
-                    if req.web_search and _last_user.strip():
+                    # web_active already excludes guests and image attachments,
+                    # so web search only runs where the fast-model routing applies.
+                    if web_active and _last_user.strip():
                         yield f"event: searching\ndata: {json.dumps({'query': _last_user[:120]})}\n\n"
                         try:
                             web_results = await web_search_svc.search_web(_last_user, max_results=WEB_MAX_RESULTS)
@@ -518,8 +543,30 @@ async def chat_completions(
         except Exception as exc:
             full_response = f"⚠️ Image generation failed: {exc}"
     else:
+        # Web search grounding (mirrors the streaming branch): search, inject
+        # into the system prompt, and populate citations for the response.
+        ns_sys = system_prompt
+        if web_active and _last_user.strip():
+            try:
+                web_results = await web_search_svc.search_web(_last_user, max_results=WEB_MAX_RESULTS)
+            except Exception:
+                web_results = []
+            if web_results:
+                block = web_search_svc.format_context(web_results)
+                ns_sys = f"{system_prompt}\n\n{block}" if system_prompt else block
+                citations = [
+                    {"index": i + 1, "chunk_id": f"web-{i}",
+                     "document_filename": (r["title"] or r["url"])[:80],
+                     "snippet": r["snippet"][:240], "url": r["url"]}
+                    for i, r in enumerate(web_results)
+                ]
+            else:
+                note = ("(A live web search was run for this question but returned no "
+                        "usable results. Answer from what you know and tell the user you "
+                        "couldn't retrieve current web sources — do not claim a knowledge cutoff.)")
+                ns_sys = f"{system_prompt}\n\n{note}" if system_prompt else note
         ns_usage: Dict = {}
-        async for chunk in ollama.chat_stream(eff_model, messages, system_prompt, eff_temp, eff_max, eff_ctx, think=eff_think, usage=ns_usage, top_p=eff_top_p, extra_options=req.ollama_options):
+        async for chunk in ollama.chat_stream(eff_model, messages, ns_sys, eff_temp, eff_max, eff_ctx, think=eff_think, usage=ns_usage, top_p=eff_top_p, extra_options=req.ollama_options):
             full_response += chunk
         if is_guest and guest_ip:
             guest_remaining = _guest_charge_tokens(

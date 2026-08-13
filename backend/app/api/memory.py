@@ -249,6 +249,14 @@ async def extract_memories(
             model_router.concrete_for(extract_model, "", avail) if model_router.is_variant(extract_model)
             else model_router.fast_model_for(avail) or extract_model
         )
+    else:
+        # Raw model ids are a Hyper+ entitlement; substitute the fast model
+        # rather than honoring an arbitrary raw id for non-entitled users.
+        if not current_user.is_admin:
+            from ..services.billing_enforcement import get_user_limits
+            if not get_user_limits(db, current_user).get("raw_models"):
+                avail = [m["name"] for m in await ollama.list_models()]
+                extract_model = model_router.fast_model_for(avail) or extract_model
     raw = ""
     async for chunk in ollama.chat_stream(extract_model, msgs, system_prompt=system, temperature=0.1):
         raw += chunk

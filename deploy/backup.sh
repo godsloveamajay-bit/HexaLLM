@@ -3,12 +3,14 @@
 # Keep this local copy; add an offsite copy (rclone/scp) if you want DR.
 set -euo pipefail
 
+cd "$(dirname "$0")/.."
+
 BACKUP_DIR="${BACKUP_DIR:-/home/hexallm/backups}"
 mkdir -p "$BACKUP_DIR"
 TS="$(date +%F-%H%M)"
 
 echo ">> Backing up hexallm-prod database"
-docker compose -p hexallm-prod exec -T db \
+docker compose -f docker-compose.yml -f deploy/docker-compose.prod.yml exec -T db \
   pg_dump -U hexallm -d hexallm \
   | gzip > "$BACKUP_DIR/hexallm-prod-$TS.sql.gz"
 

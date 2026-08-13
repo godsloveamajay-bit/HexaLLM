@@ -8,12 +8,15 @@ import os
 import tempfile
 import threading
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile
 from starlette.concurrency import run_in_threadpool
+from slowapi import Limiter
+from slowapi.util import get_remote_address
 
 from ..core.security import get_optional_user
 
 router = APIRouter(prefix="/transcribe", tags=["transcribe"])
+limiter = Limiter(key_func=get_remote_address)
 
 # Model is loaded lazily on first request (downloads ~140MB for "base" the first
 # time, then cached under ~/.cache/huggingface). Override size via WHISPER_MODEL
@@ -44,7 +47,9 @@ def _transcribe_file(path: str) -> dict:
 
 
 @router.post("")
+@limiter.limit("10/minute")
 async def transcribe(
+    request: Request,
     file: UploadFile = File(...),
     current_user=Depends(get_optional_user),  # available to guests too
 ):

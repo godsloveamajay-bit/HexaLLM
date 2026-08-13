@@ -143,12 +143,14 @@ async def upload_dataset(
         raise HTTPException(status_code=404, detail="Model not found")
 
     os.makedirs(settings.DATASETS_DIR, exist_ok=True)
-    dest = Path(settings.DATASETS_DIR) / f"{model_id}_{file.filename}"
+    safe_name = Path(file.filename or "").name
+    safe_name = "".join(c for c in safe_name if c.isalnum() or c in "._- ").strip() or "dataset"
+    dest = Path(settings.DATASETS_DIR) / f"{model_id}_{safe_name}"
 
     with open(dest, "wb") as f:
         shutil.copyfileobj(file.file, f)
 
-    return {"path": str(dest), "filename": file.filename}
+    return {"path": str(dest), "filename": safe_name}
 
 
 @router.post("/{model_id}/train", response_model=TrainingJobOut, status_code=201)

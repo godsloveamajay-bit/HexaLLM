@@ -23,15 +23,29 @@ PIDS_LIMIT = "64"
 # then /app/data/.sandbox on the inside is /opt/hexallm/data/.sandbox outside.
 # We detect whether we are inside a container and derive the host-side base.
 _CONTAINER_DATA_DIR = "/app/data"
+
+
+def _inside_container() -> bool:
+    if os.path.exists("/.dockerenv"):
+        return True
+    try:
+        with open("/proc/1/cgroup") as f:
+            return "docker" in f.read() or "kubepods" in f.read()
+    except Exception:
+        return False
+
+
 _HOST_DATA_DIR = os.environ.get(
     "HEXA_HOST_DATA_DIR",
-    _CONTAINER_DATA_DIR if os.path.exists(_CONTAINER_DATA_DIR) else _CONTAINER_DATA_DIR,
+    _CONTAINER_DATA_DIR if _inside_container() else "/opt/hexallm/data",
 )
 SANDBOX_BASE_CONTAINER = os.environ.get(
     "HEXA_SANDBOX_DIR",
     os.path.join(_CONTAINER_DATA_DIR, ".sandbox"),
 )
 if os.environ.get("HEXA_HOST_DATA_DIR"):
+    SANDBOX_BASE_HOST = SANDBOX_BASE_CONTAINER.replace(_CONTAINER_DATA_DIR, _HOST_DATA_DIR, 1)
+elif _inside_container():
     SANDBOX_BASE_HOST = SANDBOX_BASE_CONTAINER.replace(_CONTAINER_DATA_DIR, _HOST_DATA_DIR, 1)
 else:
     SANDBOX_BASE_HOST = SANDBOX_BASE_CONTAINER
@@ -139,6 +153,8 @@ class Sandbox:
             path, content = data["path"], data["content"]
         except Exception as e:
             return f"write_file error: {e}"
+        if not isinstance(path, str) or not isinstance(content, str):
+            return "write_file error: 'path' and 'content' must be strings"
         safe = self._safe_path(path)
         if safe is None:
             return "Error: path traversal denied"
@@ -159,11 +175,7 @@ class Sandbox:
             if safe and os.path.isfile(safe):
                 with open(safe) as f:
                     return f.read()[:4000]
-        try:
-            with open(path.strip()) as f:
-                return f.read()[:4000]
-        except Exception as e:
-            return f"File read error: {e}"
+        return f"File read error: {path.strip()!r} is outside the sandbox workspace"
 
     def cleanup(self):
         if self._cleaned:

@@ -1,7 +1,5 @@
-import json
 import base64
-import hashlib
-import hmac
+import zlib
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Dict, Any, List
 import httpx
@@ -17,6 +15,7 @@ class PayPalService:
         self.base_url = base
         self._token: Optional[str] = None
         self._token_expires: Optional[datetime] = None
+        self._certs: Dict[str, str] = {}  # paypal-cert-url -> PEM cert (cached)
 
     @property
     def enabled(self) -> bool:
@@ -183,7 +182,14 @@ class PayPalService:
             return resp.status_code == 204
 
     def verify_webhook(self, body: bytes, headers: Dict[str, str]) -> bool:
-        """Verify PayPal webhook signature."""
+        """Verify a PayPal webhook transmission.
+
+        PayPal signs with RSA-SHA256 using the public certificate at
+        paypal-cert-url, over the string:
+            transmission_id|transmission_time|webhook_id|crc32(body)
+        The signature is base64-encoded in the paypal-transmission-sig header.
+        The cert is cached per URL for the lifetime of the process.
+        """
         transmission_id = headers.get("paypal-transmission-id", "")
         transmission_time = headers.get("paypal-transmission-time", "")
         cert_url = headers.get("paypal-cert-url", "")
@@ -193,12 +199,36 @@ class PayPalService:
         if not all([transmission_id, transmission_time, cert_url, actual_sig, webhook_id]):
             return False
 
-        signed_parts = "|".join([transmission_id, transmission_time, webhook_id, body.decode()])
-        expected_sig = base64.b64encode(
-            hmac.new(self.client_secret.encode(), signed_parts.encode(), hashlib.sha256).digest()
-        ).decode()
+        cert_pem = self._certs.get(cert_url)
+        if not cert_pem:
+            try:
+                resp = httpx.get(cert_url, timeout=10)
+                resp.raise_for_status()
+                cert_pem = resp.text
+            except Exception:
+                return False
+            self._certs[cert_url] = cert_pem
 
-        return hmac.compare_digest(expected_sig, actual_sig)
+        from cryptography import x509
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.asymmetric import padding, rsa
+        from cryptography.exceptions import InvalidSignature
+        try:
+            cert = x509.load_pem_x509_certificate(cert_pem.encode())
+            public_key = cert.public_key()
+            if not isinstance(public_key, rsa.RSAPublicKey):
+                return False
+            crc = zlib.crc32(body)
+            signed_parts = f"{transmission_id}|{transmission_time}|{webhook_id}|{crc}"
+            public_key.verify(
+                base64.b64decode(actual_sig),
+                signed_parts.encode(),
+                padding.PKCS1v15(),
+                hashes.SHA256(),
+            )
+            return True
+        except (InvalidSignature, Exception):
+            return False
 
     async def list_plans(self, product_id: str) -> List[Dict]:
         headers = await self._headers()

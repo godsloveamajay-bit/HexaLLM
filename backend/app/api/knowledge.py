@@ -29,6 +29,12 @@ from ..services.retrieval_service import ingest_document, search
 router = APIRouter(prefix="/knowledge", tags=["knowledge"])
 
 
+def _sanitize_filename(name: str) -> str:
+    """Keep only the final path component and strip dangerous characters."""
+    name = Path(name or "").name
+    return "".join(c for c in name if c.isalnum() or c in "._- ").strip() or "upload"
+
+
 def _kb_or_404(db: Session, kb_id: int, user: User) -> KnowledgeBase:
     kb = db.query(KnowledgeBase).filter(
         KnowledgeBase.id == kb_id, KnowledgeBase.user_id == user.id
@@ -175,12 +181,23 @@ async def upload_document(
             detail=f"Unsupported file type '{ext}'. Allowed: {', '.join(SUPPORTED_EXTS)}",
         )
 
+    max_bytes = settings.MAX_UPLOAD_SIZE_MB * 1024 * 1024
+    file.file.seek(0, 2)  # seek end to measure size without loading into memory
+    size = file.file.tell()
+    file.file.seek(0)
+    if size > max_bytes:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File too large (max {settings.MAX_UPLOAD_SIZE_MB} MB)",
+        )
+
     kb_dir = Path(settings.UPLOADS_DIR) / f"kb_{kb.id}"
     kb_dir.mkdir(parents=True, exist_ok=True)
 
+    safe_name = _sanitize_filename(file.filename or "")
     document = KBDocument(
         kb_id=kb.id,
-        filename=file.filename,
+        filename=safe_name,
         mime_type=file.content_type,
         status="pending",
     )
@@ -188,7 +205,7 @@ async def upload_document(
     db.commit()
     db.refresh(document)
 
-    dest = kb_dir / f"{document.id}_{file.filename}"
+    dest = kb_dir / f"{document.id}_{safe_name}"
     with open(dest, "wb") as out:
         shutil.copyfileobj(file.file, out)
     document.source_path = str(dest)
@@ -302,6 +319,30 @@ async def crawl_url(
         import httpx
         from bs4 import BeautifulSoup
 
+        # SSRF guard — only allow http/https to public, routable hosts.
+        from urllib.parse import urlparse
+
+        parsed = urlparse(body.url)
+        if parsed.scheme not in ("http", "https") or not parsed.hostname:
+            raise HTTPException(status_code=400, detail="Only http/https URLs are supported")
+        import ipaddress
+
+        host = parsed.hostname
+        try:
+            ip = ipaddress.ip_address(host)
+        except ValueError:
+            # Resolve DNS ourselves so the SSRF guard sees the real target(s).
+            import socket
+
+            try:
+                infos = socket.getaddrinfo(host, parsed.port or 80)
+                ips = [infos[0][4][0] for infos in infos]
+            except Exception:
+                raise HTTPException(status_code=400, detail="Could not resolve host")
+            ip = ipaddress.ip_address(ips[0])
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_multicast:
+            raise HTTPException(status_code=400, detail="Blocked: private or local network addresses are not allowed")
+
         async with httpx.AsyncClient(timeout=30.0, follow_redirects=True) as client:
             resp = await client.get(body.url, headers={"User-Agent": "Mozilla/5.0"})
             resp.raise_for_status()
@@ -320,7 +361,7 @@ async def crawl_url(
 
     document = KBDocument(
         kb_id=kb.id,
-        filename=f"{title[:80]}.txt",
+        filename=f"{_sanitize_filename(title[:80])}.txt",
         mime_type="text/plain",
         status="pending",
         source_path="",

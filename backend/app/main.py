@@ -14,7 +14,11 @@ from .api import (
     auth, models, chat as chat_api, image as image_api,
     templates as templates_api, memory as memory_api,
     transcribe as transcribe_api, billing as billing_api,
-    admin as admin_api,
+    admin as admin_api, agents as agents_api, mcp as mcp_api,
+    workflows as workflows_api, knowledge as knowledge_api,
+    tools as tools_api, personas as personas_api,
+    analytics as analytics_api, downloads as downloads_api,
+    openai_compat as openai_compat_api, cli_tunnel as cli_tunnel_api,
 )
 
 
@@ -127,7 +131,13 @@ app.add_middleware(GZipMiddleware, minimum_size=1024)
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=(
+        ["*"] if settings.DEBUG else
+        [
+            settings.APP_URL,
+            "http://localhost:3000", "http://localhost:5173", "http://localhost:8080",
+        ]
+    ),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -156,6 +166,20 @@ app.include_router(memory_api.router,     prefix="/api/v1")
 app.include_router(transcribe_api.router, prefix="/api/v1")
 app.include_router(billing_api.router,    prefix="/api/v1")
 app.include_router(admin_api.router,      prefix="/api/v1")
+app.include_router(agents_api.router,     prefix="/api/v1")
+app.include_router(mcp_api.router,        prefix="/api/v1")
+app.include_router(workflows_api.router,  prefix="/api/v1")
+app.include_router(knowledge_api.router,  prefix="/api/v1")
+app.include_router(tools_api.router,      prefix="/api/v1")
+app.include_router(personas_api.router,   prefix="/api/v1")
+app.include_router(analytics_api.router,  prefix="/api/v1")
+app.include_router(downloads_api.router,  prefix="/api/v1")
+# OpenAI-compatible API — clean /v1 base (frontend advertises ${origin}/v1)
+# plus /api/v1/openai back-compat alias. Mounted after the chat router so the
+# dedicated OpenAI paths don't collide with the UI ones.
+app.include_router(openai_compat_api.router, prefix="/v1")
+app.include_router(openai_compat_api.router, prefix="/api/v1/openai")
+app.include_router(cli_tunnel_api.router, prefix="/api/v1")
 
 
 @app.get("/api/v1/health")

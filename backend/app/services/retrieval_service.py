@@ -99,6 +99,9 @@ async def ingest_document(
         db.commit()
         return len(pieces)
     except Exception as e:
+        # Roll back any chunks added for this document so a failed ingest
+        # doesn't pollute search results, then record the failure.
+        db.query(KBChunk).filter(KBChunk.document_id == document.id).delete()
         document.status = "failed"
         document.error = str(e)
         db.commit()

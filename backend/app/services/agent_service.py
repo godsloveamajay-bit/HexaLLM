@@ -286,7 +286,37 @@ async def run_agent(
     subagent_model: Optional[str] = None,  # model used by sub-agents (default: SUBAGENT_MODEL)
     subagent_max_depth: Optional[int] = None,  # max delegation depth (default: MAX_SUBAGENT_DEPTH)
 ) -> Dict[str, Any]:
-    # Initialize per-run agent context for sub-agent delegation tracking
+    """Run an agent to completion. Wraps _run_agent_inner so the sub-agent
+    delegation context (_agent_ctx) is always restored after the run, even on
+    exception — otherwise a stale context leaks into the next run in the same
+    task (stale depth → sub-agents spuriously refused)."""
+    had_ctx = bool(_agent_ctx.get())
+    try:
+        return await _run_agent_inner(
+            task, model, tools, max_steps, on_step, persona_prompt,
+            mcp_clients, sandbox, dynamic_tools, subagent_model, subagent_max_depth,
+        )
+    finally:
+        if not had_ctx:
+            _agent_ctx.set({})
+
+
+async def _run_agent_inner(
+    task: str,
+    model: str,
+    tools: List[str],
+    max_steps: int = 10,
+    on_step=None,
+    persona_prompt: Optional[str] = None,
+    mcp_clients: Optional[List] = None,   # list of (server_name, MCPClient) tuples
+    sandbox=None,                          # Optional[Sandbox] from sandbox_service
+    dynamic_tools: Optional[Dict[str, Dict[str, Any]]] = None,  # name -> {"description", "func"}
+    subagent_model: Optional[str] = None,  # model used by sub-agents (default: SUBAGENT_MODEL)
+    subagent_max_depth: Optional[int] = None,  # max delegation depth (default: MAX_SUBAGENT_DEPTH)
+) -> Dict[str, Any]:
+    # Initialize per-run agent context for sub-agent delegation tracking.
+    # Only set when no context is active (a sub-agent call inherits the depth
+    # its delegator set). Restoring happens in run_agent's finally.
     if not _agent_ctx.get():
         _agent_ctx.set({
             "subagent_model": subagent_model or SUBAGENT_MODEL,
@@ -472,6 +502,8 @@ async def run_agent(
                 )
             except asyncio.TimeoutError:
                 output = f"Tool '{tool_name}' timed out after 60 s"
+            except Exception as e:
+                output = f"Tool '{tool_name}' error: {e}"
         elif tool_name in mcp_tool_map:
             try:
                 output = await asyncio.wait_for(

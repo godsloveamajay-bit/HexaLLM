@@ -133,6 +133,15 @@ async def subscribe(data: SubscribeRequest, db: Session = Depends(get_db),
     if not result or not result.get("approval_url"):
         raise HTTPException(status_code=500, detail="Failed to create PayPal subscription")
 
+    # Cancel any existing pending/active subscriptions first so a user never
+    # accumulates multiple rows (User.subscription is a 1:1 uselist=False
+    # relationship — duplicate rows make /auth/me crash with MultipleResultsFound).
+    db.query(Subscription).filter(
+        Subscription.user_id == current_user.id,
+        Subscription.status.in_(["pending", "active"]),
+    ).update({"status": "cancelled", "cancel_at_period_end": True})
+    db.commit()
+
     sub = Subscription(
         user_id=current_user.id,
         plan_id=plan.id,

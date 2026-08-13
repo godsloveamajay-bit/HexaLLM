@@ -6,21 +6,26 @@ from ..models.billing import Plan, Subscription
 from ..models.chat import ChatMessage, ChatSession, AgentRun
 from ..models.knowledge import KnowledgeBase
 from ..models.ip_whitelist import IpWhitelist
+from ..api.billing import _seed_plans
 
 
-def _get_user_plan(db: Session, user: User) -> Plan:
+def _get_user_plan(db: Session, user: User) -> Plan | None:
     sub = db.query(Subscription).filter(
         Subscription.user_id == user.id,
-        Subscription.status.in_(["active", "pending"]),
+        Subscription.status.in_(["active"]),
     ).first()
     if sub and sub.plan:
         return sub.plan
+    # Plans are seeded on-demand by the billing endpoint; seed here too so the
+    # free-plan fallback never comes back empty (which 500'd every chat send).
+    _seed_plans(db)
     return db.query(Plan).filter(Plan.slug == "free").first()
 
 
 def get_user_limits(db: Session, user: User) -> dict:
     plan = _get_user_plan(db, user)
-    return plan.limits or {}
+    # No plan found at all → treat as unlimited rather than crashing.
+    return plan.limits if plan and plan.limits else {}
 
 
 def get_today_chat_count(db: Session, user_id: int) -> int:

@@ -128,32 +128,30 @@ class Variant:
 # Ollama reports tags inconsistently (qwen2.5:7B but deepseek-r1:32b).
 #
 # Each "department" has a fast default plus heavier opt-in tiers that only kick
-# in on explicit cues (see the escalation heuristics below). On this CPU box
-# bigger = slower, so defaults stay in the 7-8B fast lane.
-_CODING = "Qwen2.5-Coder:7B"          # default coder (fast, ~1.7 tok/s)
-_CODING_HEAVY = "Qwen2.5-Coder:14B"   # hard refactors/architecture (~0.85 tok/s)
-_CHAT = "qwen2.5:7B"                   # general chat (refreshed from openchat:7B)
-_THINKING = "deepseek-r1:1.5b"        # default reasoner — the ONLY CPU-viable one:
-                                      # ~5s to first token & streams its <think> fast.
-                                      # Bigger distills (8B 135s TTFT, 14B never finishes)
-                                      # are unusable here, so we don't auto-route to them.
-_THINKING_DEEP = "deepseek-r1:1.5b"   # no heavy escalation on a CPU-only box
-_THINKING_DEEPEST = "deepseek-r1:32b" # opt-in direct only (never auto-routed)
-_GENERAL = "llama3.1:8b"              # writing/general (refreshed from llama3:8B)
-_LARGE = "qwen3:14B"                  # balanced default + universal fallback
-_FAST = "llama3.2:3b"                # snappy 3B for titles / quick replies (~4 tok/s)
-_VISION = "llama3.2-vision:11b"      # image understanding (new capability)
+# in on explicit cues (see the escalation heuristics below). Tuned for the
+# 12 GB RTX 4080 (laptop) GPU: the heaviest tier is 14B, which fits the VRAM
+# alongside its KV cache at the context sizes used below. Nothing exceeds 12 GB.
+_CODING = "qwen2.5-coder:7b"          # default coder (fast on GPU)
+_CODING_HEAVY = "qwen2.5-coder:14b"   # hard refactors/architecture (fits 12 GB @8k ctx)
+_CHAT = "qwen2.5:7b"                   # general chat
+_THINKING = "deepseek-r1:1.5b"        # default reasoner — tiny, streams <think> fast
+_THINKING_DEEP = "deepseek-r1:8b"     # heavier reasoner; ~6 GB, fits 12 GB VRAM
+_GENERAL = "llama3.1:8b"              # writing/general
+_LARGE = "qwen3:14b"                  # balanced default + universal fallback (fits 12 GB)
+_FAST = "llama3.2:3b"                # snappy 3B for titles / quick replies
+_VISION = "llama3.2-vision:11b"      # image understanding (fits 12 GB)
 _MATH = "qwen2-math:7b"             # math-tuned for equations, proofs, step-by-step
-# Legacy models kept installed as safety fallbacks during/after the refresh:
-_OPENCHAT = "openchat:7B"
+_EMBED = "nomic-embed-text"          # embeddings for RAG / knowledge bases (~0.3 GB)
+# Legacy models kept as safety fallbacks (only used if a primary is missing):
+_OPENCHAT = "openchat:7b"
 _LLAMA3 = "llama3:8b"
 
 # Models that emit a separate chain-of-thought (reasoning) stream.
 _REASONING_MODELS = ("deepseek-r1", "qwen3")
 
-# Reasoners small enough to actually think within seconds on this CPU-only box.
-# Only these get chain-of-thought forced ON (so the Thought bubble fills fast);
-# heavier reasoners are suppressed to keep everyday chat responsive.
+# Reasoners small enough to think quickly on the 12 GB GPU. Only these get
+# chain-of-thought forced ON (so the Thought bubble fills fast); heavier
+# reasoners are suppressed to keep everyday chat responsive.
 _FAST_REASONERS = ("deepseek-r1:1.5b",)
 
 
@@ -293,7 +291,7 @@ VARIANTS: Dict[str, Variant] = {
             "Point out edge cases, bugs, and complexity trade-offs where relevant."
         ),
         temperature=0.2,
-        num_ctx=16384,
+        num_ctx=8192,
         num_predict=4096,
         fallbacks=[_CODING, _LARGE, _GENERAL],
     ),
@@ -354,8 +352,8 @@ VARIANTS: Dict[str, Variant] = {
             "End every response with a clear, actionable conclusion."
         ),
         temperature=0.4,
-        # Sized for the 1.5b reasoner: a smaller context/output keeps prefill snappy
-        # on CPU while leaving room for the <think> stream plus the answer.
+        # 8k context keeps every tier (incl. the 14B coders) within the 12 GB
+        # VRAM budget once the KV cache is included.
         num_ctx=8192,
         num_predict=4096,
         fallbacks=[_THINKING, _LARGE, _GENERAL],

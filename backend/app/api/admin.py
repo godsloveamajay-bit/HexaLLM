@@ -94,7 +94,14 @@ def admin_stats(db: Session = Depends(get_db), _=Depends(require_admin)):
 
     total_users = db.query(User).count()
     total_admins = db.query(User).filter(User.is_admin.is_(True)).count()
-    active_today = db.query(User).filter(User.is_active.is_(True), User.created_at >= today_start).count()
+    # "Active today" = users who made at least one request since UTC midnight
+    # (RequestLog covers every authed endpoint hit). Previously this counted
+    # users *created* today, which mislabeled new sign-ups as active.
+    active_ids = db.query(RequestLog.user_id).filter(
+        RequestLog.created_at >= today_start,
+        RequestLog.user_id.isnot(None),
+    ).distinct().subquery()
+    active_today = db.query(User).filter(User.id.in_(active_ids), User.is_active.is_(True)).count()
     total_requests = db.query(RequestLog).count()
     total_whitelisted_ips = db.query(IpWhitelist).count()
     requests_last_30d = db.query(RequestLog).filter(RequestLog.created_at >= thirty_days_ago).count()

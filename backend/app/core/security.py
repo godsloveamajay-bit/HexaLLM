@@ -50,6 +50,8 @@ def get_current_user(
         api_key = db.query(APIKey).filter(APIKey.key == token, APIKey.is_active).first()
         if not api_key:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API key")
+        if not api_key.user or not api_key.user.is_active:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
         api_key.last_used_at = datetime.now(timezone.utc)
         db.commit()
         return api_key.user
@@ -60,8 +62,9 @@ def get_current_user(
         sub = payload.get("sub")
         if sub is None:
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
-        user_id: int = int(sub)
-        if user_id is None:
+        try:
+            user_id: int = int(sub)
+        except (TypeError, ValueError):
             raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
     except JWTError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid token")
@@ -110,6 +113,8 @@ def get_api_key_record(
     ).first()
     if not api_key:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or revoked API key")
+    if not api_key.user or not api_key.user.is_active:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Account disabled")
     return api_key
 
 

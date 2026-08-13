@@ -281,7 +281,7 @@ def forgot_password(request: Request, data: dict, background_tasks: BackgroundTa
     # Invalidate old tokens for this user
     db.query(PasswordResetToken).filter(
         PasswordResetToken.user_id == user.id,
-        not PasswordResetToken.used,
+        PasswordResetToken.used == False,  # noqa: E712
     ).update({"used": True})
 
     token = secrets.token_urlsafe(32)
@@ -306,7 +306,7 @@ def reset_password(data: dict, db: Session = Depends(get_db)):
 
     record = db.query(PasswordResetToken).filter(
         PasswordResetToken.token == token_str,
-        not PasswordResetToken.used,
+        PasswordResetToken.used == False,  # noqa: E712
     ).first()
 
     if not record:

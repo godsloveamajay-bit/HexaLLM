@@ -1,17 +1,29 @@
 from sqlalchemy import create_engine, event
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import NullPool
 from .config import settings
 
 _is_sqlite = "sqlite" in settings.DATABASE_URL
 
-engine = create_engine(
-    settings.DATABASE_URL,
-    connect_args={"check_same_thread": False} if _is_sqlite else {},
-    pool_size=10 if not _is_sqlite else 5,
-    max_overflow=20 if not _is_sqlite else 0,
-    pool_pre_ping=True,
-)
+# SQLite: NullPool — each request opens its own connection (WAL gives us
+# concurrent readers + a single writer). A bounded QueuePool is fatal here:
+# every streaming chat holds a DB session open for the whole response, so a
+# handful of concurrent streams exhaust the pool and *every* other request
+# (health checks, session lists) times out — reads as "the server is off".
+if _is_sqlite:
+    engine = create_engine(
+        settings.DATABASE_URL,
+        connect_args={"check_same_thread": False, "timeout": 30},
+        poolclass=NullPool,
+    )
+else:
+    engine = create_engine(
+        settings.DATABASE_URL,
+        pool_size=10,
+        max_overflow=20,
+        pool_pre_ping=True,
+    )
 
 if _is_sqlite:
     @event.listens_for(engine, "connect")

@@ -16,6 +16,7 @@ function PageSpinner() {
 }
 
 // Public pages
+const LandingPage     = lazy(() => import('./pages/Landing'))
 const LoginPage        = lazy(() => import('./pages/Login'))
 const RegisterPage     = lazy(() => import('./pages/Register'))
 const PrivacyPage      = lazy(() => import('./pages/PrivacyPolicy'))
@@ -70,7 +71,8 @@ export default function App() {
       <CommandPalette />
       <Suspense fallback={<PageSpinner />}>
         <Routes>
-          <Route path="/login"           element={<LoginPage />} />
+          <Route path="/"             element={<LandingPage />} />
+          <Route path="/login"        element={<LoginPage />} />
           <Route path="/register"        element={<RegisterPage />} />
           <Route path="/privacy"         element={<PrivacyPage />} />
           <Route path="/forgot-password" element={<ForgotPage />} />

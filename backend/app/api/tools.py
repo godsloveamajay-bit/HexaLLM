@@ -101,6 +101,17 @@ async def generate(
         except Exception:
             avail = []
         gen_model = model_router.concrete_for(gen_model, data.prompt, avail)
+    else:
+        # Raw model ids are a Hyper+ entitlement; substitute the default
+        # variant-backed model for non-entitled users.
+        if not current_user.is_admin:
+            from ..services.billing_enforcement import get_user_limits
+            if not get_user_limits(db, current_user).get("raw_models"):
+                try:
+                    avail = [m["name"] for m in await ollama.list_models()]
+                except Exception:
+                    avail = []
+                gen_model = model_router.fast_model_for(avail) or gen_model
     gen = await generate_tool(gen_model, data.prompt, existing)
     if gen.get("error"):
         raise HTTPException(status_code=422, detail=f"Could not generate a valid tool: {gen['error']}")

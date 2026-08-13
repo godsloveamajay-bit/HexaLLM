@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {
-  Send, Plus, Trash2, Bot, User, Loader2, ChevronDown,
-  FileText, Sparkles, Zap, Scale, Brain, Settings2, Menu,
-  X, Paperclip, Share2, BookMarked, Clipboard, ClipboardCheck,
-  Mic, MicOff, Square, Download, RotateCcw, Search,
+  Send, Loader2, ChevronDown,
+  FileText, Sparkles, Zap, Scale, Brain, Settings2, User,
+  X, Paperclip, BookMarked, Clipboard, ClipboardCheck,
+  Mic, MicOff, Square, Download, RotateCcw,
   ChevronRight, Wrench, Lock, Sparkle, SlidersHorizontal, Globe, Sigma,
   Sliders,
 } from 'lucide-react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../store/auth'
+import { useSessions, activeSessionOf, type Session } from '../store/sessions'
 import { prettyModel } from '../lib/models'
 import PersonalitySliders from '../components/PersonalitySliders'
 import { normalizeTraits, isActive as personalityActive, type TraitKey } from '../lib/personality'
@@ -67,8 +68,6 @@ interface Message {
 interface StepEvent { name: string; input: string; output: string; thought: string }
 interface Template { id: number; name: string; content: string }
 interface Attachment { type: 'image' | 'pdf' | 'text'; name: string; base64: string; preview?: string }
-interface Session { id: number; title: string; model_name: string; updated_at: string }
-interface ContentMatch { id: number; title: string; model_name: string; updated_at: string; match_count: number; snippet: string; role: string | null }
 interface HexaLLMVariant {
   id: string; label: string; description: string; ready: boolean
   available_bases: string[]; missing_bases: string[]
@@ -85,6 +84,13 @@ const VARIANT_ICONS: Record<string, any> = {
 }
 
 const CUSTOM_VARIANT_ID = 'hex-4.2-custom'
+// Gemini-style starter prompts shown under the empty composer.
+const SUGGESTIONS = [
+  'Explain a complex topic simply',
+  'Help me write or debug code',
+  'Summarize an article or document',
+  'Brainstorm ideas for a project',
+]
 // Guests have no server-side session; this local-only id keeps the streaming
 // plumbing (liveStreams map) working while the backend persists nothing.
 const GUEST_SESSION_ID = -1
@@ -338,7 +344,7 @@ function MessageBubble({
               since={activitySince ?? undefined}
             />
           ) : (isTyping || isFastStream) ? (
-            <div className="bg-gray-800/30 rounded-xl px-4 py-3 prose prose-sm">
+            <div className="bg-gray-800/30 rounded-2xl px-4 py-3 prose prose-sm">
               <ReactMarkdown
                 remarkPlugins={[remarkMath, remarkGfm]}
                 components={{
@@ -359,7 +365,7 @@ function MessageBubble({
               <span className="stream-cursor text-primary-500" />
             </div>
           ) : (
-            <div className="bg-gray-800/30 rounded-xl px-4 py-3 prose prose-sm">
+            <div className="bg-gray-800/30 rounded-2xl px-4 py-3 prose prose-sm">
               <ReactMarkdown
                 remarkPlugins={[remarkMath, remarkGfm]}
                 urlTransform={(url) =>
@@ -475,8 +481,13 @@ export default function ChatPage() {
   // whether the daily cap has been hit (locks the composer behind a sign-up CTA).
   const [guestRemaining, setGuestRemaining] = useState<number | null>(null)
   const [guestBlocked, setGuestBlocked] = useState(false)
-  const [sessions, setSessions] = useState<Session[]>([])
-  const [activeSession, setActiveSession] = useState<Session | null>(null)
+  const { sessions, activeId, loaded: sessionsLoaded, fetch: fetchSessions, create: createSession,
+          remove: deleteSession, setActive: selectSessionId, update: updateSession } = useSessions()
+  const activeSession = activeSessionOf({ sessions, activeId })
+  const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
+  const wantsNew = searchParams.get('new') === '1'
+  const requestedIdRef = useRef<number | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [model, setModel] = useState(user?.ai_default_model || 'hex-5.1-prime')
@@ -490,10 +501,6 @@ export default function ChatPage() {
   // True once the backend signals a reasoning turn — shows the Thought bubble
   // immediately, before the (often minute-away on CPU) first <think> token.
   const [reasoningPhase, setReasoningPhase] = useState(false)
-  const [sessionPanelOpen, setSessionPanelOpen] = useState(false)
-  const [sessionSearch, setSessionSearch] = useState('')
-  const [contentResults, setContentResults] = useState<ContentMatch[] | null>(null)
-  const [searching, setSearching] = useState(false)
   const [systemPrompt, setSystemPrompt] = useState('')
   const [showSystem, setShowSystem] = useState(false)
   const [variants, setVariants] = useState<HexaLLMVariant[]>([])
@@ -551,9 +558,29 @@ export default function ChatPage() {
     // Model lists are public; everything else is account-bound, so guests skip it.
     loadVariants(); loadOllamaModels()
     if (!isGuest) {
-      loadSessions(); loadTemplates()
+      fetchSessions(); loadTemplates()
     }
-  }, [isGuest])
+  }, [isGuest, fetchSessions])
+
+  // Gemini sidebar → chat: load the messages for a session the user picked.
+  useEffect(() => {
+    if (isGuest || activeId === null || !sessionsLoaded) return
+    if (requestedIdRef.current === activeId) {
+      requestedIdRef.current = null
+      loadSessionMessages(activeId)
+    }
+  }, [activeId, isGuest, sessionsLoaded])
+
+  // First visit: open the most recent chat. "?new=1" (sidebar button) starts fresh.
+  useEffect(() => {
+    if (isGuest || !sessionsLoaded || activeId !== null) return
+    if (wantsNew) {
+      newChat()
+      navigate('/chat', { replace: true })
+      return
+    }
+    if (sessions.length > 0) requestSession(sessions[0].id)
+  }, [isGuest, sessionsLoaded, wantsNew, sessions.length, activeId])
 
   useEffect(() => {
     if (variants.length > 0 && sessions.length === 0) {
@@ -630,17 +657,36 @@ export default function ChatPage() {
     ta.style.height = `${Math.min(ta.scrollHeight, 200)}px`
   }, [input])
 
-  const loadSessions = async () => {
-    try {
-      const { data } = await api.get('/chat/sessions')
-      setSessions(data)
-      if (data.length > 0) {
-        const first: Session = data[0]
-        setActiveSession(first); setModel(first.model_name)
-        const { data: msgs } = await api.get(`/chat/sessions/${first.id}/messages`)
-        setMessages(msgs.map((m: any) => ({ role: m.role as Message['role'], content: m.content, steps: m.steps || undefined })))
+  const loadSessionMessages = async (id: number) => {
+    setSending(false); setStreamPhase('idle')
+    setAttachment(null)
+    const live = liveStreams.get(id)
+    if (live) {
+      if (live.done) {
+        try { const { data } = await api.get(`/chat/sessions/${id}/messages`); setMessages(data.map((m: any) => ({ role: m.role as Message['role'], content: m.content, steps: m.steps || undefined }))) } catch {}
+        liveStreams.delete(id)
+      } else {
+        try { const { data } = await api.get(`/chat/sessions/${id}/messages`); setMessages([...data.map((m: any) => ({ role: m.role as Message['role'], content: m.content, steps: m.steps || undefined })), { role: 'assistant' as const, content: live.content }]) } catch { setMessages([{ role: 'assistant' as const, content: live.content }]) }
+        setSending(true); setStreamPhase(live.content ? 'typing' : 'thinking')
+        live.onComplete.push((content, citations, route, usage, latency_ms) => {
+          if (!mountedRef.current) return
+          liveStreams.delete(id)
+          setMessages(prev => { const u = [...prev]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, content, citations: citations.length ? citations : undefined, route, usage, latency_ms }; return u })
+          setSending(false); setStreamPhase('idle')
+        })
       }
-    } catch {}
+      return
+    }
+    try { const { data } = await api.get(`/chat/sessions/${id}/messages`); setMessages(data.map((m: any) => ({ role: m.role, content: m.content, steps: m.steps || undefined }))) } catch {}
+  }
+
+  // Sidebar click → load that chat. The ref marks the click so the activeId
+  // watcher loads messages exactly once for user picks (not for create()).
+  const requestSession = (id: number) => {
+    const s = useSessions.getState().sessions.find((x) => x.id === id)
+    if (s) setModel(s.model_name)
+    requestedIdRef.current = id
+    selectSessionId(id)
   }
 
   // ── Stop generation ───────────────────────────────────────────────────
@@ -654,49 +700,21 @@ export default function ChatPage() {
   // NB: does NOT clear the message list — sendMessage calls this *after* adding
   // the user's message, so wiping here would drop the first message of a new
   // chat (the bug where the send appeared to do nothing and the picker stayed).
-  const createSession = async () => {
-    const { data } = await api.post('/chat/sessions', { model_name: model, title: 'New Chat', system_prompt: systemPrompt || null })
-    setSessions((s) => [data, ...s]); setActiveSession(data)
-    return data
-  }
-
-  // Explicit "New Chat" button — start a fresh empty session.
+  // Explicit "New Chat" (sidebar / header) — start a fresh empty session.
   const newChat = async () => {
     setMessages([])
     setInput('')
-    await createSession()
-  }
-
-  const selectSession = async (session: Session) => {
-    setSending(false); setStreamPhase('idle')
-    setActiveSession(session); setModel(session.model_name)
-    setAttachment(null); setSessionPanelOpen(false)
-    const live = liveStreams.get(session.id)
-    if (live) {
-      if (live.done) {
-        try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages(data.map((m: any) => ({ role: m.role as Message['role'], content: m.content, steps: m.steps || undefined }))) } catch {}
-        liveStreams.delete(session.id)
-      } else {
-        try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages([...data.map((m: any) => ({ role: m.role as Message['role'], content: m.content, steps: m.steps || undefined })), { role: 'assistant' as const, content: live.content }]) } catch { setMessages([{ role: 'assistant' as const, content: live.content }]) }
-        setSending(true); setStreamPhase(live.content ? 'typing' : 'thinking')
-        live.onComplete.push((content, citations, route, usage, latency_ms) => {
-          if (!mountedRef.current) return
-          liveStreams.delete(session.id)
-          setMessages(prev => { const u = [...prev]; const l = u[u.length - 1]; if (l?.role === 'assistant') u[u.length - 1] = { ...l, content, citations: citations.length ? citations : undefined, route, usage, latency_ms }; return u })
-          setSending(false); setStreamPhase('idle')
-        })
-      }
-      return
+    setAttachment(null)
+    try {
+      await createSession(model, systemPrompt)
+    } catch {
+      toast.error('Could not start a new chat.')
     }
-    try { const { data } = await api.get(`/chat/sessions/${session.id}/messages`); setMessages(data.map((m: any) => ({ role: m.role, content: m.content, steps: m.steps || undefined }))) } catch {}
   }
 
-  const deleteSession = async (id: number, e: React.MouseEvent) => {
-    e.stopPropagation()
-    await api.delete(`/chat/sessions/${id}`)
-    setSessions((s) => s.filter((x) => x.id !== id))
-    if (activeSession?.id === id) { setActiveSession(null); setMessages([]) }
-  }
+  useEffect(() => {
+    if (activeId === null && !isGuest) setMessages([])
+  }, [activeId, isGuest])
 
   // ── Send / regenerate ────────────────────────────────────────────────
   const doStream = useCallback(async (userMessages: Message[], session: { id: number }, isFirst: boolean, opts: { regenerate?: boolean } = {}) => {
@@ -892,9 +910,7 @@ export default function ChatPage() {
       setAttachment(null)
       if (!errored && isFirst && session && session.id > 0) {
         api.post(`/chat/sessions/${session.id}/rename`).then(({ data }) => {
-          const { title } = data; const sid = session.id
-          setSessions((s) => s.map((x) => x.id === sid ? { ...x, title } : x))
-          setActiveSession((a) => a?.id === sid ? ({ ...a, title } as Session) : a)
+          updateSession(session.id, { title: data.title })
         }).catch(() => {})
       }
     }
@@ -910,7 +926,7 @@ export default function ChatPage() {
     const isFirst = messages.length === 0
     let session: { id: number } | null
     try {
-      session = isGuest ? { id: GUEST_SESSION_ID } : (activeSession ?? await createSession())
+      session = isGuest ? { id: GUEST_SESSION_ID } : (activeSession ?? await createSession(model, systemPrompt))
     } catch {
       // Session couldn't be created — undo the optimistic user/assistant bubbles
       // so the composer isn't left in a half-sent state.
@@ -1054,407 +1070,38 @@ export default function ChatPage() {
     e.stopPropagation(); await api.delete(`/templates/${id}`); setTemplates(t => t.filter(x => x.id !== id))
   }
 
-  // Search message *content* across all sessions (debounced). Titles are still
-  // matched locally for instant feedback; this adds full-text body matches.
-  useEffect(() => {
-    const q = sessionSearch.trim()
-    if (q.length < 2) { setContentResults(null); setSearching(false); return }
-    setSearching(true)
-    const t = setTimeout(async () => {
-      try {
-        const { data } = await api.get('/chat/sessions/search', { params: { q } })
-        setContentResults(data)
-      } catch { setContentResults([]) }
-      finally { setSearching(false) }
-    }, 250)
-    return () => clearTimeout(t)
-  }, [sessionSearch])
-
-  const filteredSessions = sessions.filter(s => s.title.toLowerCase().includes(sessionSearch.toLowerCase()))
   const isStreaming = streamPhase !== 'idle' || sending
 
-  return (
-    <div className="flex h-full">
-      {sessionPanelOpen && (
-        <div className="fixed inset-0 z-30 bg-black/50 lg:hidden" onClick={() => setSessionPanelOpen(false)} />
-      )}
+  const onModelChange = (m: string) => {
+    setModel(m)
+    if (activeSession) {
+      api.patch(`/chat/sessions/${activeSession.id}`, { model_name: m }).catch(() => {})
+      updateSession(activeSession.id, { model_name: m })
+    }
+  }
 
-      {/* Session sidebar — hidden for guests (no saved chats) */}
-      {!isGuest && (
-      <div className={clsx(
-        'flex-shrink-0 w-64 border-r border-gray-800 bg-gray-900 flex flex-col',
-        'fixed top-12 bottom-0 left-0 z-40 transition-transform duration-300',
-        'lg:static lg:top-auto lg:bottom-auto lg:z-auto lg:translate-x-0 lg:transition-none',
-        sessionPanelOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0',
-      )}>
-        <div className="p-2.5 border-b border-gray-800 space-y-2">
-          <div className="flex items-center gap-2">
-            <button onClick={newChat} className="btn-primary flex-1 justify-center py-2 text-sm">
-              <Plus className="w-4 h-4" /> New Chat
-            </button>
-            <button onClick={() => setSessionPanelOpen(false)} className="lg:hidden p-2 rounded-lg hover:bg-gray-800 text-gray-500">
-              <X className="w-4 h-4" />
-            </button>
-          </div>
-          {/* Session search */}
-          <div className="relative">
-            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-600" />
-            <input
-              value={sessionSearch}
-              onChange={e => setSessionSearch(e.target.value)}
-              placeholder="Search chats…"
-              className="w-full bg-gray-800 border border-gray-700/60 rounded-lg pl-8 pr-3 py-1.5 text-xs text-gray-300 placeholder-gray-600 focus:outline-none focus:ring-1 focus:ring-primary-500/50"
-            />
+  const pickSuggestion = (s: string) => {
+    setInput(s)
+    textareaRef.current?.focus()
+  }
+
+  const composer = (
+    <div data-templates-panel
+      className="w-full rounded-3xl border border-gray-700/50 bg-gray-900/70 light:bg-white/80 backdrop-blur
+                 shadow-lg shadow-black/20 focus-within:border-primary-500/60 transition-colors">
+      {isGuest && guestBlocked ? (
+        <div className="max-w-xl mx-auto text-center py-4 px-4">
+          <Lock className="w-5 h-5 text-primary-400 mx-auto mb-2" />
+          <p className="text-sm text-gray-200 font-medium">You've used today's free guest tokens</p>
+          <p className="text-xs text-gray-400 mt-1">Create a free account to keep chatting — plus saved history, file uploads, and image generation.</p>
+          <div className="flex items-center justify-center gap-2 mt-3">
+            <Link to="/register" className="btn-primary py-1.5 px-4 text-sm">Create free account</Link>
+            <Link to="/login" className="btn-ghost py-1.5 px-3 text-sm">Sign in</Link>
           </div>
         </div>
-
-        <div className="flex-1 overflow-y-auto p-2 space-y-0.5">
-          {/* When searching, show full-text results (title + message body) with
-              snippets; otherwise the plain recent-session list. */}
-          {contentResults !== null ? (
-            <>
-              {searching && contentResults.length === 0 && (
-                <p className="text-xs text-gray-600 px-3 py-4 text-center">Searching…</p>
-              )}
-              {contentResults.map((s) => (
-                <div key={s.id} onClick={() => selectSession(s)}
-                  className={clsx('flex items-start gap-2 px-3 py-2.5 rounded-lg cursor-pointer group text-sm transition-colors',
-                    activeSession?.id === s.id ? 'bg-primary-900/40 text-primary-300' : 'hover:bg-gray-800 text-gray-400'
-                  )}>
-                  <Bot className="w-3.5 h-3.5 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1 min-w-0">
-                    <p className="truncate text-sm">{s.title}</p>
-                    {s.snippet ? (
-                      <p className="text-xs text-gray-500 line-clamp-2 mt-0.5">{s.snippet}</p>
-                    ) : (
-                      <p className="text-xs text-gray-600 truncate">{prettyModel(s.model_name)}</p>
-                    )}
-                    {s.match_count > 1 && (
-                      <p className="text-[10px] text-primary-500/80 mt-0.5">{s.match_count} matches</p>
-                    )}
-                  </div>
-                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                    <button onClick={(e) => deleteSession(s.id, e)} className="hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
-                  </div>
-                </div>
-              ))}
-              {!searching && contentResults.length === 0 && (
-                <p className="text-xs text-gray-600 px-3 py-4 text-center">No chats match "{sessionSearch}"</p>
-              )}
-            </>
-          ) : (
-            filteredSessions.map((s) => (
-              <div key={s.id} onClick={() => selectSession(s)}
-                className={clsx('flex items-center gap-2 px-3 py-2.5 rounded-lg cursor-pointer group text-sm transition-colors',
-                  activeSession?.id === s.id ? 'bg-primary-900/40 text-primary-300' : 'hover:bg-gray-800 text-gray-400'
-                )}>
-                <Bot className="w-3.5 h-3.5 flex-shrink-0" />
-                <div className="flex-1 min-w-0">
-                  <p className="truncate text-sm">{s.title}</p>
-                  <p className="text-xs text-gray-600 truncate">{prettyModel(s.model_name)}</p>
-                </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity flex-shrink-0">
-                  {activeSession?.id === s.id && (
-                    <button onClick={e => { e.stopPropagation(); shareSession() }} className="hover:text-primary-400" title="Share"><Share2 className="w-3 h-3" /></button>
-                  )}
-                  <button onClick={(e) => deleteSession(s.id, e)} className="hover:text-red-400"><Trash2 className="w-3 h-3" /></button>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
-      </div>
-      )}
-
-      {/* Chat area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Toolbar */}
-        <div className="flex-shrink-0 border-b border-gray-800 bg-gray-900">
-          <div className="flex items-center gap-2 px-3 py-2">
-            {!isGuest && (
-              <button onClick={() => setSessionPanelOpen(true)} className="lg:hidden p-1.5 rounded-lg hover:bg-gray-800 text-gray-400 flex-shrink-0"><Menu className="w-4 h-4" /></button>
-            )}
-
-            <select value={model} onChange={(e) => {
-              const m = e.target.value; setModel(m)
-              if (activeSession) {
-                api.patch(`/chat/sessions/${activeSession.id}`, { model_name: m }).catch(() => {})
-                setSessions(s => s.map(x => x.id === activeSession.id ? { ...x, model_name: m } : x))
-                setActiveSession(a => a ? { ...a, model_name: m } : a)
-              }
-            }} className="flex-1 min-w-0 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1.5 text-sm text-gray-200 focus:outline-none focus:ring-1 focus:ring-primary-500">
-              <optgroup label="HexaLLM (smart routing)">
-                {variants.map((v) => <option key={v.id} value={v.id} disabled={!v.ready}>{v.label}{v.ready ? '' : ' (unavailable)'}</option>)}
-              </optgroup>
-              {hasRawAccess && ollamaModels.length > 0 && (
-                <optgroup label="Models (direct)">
-                  {ollamaModels.map((m) => <option key={m} value={m}>{m}</option>)}
-                </optgroup>
-              )}
-            </select>
-
-            {/* Export */}
-            {messages.length > 0 && (
-              <button onClick={exportConversation} className="btn-ghost p-1.5 flex-shrink-0" title="Export as Markdown">
-                <Download className="w-4 h-4" />
-              </button>
-            )}
-
-            {!isGuest && (<>
-            {/* Web search toggle */}
-            <button onClick={() => setWebSearch(w => !w)} title={webSearch ? 'Web search on' : 'Web search off'}
-              className={clsx('text-xs gap-1 p-1.5 flex-shrink-0 rounded-md inline-flex items-center transition-colors',
-                webSearch ? 'bg-primary-900/40 text-primary-300 border border-primary-700' : 'btn-ghost')}>
-              <Globe className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Web</span>
-            </button>
-            {/* Templates */}
-            <div className="relative flex items-center gap-1 flex-shrink-0" data-templates-panel>
-              <button onClick={() => setShowTemplates(!showTemplates)} className="btn-ghost text-xs gap-1 p-1.5" title="Prompt templates">
-                <BookMarked className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">Templates</span>
-              </button>
-              {(model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && (
-                <button onClick={() => setShowSystem(!showSystem)} className="btn-ghost text-xs gap-1 p-1.5">
-                  <ChevronDown className={clsx('w-3 h-3 transition-transform', showSystem && 'rotate-180')} />
-                  <span className="hidden sm:inline">System</span>
-                </button>
-              )}
-              {(model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && (
-                <button onClick={() => setShowPersonality(!showPersonality)} className="btn-ghost text-xs gap-1 p-1.5 relative" title="Personality">
-                  <SlidersHorizontal className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Personality</span>
-                  {personalityActive(personality) && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary-400" />}
-                </button>
-              )}
-              {hasRawAccess && (
-                <button onClick={() => setShowAdvanced(!showAdvanced)} className={clsx('btn-ghost text-xs gap-1 p-1.5', showAdvanced && 'bg-primary-900/30')} title="Advanced Ollama params">
-                  <Sliders className="w-3.5 h-3.5" />
-                  <span className="hidden sm:inline">Params</span>
-                  {Object.keys(ollamaOptions).length > 0 && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary-400" />}
-                </button>
-              )}
-              {showTemplates && (
-                <div className="absolute right-0 top-full mt-1 w-72 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl z-50 p-3 space-y-2">
-                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Saved templates</p>
-                  {templates.length === 0 && <p className="text-xs text-gray-600">No templates yet.</p>}
-                  {templates.map((t) => (
-                    <div key={t.id} onClick={() => applyTemplate(t)} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-gray-800 group">
-                      <span className="flex-1 text-sm text-gray-300 truncate">{t.name}</span>
-                      <button onClick={(e) => deleteTemplate(t.id, e)} className="opacity-0 group-hover:opacity-100 hover:text-red-400"><X className="w-3 h-3" /></button>
-                    </div>
-                  ))}
-                  {systemPrompt.trim() && (
-                    <div className="pt-2 border-t border-gray-800 flex gap-2">
-                      <input value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="Template name…" className="input text-xs flex-1 py-1" onKeyDown={e => e.key === 'Enter' && saveTemplate()} />
-                      <button onClick={saveTemplate} className="btn-primary text-xs px-2 py-1">Save</button>
-          </div>
-        )}
-
-        {hasRawAccess && showAdvanced && (
-          <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/50">
-            <p className="text-xs font-semibold text-gray-300 mb-3 flex items-center gap-1.5">
-              <Sliders className="w-3.5 h-3.5 text-primary-400" /> Advanced Ollama Params
-            </p>
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-              {[
-                { key: 'num_ctx', label: 'Context Length', type: 'number', min: 2048, max: 65536, step: 2048 },
-                { key: 'top_k', label: 'Top K', type: 'number', min: 1, max: 100, step: 1 },
-                { key: 'repeat_penalty', label: 'Repeat Penalty', type: 'number', min: 0.1, max: 2, step: 0.1 },
-                { key: 'frequency_penalty', label: 'Freq Penalty', type: 'number', min: 0, max: 2, step: 0.1 },
-                { key: 'presence_penalty', label: 'Presence Penalty', type: 'number', min: 0, max: 2, step: 0.1 },
-                { key: 'seed', label: 'Seed (0=random)', type: 'number', min: 0, max: 2147483647, step: 1 },
-                { key: 'mirostat', label: 'Mirostat', type: 'select', options: [{value: 0, label: 'Off'}, {value: 1, label: 'Mirostat 1'}, {value: 2, label: 'Mirostat 2'}] },
-              ].map(({ key, label, type, min, max, step, options }) => (
-                <div key={key}>
-                  <label className="text-xs text-gray-500 block mb-0.5">{label}</label>
-                  {type === 'select' ? (
-                    <select
-                      value={typeof ollamaOptions[key] === 'number' ? ollamaOptions[key] as number : 0}
-                      onChange={(e) => setOllamaOptions(o => ({...o, [key]: parseInt(e.target.value)}))}
-                      className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 w-full"
-                    >
-                      {options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  ) : (
-                    <input
-                      type={type} min={min} max={max} step={step}
-                      value={typeof ollamaOptions[key] === 'number' ? ollamaOptions[key] as number : ''}
-                      onChange={(e) => {
-                        const raw = e.target.value
-                        if (raw === '') {
-                          const next = {...ollamaOptions}; delete next[key]; setOllamaOptions(next)
-                        } else {
-                          setOllamaOptions(o => ({...o, [key]: type === 'number' ? parseFloat(raw) : raw}))
-                        }
-                      }}
-                      placeholder="Default"
-                      className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 w-full"
-                    />
-                  )}
-                </div>
-              ))}
-            </div>
-            <div className="flex items-center gap-2 mt-3">
-              <button onClick={() => setOllamaOptions({})} className="btn-ghost text-xs px-2 py-1 text-gray-500 hover:text-gray-300">Reset all</button>
-              <p className="text-xs text-gray-600">Applies when using direct models. HexaLLM variants ignore these.</p>
-            </div>
-          </div>
-        )}
-                </div>
-              )}
-            </div>
-            </>)}
-          </div>
-        </div>
-
-        {/* Guest trial banner */}
-        {isGuest && (
-          <div className="px-4 py-2 border-b border-gray-800 bg-gradient-to-r from-primary-900/20 to-secondary-900/10 flex items-center gap-2 flex-wrap text-xs">
-            <Sparkle className="w-3.5 h-3.5 text-primary-400 flex-shrink-0" />
-            <span className="text-gray-300">
-              You're chatting as a guest.{' '}
-              {guestRemaining != null
-                ? <span className="text-primary-300 font-medium">{guestRemaining.toLocaleString()} free tokens left today.</span>
-                : <span className="text-gray-400">Sign in to save chats, attach files, and generate images.</span>}
-            </span>
-            <span className="flex items-center gap-2 ml-auto">
-              <Link to="/login" className="text-gray-400 hover:text-gray-200 transition-colors">Sign in</Link>
-              <Link to="/register" className="btn-primary py-1 px-2.5">Create free account</Link>
-            </span>
-          </div>
-        )}
-
-        {(model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && showSystem && (
-          <div className="px-4 py-2 border-b border-gray-800 bg-gray-900/50">
-            <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} placeholder="You are a helpful assistant that…" rows={2} className="input text-sm resize-none" />
-            <p className="text-xs text-gray-500 mt-1">Custom variant & direct models use this system prompt. Branded variants enforce their own behaviour.</p>
-          </div>
-        )}
-
-        {!isGuest && (model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && showPersonality && (
-          <div className="px-4 py-3 border-b border-gray-800 bg-gray-900/50">
-            <div className="flex items-center justify-between mb-2">
-              <p className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-primary-400" /> Model Personality
-              </p>
-              <button
-                onClick={async () => {
-                  setSavingPersonality(true)
-                  try { await api.patch('/auth/me', { ai_personality: personality }); toast.success('Saved as your default personality') }
-                  catch { toast.error('Could not save') }
-                  finally { setSavingPersonality(false) }
-                }}
-                disabled={savingPersonality}
-                className="btn-ghost text-xs gap-1 p-1.5 text-gray-400">
-                {savingPersonality ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Save as default
-              </button>
-            </div>
-            <PersonalitySliders value={personality} onChange={setPersonality} />
-            <p className="text-xs text-gray-500 mt-2">Shapes the model's voice and sampling for this chat. Branded variants enforce their own behaviour.</p>
-          </div>
-        )}
-
-        {/* Messages */}
-        {messages.length === 0 ? (
-          <div ref={scrollRef} className="flex-1 flex flex-col items-center justify-center px-4">
-            <div className="max-w-lg w-full text-center space-y-4">
-              <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-primary-500/20 to-secondary-500/20 flex items-center justify-center">
-                <AiSparkle size={32} active />
-              </div>
-              <div>
-                {greetingLoading ? (
-                  <div className="flex flex-col items-center justify-center gap-3 py-6">
-                    <span className="inline-block w-5 h-5 border-2 border-gray-600 border-t-primary-400 rounded-full animate-spin" />
-                    <span className="text-sm text-gray-500">Thinking of a greeting…</span>
-                  </div>
-                ) : (
-                  <>
-                    <h1 className="text-2xl font-semibold text-gray-100 leading-relaxed">{greeting}</h1>
-                    <p className="text-sm text-gray-500 mt-3 max-w-md mx-auto">
-                      I'm HexaLLM — code, write, analyze, create. Pick a model and start chatting.
-                    </p>
-                  </>
-                )}
-              </div>
-              {variants.some(v => v.ready) && (
-                <div className="flex flex-wrap gap-2 justify-center pt-1">
-                  {variants.filter(v => v.ready).map(v => {
-                    const Icon = VARIANT_ICONS[v.id] || Sparkles
-                    return (
-                      <button key={v.id} onClick={() => setModel(v.id)}
-                        className={clsx('flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs border transition-colors',
-                          model === v.id ? 'bg-primary-900/40 border-primary-700 text-primary-200' : 'bg-gray-900 border-gray-800 text-gray-400 hover:border-gray-700')}>
-                        <Icon className="w-3 h-3" />{v.label}
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-            <div ref={bottomRef} />
-          </div>
-        ) : (
-          <div className="flex-1 relative min-h-0">
-            <div ref={scrollRef} onScroll={onMessagesScroll} className="h-full overflow-y-auto py-4">
-              <div className="max-w-3xl mx-auto space-y-5 px-4">
-                {messages.map((msg, i) => (
-                  <MessageBubble
-                    key={i} msg={msg} index={i}
-                    isLast={i === messages.length - 1}
-                    isActive={(streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
-                    streamPhase={streamPhase} warmingModel={warmingModel} sending={sending}
-                    onRegenerate={regenerate}
-                    isCliActive={false}
-                    activity={i === messages.length - 1 ? streamActivity : null}
-                    activitySince={i === messages.length - 1 ? activitySince : null}
-                    reasoningPhase={reasoningPhase && i === messages.length - 1}
-                  />
-                ))}
-
-                {isStreaming && (
-                  <div className="flex justify-center">
-                    <button onClick={stopGeneration} className="btn-secondary text-xs gap-1.5 py-1.5">
-                      <Square className="w-3 h-3 fill-current" />Stop generating
-                    </button>
-                  </div>
-                )}
-
-                <div ref={bottomRef} />
-              </div>
-            </div>
-            {showJump && (
-              <button onClick={jumpToLatest}
-                className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 inline-flex items-center gap-1.5 rounded-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 text-xs py-1.5 px-3 shadow-lg transition-colors">
-                <ChevronDown className="w-3.5 h-3.5" /> Jump to latest
-              </button>
-            )}
-          </div>
-        )}
-
-        {/* Attachment preview */}
-        {attachment && messages.length > 0 && (
-          <div className="px-4 py-2 border-t border-gray-800 bg-gray-900/60 flex items-center gap-3">
-            {attachment.preview ? <img src={attachment.preview} alt="attachment" className="w-10 h-10 object-cover rounded" /> : <FileText className="w-5 h-5 text-gray-500 flex-shrink-0" />}
-            <span className="text-xs text-gray-400 flex-1 truncate">{attachment.name}</span>
-            <button onClick={() => setAttachment(null)} className="text-gray-600 hover:text-gray-400"><X className="w-4 h-4" /></button>
-          </div>
-        )}
-
-        {/* Input bar */}
-        <div className={messages.length === 0 ? 'px-4 pb-8 pt-2' : 'px-4 py-3 border-t border-gray-800 bg-gray-900'}>
-          {isGuest && guestBlocked ? (
-            <div className="max-w-xl mx-auto text-center py-3 px-4 rounded-xl border border-primary-800/50 bg-primary-900/20">
-              <Lock className="w-5 h-5 text-primary-400 mx-auto mb-2" />
-              <p className="text-sm text-gray-200 font-medium">You've used today's free guest tokens</p>
-              <p className="text-xs text-gray-400 mt-1">Create a free account to keep chatting — plus saved history, file uploads, and image generation.</p>
-              <div className="flex items-center justify-center gap-2 mt-3">
-                <Link to="/register" className="btn-primary py-1.5 px-4 text-sm">Create free account</Link>
-                <Link to="/login" className="btn-ghost py-1.5 px-3 text-sm">Sign in</Link>
-              </div>
-            </div>
-          ) : (
-          <div className={clsx('flex items-end gap-2 mx-auto', messages.length === 0 ? 'max-w-xl bg-gray-800/40 border border-gray-700/50 rounded-xl px-4 py-3.5 shadow-lg shadow-black/10' : 'max-w-3xl bg-gray-800/30 border border-gray-700/40 rounded-xl px-3 py-2')}>
+      ) : (
+        <>
+          <div className="flex items-end gap-2 px-3 py-2.5">
             <input ref={fileInputRef} type="file" accept="image/*,.pdf,.txt,.md" className="hidden" onChange={handleFile} />
             {!isGuest && (
               <button onClick={() => fileInputRef.current?.click()} className="btn-ghost p-2 flex-shrink-0" title="Attach file or image">
@@ -1482,9 +1129,290 @@ export default function ChatPage() {
               </button>
             )}
           </div>
+
+          {/* Chips row */}
+          <div className="flex flex-wrap items-center gap-1.5 px-3 pb-2.5">
+            {variants.filter(v => v.ready).map(v => {
+              const Icon = VARIANT_ICONS[v.id] || Sparkles
+              return (
+                <button key={v.id} onClick={() => onModelChange(v.id)}
+                  className={clsx('inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border transition-colors',
+                    model === v.id ? 'bg-primary-900/40 border-primary-700 text-primary-200' : 'bg-gray-900 border-gray-800 text-gray-400 hover:border-gray-700')}>
+                  <Icon className="w-3 h-3" />{v.label}
+                </button>
+              )
+            })}
+            {hasRawAccess && ollamaModels.length > 0 && (
+              <select value={model} onChange={(e) => onModelChange(e.target.value)}
+                className="bg-gray-900 border border-gray-800 rounded-md px-1.5 py-1 text-xs text-gray-400 focus:outline-none">
+                <optgroup label="Models (direct)">
+                  {ollamaModels.map((m) => <option key={m} value={m}>{m}</option>)}
+                </optgroup>
+              </select>
+            )}
+            {!isGuest && (
+              <button onClick={() => setWebSearch(w => !w)} title={webSearch ? 'Web search on' : 'Web search off'}
+                className={clsx('inline-flex items-center gap-1 text-xs px-2.5 py-1 rounded-lg border transition-colors',
+                  webSearch ? 'bg-primary-900/40 text-primary-300 border-primary-700' : 'bg-gray-900 border-gray-800 text-gray-400 hover:border-gray-700')}>
+                <Globe className="w-3.5 h-3.5" /><span className="hidden sm:inline">Web</span>
+              </button>
+            )}
+            {!isGuest && (
+              <button onClick={() => setShowTemplates(!showTemplates)} className="btn-ghost text-xs gap-1 p-1.5" title="Prompt templates">
+                <BookMarked className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Templates</span>
+              </button>
+            )}
+            {(model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && (
+              <button onClick={() => setShowSystem(!showSystem)} className="btn-ghost text-xs gap-1 p-1.5">
+                <ChevronDown className={clsx('w-3 h-3 transition-transform', showSystem && 'rotate-180')} />
+                <span className="hidden sm:inline">System</span>
+              </button>
+            )}
+            {(model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && (
+              <button onClick={() => setShowPersonality(!showPersonality)} className="btn-ghost text-xs gap-1 p-1.5 relative" title="Personality">
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Personality</span>
+                {personalityActive(personality) && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary-400" />}
+              </button>
+            )}
+            {hasRawAccess && (
+              <button onClick={() => setShowAdvanced(!showAdvanced)} className={clsx('btn-ghost text-xs gap-1 p-1.5', showAdvanced && 'bg-primary-900/30')} title="Advanced Ollama params">
+                <Sliders className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Params</span>
+                {Object.keys(ollamaOptions).length > 0 && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary-400" />}
+              </button>
+            )}
+            {messages.length > 0 && (
+              <button onClick={exportConversation} className="btn-ghost p-1.5 ml-auto" title="Export as Markdown">
+                <Download className="w-4 h-4" />
+              </button>
+            )}
+          </div>
+
+          {showTemplates && (
+            <div className="mx-3 mb-3 bg-gray-900 border border-gray-700 rounded-xl shadow-2xl p-3 space-y-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Saved templates</p>
+              {templates.length === 0 && <p className="text-xs text-gray-600">No templates yet.</p>}
+              {templates.map((t) => (
+                <div key={t.id} onClick={() => applyTemplate(t)} className="flex items-center gap-2 px-2 py-1.5 rounded-lg cursor-pointer hover:bg-gray-800 group">
+                  <span className="flex-1 text-sm text-gray-300 truncate">{t.name}</span>
+                  <button onClick={(e) => deleteTemplate(t.id, e)} className="opacity-0 group-hover:opacity-100 hover:text-red-400"><X className="w-3 h-3" /></button>
+                </div>
+              ))}
+              {systemPrompt.trim() && (
+                <div className="pt-2 border-t border-gray-800 flex gap-2">
+                  <input value={newTemplateName} onChange={e => setNewTemplateName(e.target.value)} placeholder="Template name…" className="input text-xs flex-1 py-1" onKeyDown={e => e.key === 'Enter' && saveTemplate()} />
+                  <button onClick={saveTemplate} className="btn-primary text-xs px-2 py-1">Save</button>
+                </div>
+              )}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  )
+
+  const panels = (
+    <>
+      {(model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && showSystem && (
+        <div className="mt-2 rounded-xl border border-gray-800 bg-gray-900/50 p-3">
+          <textarea value={systemPrompt} onChange={e => setSystemPrompt(e.target.value)} placeholder="You are a helpful assistant that…" rows={2} className="input text-sm resize-none" />
+          <p className="text-xs text-gray-500 mt-1">Custom variant & direct models use this system prompt. Branded variants enforce their own behaviour.</p>
+        </div>
+      )}
+      {!isGuest && (model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && showPersonality && (
+        <div className="mt-2 rounded-xl border border-gray-800 bg-gray-900/50 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs font-semibold text-gray-300 flex items-center gap-1.5">
+              <SlidersHorizontal className="w-3.5 h-3.5 text-primary-400" /> Model Personality
+            </p>
+            <button
+              onClick={async () => {
+                setSavingPersonality(true)
+                try { await api.patch('/auth/me', { ai_personality: personality }); toast.success('Saved as your default personality') }
+                catch { toast.error('Could not save') }
+                finally { setSavingPersonality(false) }
+              }}
+              disabled={savingPersonality}
+              className="btn-ghost text-xs gap-1 p-1.5 text-gray-400">
+              {savingPersonality ? <Loader2 className="w-3 h-3 animate-spin" /> : <Sparkles className="w-3 h-3" />} Save as default
+            </button>
+          </div>
+          <PersonalitySliders value={personality} onChange={setPersonality} />
+          <p className="text-xs text-gray-500 mt-2">Shapes the model's voice and sampling for this chat. Branded variants enforce their own behaviour.</p>
+        </div>
+      )}
+      {hasRawAccess && showAdvanced && (
+        <div className="mt-2 rounded-xl border border-gray-800 bg-gray-900/50 p-4">
+          <p className="text-xs font-semibold text-gray-300 mb-3 flex items-center gap-1.5">
+            <Sliders className="w-3.5 h-3.5 text-primary-400" /> Advanced Ollama Params
+          </p>
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+            {[
+              { key: 'num_ctx', label: 'Context Length', type: 'number', min: 2048, max: 65536, step: 2048 },
+              { key: 'top_k', label: 'Top K', type: 'number', min: 1, max: 100, step: 1 },
+              { key: 'repeat_penalty', label: 'Repeat Penalty', type: 'number', min: 0.1, max: 2, step: 0.1 },
+              { key: 'frequency_penalty', label: 'Freq Penalty', type: 'number', min: 0, max: 2, step: 0.1 },
+              { key: 'presence_penalty', label: 'Presence Penalty', type: 'number', min: 0, max: 2, step: 0.1 },
+              { key: 'seed', label: 'Seed (0=random)', type: 'number', min: 0, max: 2147483647, step: 1 },
+              { key: 'mirostat', label: 'Mirostat', type: 'select', options: [{value: 0, label: 'Off'}, {value: 1, label: 'Mirostat 1'}, {value: 2, label: 'Mirostat 2'}] },
+            ].map(({ key, label, type, min, max, step, options }) => (
+              <div key={key}>
+                <label className="text-xs text-gray-500 block mb-0.5">{label}</label>
+                {type === 'select' ? (
+                  <select
+                    value={typeof ollamaOptions[key] === 'number' ? ollamaOptions[key] as number : 0}
+                    onChange={(e) => setOllamaOptions(o => ({...o, [key]: parseInt(e.target.value)}))}
+                    className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 w-full"
+                  >
+                    {options?.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                ) : (
+                  <input
+                    type={type} min={min} max={max} step={step}
+                    value={typeof ollamaOptions[key] === 'number' ? ollamaOptions[key] as number : ''}
+                    onChange={(e) => {
+                      const raw = e.target.value
+                      if (raw === '') {
+                        const next = {...ollamaOptions}; delete next[key]; setOllamaOptions(next)
+                      } else {
+                        setOllamaOptions(o => ({...o, [key]: type === 'number' ? parseFloat(raw) : raw}))
+                      }
+                    }}
+                    placeholder="Default"
+                    className="bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-gray-200 w-full"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+          <div className="flex items-center gap-2 mt-3">
+            <button onClick={() => setOllamaOptions({})} className="btn-ghost text-xs px-2 py-1 text-gray-500 hover:text-gray-300">Reset all</button>
+            <p className="text-xs text-gray-600">Applies when using direct models. HexaLLM variants ignore these.</p>
+          </div>
+        </div>
+      )}
+    </>
+  )
+
+  return (
+    <div className="flex flex-col h-full">
+      {/* Guest trial banner */}
+      {isGuest && (
+        <div className="px-4 py-2 border-b border-gray-800 bg-gradient-to-r from-primary-900/20 to-secondary-900/10 flex items-center gap-2 flex-wrap text-xs">
+          <Sparkle className="w-3.5 h-3.5 text-primary-400 flex-shrink-0" />
+          <span className="text-gray-300">
+            You're chatting as a guest.{' '}
+            {guestRemaining != null
+              ? <span className="text-primary-300 font-medium">{guestRemaining.toLocaleString()} free tokens left today.</span>
+              : <span className="text-gray-400">Sign in to save chats, attach files, and generate images.</span>}
+          </span>
+          <span className="flex items-center gap-2 ml-auto">
+            <Link to="/login" className="text-gray-400 hover:text-gray-200 transition-colors">Sign in</Link>
+            <Link to="/register" className="btn-primary py-1 px-2.5">Create free account</Link>
+          </span>
+        </div>
+      )}
+
+      {/* Composer pinned above the thread (Gemini-style) */}
+      {messages.length > 0 && (
+        <div className="flex-shrink-0 w-full max-w-3xl mx-auto px-4 pt-4 pb-1">
+          {attachment && (
+            <div className="flex items-center gap-3 px-3 py-2 mb-2 rounded-xl border border-gray-800 bg-gray-900/60">
+              {attachment.preview ? <img src={attachment.preview} alt="attachment" className="w-10 h-10 object-cover rounded" /> : <FileText className="w-5 h-5 text-gray-500 flex-shrink-0" />}
+              <span className="text-xs text-gray-400 flex-1 truncate">{attachment.name}</span>
+              <button onClick={() => setAttachment(null)} className="text-gray-600 hover:text-gray-400"><X className="w-4 h-4" /></button>
+            </div>
+          )}
+          {composer}
+          {panels}
+        </div>
+      )}
+
+      {/* Messages / empty state */}
+      {messages.length === 0 ? (
+        <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
+          <div className="min-h-full flex flex-col items-center justify-center px-4 py-10">
+            <div className="max-w-2xl w-full flex flex-col items-center">
+              <div className="w-16 h-16 mb-5 rounded-2xl bg-gradient-to-br from-primary-500/20 to-secondary-500/20 flex items-center justify-center">
+                <AiSparkle size={32} active />
+              </div>
+              {greetingLoading ? (
+                <div className="flex flex-col items-center justify-center gap-3 py-6">
+                  <span className="inline-block w-5 h-5 border-2 border-gray-600 border-t-primary-400 rounded-full animate-spin" />
+                  <span className="text-sm text-gray-500">Thinking of a greeting…</span>
+                </div>
+              ) : (
+                <>
+                  <h1 className="text-2xl font-semibold text-gray-100 leading-relaxed text-center">{greeting}</h1>
+                  <p className="text-sm text-gray-500 mt-3 max-w-md mx-auto text-center">
+                    I'm HexaLLM — code, write, analyze, create. Pick a model and start chatting.
+                  </p>
+                </>
+              )}
+
+              <div className="w-full mt-6">
+                {attachment && (
+                  <div className="flex items-center gap-3 px-3 py-2 mb-2 rounded-xl border border-gray-800 bg-gray-900/60">
+                    {attachment.preview ? <img src={attachment.preview} alt="attachment" className="w-10 h-10 object-cover rounded" /> : <FileText className="w-5 h-5 text-gray-500 flex-shrink-0" />}
+                    <span className="text-xs text-gray-400 flex-1 truncate">{attachment.name}</span>
+                    <button onClick={() => setAttachment(null)} className="text-gray-600 hover:text-gray-400"><X className="w-4 h-4" /></button>
+                  </div>
+                )}
+                {composer}
+                {panels}
+              </div>
+
+              <div className="mt-5 grid sm:grid-cols-2 gap-2 w-full">
+                {SUGGESTIONS.map((s) => (
+                  <button key={s} onClick={() => pickSuggestion(s)}
+                    className="text-left rounded-xl border border-gray-800 bg-gray-900/60 hover:border-primary-500/50 hover:bg-gray-900 px-4 py-3 text-sm text-gray-300 transition-colors">
+                    {s}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div ref={bottomRef} />
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 min-h-0 relative">
+          <div ref={scrollRef} onScroll={onMessagesScroll} className="h-full overflow-y-auto py-6">
+            <div className="max-w-3xl mx-auto space-y-5 px-4">
+              {messages.map((msg, i) => (
+                <MessageBubble
+                  key={i} msg={msg} index={i}
+                  isLast={i === messages.length - 1}
+                  isActive={(streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
+                  streamPhase={streamPhase} warmingModel={warmingModel} sending={sending}
+                  onRegenerate={regenerate}
+                  isCliActive={false}
+                  activity={i === messages.length - 1 ? streamActivity : null}
+                  activitySince={i === messages.length - 1 ? activitySince : null}
+                  reasoningPhase={reasoningPhase && i === messages.length - 1}
+                />
+              ))}
+
+              {isStreaming && (
+                <div className="flex justify-center">
+                  <button onClick={stopGeneration} className="btn-secondary text-xs gap-1.5 py-1.5">
+                    <Square className="w-3 h-3 fill-current" />Stop generating
+                  </button>
+                </div>
+              )}
+
+              <div ref={bottomRef} />
+            </div>
+          </div>
+          {showJump && (
+            <button onClick={jumpToLatest}
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 inline-flex items-center gap-1.5 rounded-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 text-xs py-1.5 px-3 shadow-lg transition-colors">
+              <ChevronDown className="w-3.5 h-3.5" /> Jump to latest
+            </button>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }
