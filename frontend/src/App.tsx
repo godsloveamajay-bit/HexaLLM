@@ -3,9 +3,11 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import { isCapacitor } from './lib/platform'
 import { DEV_FEATURES } from './lib/devFeatures'
+import { isDevSite } from './dev/isDev'
 import Layout from './components/layout/Layout'
 import MobileLayout from './components/layout/MobileLayout'
 import CommandPalette from './components/ui/CommandPalette'
+import DevPortal from './dev/DevPortal'
 
 function PageSpinner() {
   return (
@@ -66,6 +68,15 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 const AppLayout = isCapacitor() ? MobileLayout : Layout
 
 export default function App() {
+  // The dev host (dev.hexallm.co.uk / localhost) serves a completely
+  // separate developer portal — never the consumer site.
+  if (isDevSite()) {
+    return (
+      <Suspense fallback={<PageSpinner />}>
+        <DevPortal />
+      </Suspense>
+    )
+  }
   return (
     <>
       <CommandPalette />
