@@ -27,6 +27,9 @@ interface User {
   ai_default_kb_id?: number | null
   ai_reasoning?: boolean | null
   ai_personality?: Record<string, number> | null
+  // Voice mode preferences (Settings → AI Assistant)
+  voice_name?: string | null
+  voice_streaming?: boolean | null
   // Billing
   plan_id?: number | null
   subscription?: SubscriptionBrief | null

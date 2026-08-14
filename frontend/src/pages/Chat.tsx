@@ -448,7 +448,7 @@ export default function ChatPage() {
   const voiceVadRef = useRef<{ raf: number; analyser: AnalyserNode | null; inSpeech: boolean; said: boolean; lastSpeechAt: number; startAt: number } | null>(null)
   const voiceMicStateRef = useRef<'off' | 'recording' | 'paused' | 'transcribing'>('off')
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null)
-  const voiceQueueRef = useRef<HTMLAudioElement[]>([])
+  const voiceQueueRef = useRef<{ el: HTMLAudioElement; close: () => void }[]>([])
   const voiceHeldTextRef = useRef('')
   const voiceBusyRef = useRef(false)
   const voiceSpeakRef = useRef<(t: string) => void>(() => {})
@@ -1067,41 +1067,78 @@ export default function ChatPage() {
   // ── Voice mode loop ─────────────────────────────────────────────────────
   const voicePlayNext = () => {
     if (voiceAudioRef.current) return
-    const a = voiceQueueRef.current.shift()
-    if (!a) {
+    const item = voiceQueueRef.current.shift()
+    if (!item) {
       setVoiceSpeaking(false)
       voiceResumeRef.current()
       return
     }
-    voiceAudioRef.current = a
+    voiceAudioRef.current = item.el
     setVoiceSpeaking(true)
     voicePauseMic()
-    a.play().catch(() => {})
-    a.onended = () => {
-      URL.revokeObjectURL(a.src)
+    item.el.play().catch(() => {})
+    item.el.onended = () => {
+      item.close()
+      URL.revokeObjectURL(item.el.src)
       voiceAudioRef.current = null
       voicePlayNext()
     }
+  }
+
+  // Progressive playback: feed the streamed mp3 chunks into a MediaSource so
+  // the voice starts as soon as the first bytes arrive instead of waiting for
+  // the whole file. Falls back to blob playback when MSE isn't available.
+  const streamTtsInto = (resp: Response) => {
+    let ms: MediaSource
+    try { ms = new MediaSource() } catch { return }
+    const url = URL.createObjectURL(ms)
+    const player = new Audio(url)
+    const item = { el: player, close: () => { try { (ms as unknown as { close(): void }).close() } catch {} } }
+    voiceQueueRef.current.push(item)
+    voicePlayNext()
+    ms.addEventListener('sourceopen', () => {
+      let sb: SourceBuffer | null = null
+      try { sb = ms.addSourceBuffer('audio/mpeg') } catch { item.close(); URL.revokeObjectURL(url); return }
+      const reader = resp.body!.getReader()
+      const pump = async () => {
+        try {
+          const { done, value } = await reader.read()
+          if (done) {
+            if (ms.readyState === 'open') ms.endOfStream()
+            return
+          }
+          if (sb!.updating) await new Promise((r) => sb!.addEventListener('updateend', r, { once: true }))
+          sb!.appendBuffer(value)
+          pump()
+        } catch { item.close() }
+      }
+      pump()
+    })
   }
 
   const speakText = async (text: string) => {
     if (!voiceModeRef.current) return
     const clean = text.replace(/[#*`_~>\[\]|]/g, ' ').replace(/\s+/g, ' ').trim()
     if (!clean) return
+    const streaming = !!user?.voice_streaming && typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported('audio/mpeg')
     try {
       const tok = localStorage.getItem('token')
       const headers: Record<string, string> = { 'Content-Type': 'application/json' }
       if (tok) headers.Authorization = `Bearer ${tok}`
-      const resp = await fetch(`${baseURL}/voice/synthesize`, {
-        method: 'POST', headers, body: JSON.stringify({ text: clean.slice(0, 3000) }),
+      const voice = user?.voice_name || undefined
+      const resp = await fetch(`${baseURL}${streaming ? '/voice/stream' : '/voice/synthesize'}`, {
+        method: 'POST', headers, body: JSON.stringify({ text: clean.slice(0, 3000), voice }),
       })
       if (!resp.ok) throw new Error('tts')
-      const blob = await resp.blob()
-      if (!blob.size) throw new Error('tts')
-      const url = URL.createObjectURL(blob)
-      const a = new Audio(url)
-      voiceQueueRef.current.push(a)
-      voicePlayNext()
+      if (streaming) {
+        streamTtsInto(resp)
+      } else {
+        const blob = await resp.blob()
+        if (!blob.size) throw new Error('tts')
+        const url = URL.createObjectURL(blob)
+        voiceQueueRef.current.push({ el: new Audio(url), close: () => {} })
+        voicePlayNext()
+      }
     } catch {
       // Synthesis failed — don't leave the mic paused forever.
       if (!voiceQueueRef.current.length && !voiceAudioRef.current) voiceResumeRef.current()
@@ -1263,7 +1300,7 @@ export default function ChatPage() {
   }
 
   const stopVoiceTts = () => {
-    voiceQueueRef.current.forEach(a => { try { a.pause() } catch {} URL.revokeObjectURL(a.src) })
+    voiceQueueRef.current.forEach(i => { try { i.el.pause() } catch {} i.close(); URL.revokeObjectURL(i.el.src) })
     voiceQueueRef.current = []
     if (voiceAudioRef.current) {
       try { voiceAudioRef.current.pause() } catch {}

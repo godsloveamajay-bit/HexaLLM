@@ -24,6 +24,8 @@ class User(Base):
     ai_default_kb_id = Column(Integer, nullable=True) # default knowledge base for new chats
     ai_reasoning = Column(Boolean, nullable=True)     # show extended thinking (null/true = on)
     ai_personality = Column(JSON, nullable=True)       # default Personality Engine sliders {trait: 0..100}
+    voice_name = Column(String, nullable=True)         # preferred TTS voice for voice mode
+    voice_streaming = Column(Boolean, nullable=True)   # stream TTS audio instead of full-blob
     is_active = Column(Boolean, default=True)
     is_admin = Column(Boolean, default=False)
     # Session revocation — bumped on logout to invalidate all issued JWTs at once

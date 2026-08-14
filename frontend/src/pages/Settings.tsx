@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, ExternalLink, Lock, Palette, Sun, Moon, MonitorSmartphone, Sparkles, CreditCard, Zap } from 'lucide-react'
+import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, ExternalLink, Lock, Palette, Sun, Moon, MonitorSmartphone, Sparkles, CreditCard, Zap, AudioLines } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
@@ -7,6 +7,28 @@ import { useNavigate } from 'react-router-dom'
 import { isTauri, isCapacitor } from '../lib/platform'
 import { useTheme, type Theme } from '../lib/theme'
 import UserAvatar from '../components/ui/UserAvatar'
+
+// Curated subset of edge-tts' free Microsoft neural voices (ShortName = value).
+// The backend validates the value against the full live catalog before use.
+const TTS_VOICES: { id: string; label: string }[] = [
+  { id: 'en-US-JennyNeural', label: 'Jenny — US female' },
+  { id: 'en-US-AriaNeural', label: 'Aria — US female' },
+  { id: 'en-US-GuyNeural', label: 'Guy — US male' },
+  { id: 'en-US-ChristopherNeural', label: 'Christopher — US male' },
+  { id: 'en-US-EmmaMultilingualNeural', label: 'Emma — US multilingual' },
+  { id: 'en-GB-SoniaNeural', label: 'Sonia — UK female' },
+  { id: 'en-GB-RyanNeural', label: 'Ryan — UK male' },
+  { id: 'en-AU-NatashaNeural', label: 'Natasha — AU female' },
+  { id: 'en-CA-ClaraNeural', label: 'Clara — CA female' },
+  { id: 'en-IN-NeerjaNeural', label: 'Neerja — IN female' },
+  { id: 'de-DE-KatjaNeural', label: 'Katja — German female' },
+  { id: 'es-ES-ElviraNeural', label: 'Elvira — Spanish female' },
+  { id: 'fr-FR-DeniseNeural', label: 'Denise — French female' },
+  { id: 'it-IT-ElsaNeural', label: 'Elsa — Italian female' },
+  { id: 'pt-BR-FranciscaNeural', label: 'Francisca — Brazilian female' },
+  { id: 'ja-JP-NanamiNeural', label: 'Nanami — Japanese female' },
+  { id: 'zh-CN-XiaoxiaoNeural', label: 'Xiaoxiao — Mandarin female' },
+]
 
 const THEME_OPTIONS: { value: Theme; label: string; icon: typeof Sun; hint: string }[] = [
   { value: 'light', label: 'Light', icon: Sun, hint: 'Warm cream' },
@@ -39,6 +61,8 @@ export default function SettingsPage() {
     ai_temperature: typeof user?.ai_temperature === 'number' ? user!.ai_temperature! : 0.7,
     ai_max_tokens: typeof user?.ai_max_tokens === 'number' ? user!.ai_max_tokens! : 0, // 0 = model default
     ai_reasoning: user?.ai_reasoning !== false,                                         // default on
+    voice_name: user?.voice_name || '',                                                 // '' = server default
+    voice_streaming: user?.voice_streaming === true,
   })
   const [aiSaving, setAiSaving] = useState(false)
 
@@ -56,6 +80,8 @@ export default function SettingsPage() {
         ai_temperature: aiForm.ai_temperature,
         ai_max_tokens: aiForm.ai_max_tokens || null,        // 0 → model default
         ai_reasoning: aiForm.ai_reasoning,
+        voice_name: aiForm.voice_name || null,
+        voice_streaming: aiForm.voice_streaming,
       })
       await fetchMe()
       toast.success('AI settings saved!')
@@ -317,6 +343,46 @@ export default function SettingsPage() {
             >
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiForm.ai_reasoning ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
+          </div>
+
+          <div className="pt-4 border-t border-gray-800">
+            <div className="flex items-center gap-2 mb-1">
+              <AudioLines className="w-4 h-4 text-primary-400" />
+              <h3 className="text-sm font-semibold text-gray-100">Voice mode</h3>
+            </div>
+            <div className="mt-4">
+              <label className="label">Assistant voice</label>
+              <select
+                className="input"
+                value={aiForm.voice_name}
+                onChange={(e) => setAiForm((f) => ({ ...f, voice_name: e.target.value }))}
+              >
+                <option value="">Default (Jenny, US female)</option>
+                {TTS_VOICES.map((v) => (
+                  <option key={v.id} value={v.id}>{v.label}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                The voice spoken aloud in Chat's voice mode. Free Microsoft neural voices — no downloads.
+              </p>
+            </div>
+            <div className="flex items-center justify-between gap-4 mt-4">
+              <div>
+                <label className="label mb-0">Stream speech</label>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Start talking as soon as the first audio arrives instead of waiting for the whole reply.
+                </p>
+              </div>
+              <button
+                type="button"
+                role="switch"
+                aria-checked={aiForm.voice_streaming}
+                onClick={() => setAiForm((f) => ({ ...f, voice_streaming: !f.voice_streaming }))}
+                className={`relative inline-flex h-6 w-11 flex-shrink-0 items-center rounded-full transition-colors ${aiForm.voice_streaming ? 'bg-primary-600' : 'bg-gray-600'}`}
+              >
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${aiForm.voice_streaming ? 'translate-x-6' : 'translate-x-1'}`} />
+              </button>
+            </div>
           </div>
 
           <button type="submit" disabled={aiSaving} className="btn-primary">

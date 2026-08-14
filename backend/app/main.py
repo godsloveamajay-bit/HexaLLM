@@ -54,6 +54,10 @@ def _migrate_db():
             conn.execute(text("ALTER TABLE users ADD COLUMN ai_reasoning BOOLEAN"))
         if "ai_personality" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN ai_personality JSON"))
+        if "voice_name" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN voice_name VARCHAR"))
+        if "voice_streaming" not in user_cols:
+            conn.execute(text("ALTER TABLE users ADD COLUMN voice_streaming BOOLEAN"))
 
         # Drop the NOT NULL constraint on hashed_password by recreating the table.
         # SQLite cannot ALTER a column constraint, so we use the recommended rename approach.

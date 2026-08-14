@@ -53,6 +53,8 @@ class UserOut(BaseModel):
     ai_default_kb_id: Optional[int] = None
     ai_reasoning: Optional[bool] = None
     ai_personality: Optional[Dict[str, int]] = None
+    voice_name: Optional[str] = None
+    voice_streaming: Optional[bool] = None
     # Billing
     plan_id: Optional[int] = None
     subscription: Optional[SubscriptionBrief] = None
@@ -72,6 +74,8 @@ class UserUpdate(BaseModel):
     ai_default_kb_id: Optional[int] = None
     ai_reasoning: Optional[bool] = None
     ai_personality: Optional[Dict[str, int]] = None
+    voice_name: Optional[str] = None
+    voice_streaming: Optional[bool] = None
 
 
 class PasswordChange(BaseModel):
