@@ -241,7 +241,10 @@ function MessageBubble({
   }
 
   return (
-    <div className={clsx('flex gap-3 group msg-in', msg.role === 'user' ? 'flex-row-reverse' : '')}>
+    <div
+      data-live-bubble={isLast && streaming ? 'true' : undefined}
+      className={clsx('flex gap-3 group msg-in', msg.role === 'user' ? 'flex-row-reverse' : '')}
+    >
       {/* Avatar */}
       {msg.role === 'user' ? (
         <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-primary-600 shadow">
@@ -558,9 +561,29 @@ export default function ChatPage() {
   // yanking the view down while they tried to read earlier replies.
   useEffect(() => { if (atBottomRef.current) bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [messages])
 
+  // Follow mode: while a reply streams, the live bubble is pinned to the bottom
+  // edge of the viewport. Scrolling UP is free (read earlier replies), but
+  // scrolling down stops at the bubble — it follows you down, so the answer
+  // never disappears under the fold while you read. The clamp releases as soon
+  // as generation finishes.
+  const clampFollow = useCallback(() => {
+    if (streamPhase === 'idle' && !sending) return
+    const el = scrollRef.current
+    if (!el) return
+    const bub = el.querySelector('[data-live-bubble]')
+    if (!bub) return
+    const viewportTop = el.getBoundingClientRect().top
+    const bubbleBottom = (bub as HTMLElement).getBoundingClientRect().bottom - viewportTop + el.scrollTop
+    const maxScroll = bubbleBottom - el.clientHeight + 24
+    if (el.scrollTop > maxScroll) el.scrollTop = maxScroll
+  }, [streamPhase, sending])
+
+  useEffect(() => { clampFollow() }, [messages, streamPhase, sending, clampFollow])
+
   const onMessagesScroll = () => {
     const el = scrollRef.current
     if (!el) return
+    clampFollow()
     const near = el.scrollHeight - el.scrollTop - el.clientHeight < 120
     atBottomRef.current = near
     setShowJump(!near)
