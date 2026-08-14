@@ -59,6 +59,24 @@ def my_models(db: Session = Depends(get_db), current_user: User = Depends(get_cu
     return result
 
 
+@router.get("/slug/{slug}", response_model=ModelOut)
+def get_model_by_slug(
+    slug: str,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """Public share link: a hub model by its unique slug. Private models are
+    only visible to their owner; anything else 404s (no existence leak)."""
+    m = db.query(AIModel).filter(AIModel.slug == slug).first()
+    if not m or (not m.is_public and (not current_user or m.owner_id != current_user.id)):
+        raise HTTPException(status_code=404, detail="Model not found")
+    m.downloads = (m.downloads or 0) + 1
+    db.commit()
+    out = ModelOut.model_validate(m)
+    out.owner_username = m.owner.username if m.owner else None
+    return out
+
+
 @router.post("", response_model=ModelOut, status_code=201)
 def create_model(
     data: ModelCreate,

@@ -431,6 +431,7 @@ export default function ChatPage() {
   const [systemPrompt, setSystemPrompt] = useState('')
   const [showSystem, setShowSystem] = useState(false)
   const [variants, setVariants] = useState<HexaLLMVariant[]>([])
+  const [hubModels, setHubModels] = useState<{ slug: string; name: string }[]>([])
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [attachment, setAttachment] = useState<Attachment | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
@@ -509,7 +510,7 @@ export default function ChatPage() {
 
   useEffect(() => {
     // Model lists are public; everything else is account-bound, so guests skip it.
-    loadVariants(); loadOllamaModels()
+    loadVariants(); loadOllamaModels(); loadHubModels()
     if (!isGuest) {
       fetchSessions(); loadTemplates()
     }
@@ -539,7 +540,18 @@ export default function ChatPage() {
     if (sessions.length > 0) requestSession(sessions[0].id)
   }, [isGuest, sessionsLoaded, wantsNew, sessions.length, activeId])
 
+  // A share link / "Use in Chat" deep-link (?model=custom:<slug>) selects the
+  // Model Hub entry — the backend resolves it; we just surface its label.
+  const modelParam = searchParams.get('model')
   useEffect(() => {
+    if (modelParam && modelParam.startsWith('custom:')) {
+      setModel(modelParam)
+      navigate('/chat', { replace: true })
+    }
+  }, [modelParam])
+
+  useEffect(() => {
+    if (model.startsWith('custom:')) return
     if (variants.length > 0 && sessions.length === 0) {
       // Prefer the user's configured default model when it's available,
       // otherwise fall back to the first ready variant.
@@ -549,7 +561,7 @@ export default function ChatPage() {
       if (prefReady) setModel(pref!)
       else if (first) setModel(first.id)
     }
-  }, [variants, sessions, user])
+  }, [variants, sessions, user, model])
 
   useEffect(() => {
     if (messages.length > 0) return
@@ -589,6 +601,12 @@ export default function ChatPage() {
 
   const loadVariants = async () => {
     try { const { data } = await api.get('/models/hexallm/variants'); setVariants(data.variants || []) } catch {}
+  }
+  const loadHubModels = async () => {
+    try {
+      const { data } = await api.get('/models')
+      setHubModels((data || []).map((m: any) => ({ slug: m.slug, name: m.name })))
+    } catch {}
   }
   const loadTemplates = async () => {
     try { const { data } = await api.get('/templates'); setTemplates(data) } catch {}
@@ -1489,6 +1507,14 @@ export default function ChatPage() {
                 </button>
               )
             })}
+            {hubModels.length > 0 && (
+              <select value={model} onChange={(e) => onModelChange(e.target.value)}
+                className="bg-gray-900 border border-gray-800 rounded-md px-1.5 py-1 text-xs text-gray-400 focus:outline-none">
+                <optgroup label="Model Hub">
+                  {hubModels.map((m) => <option key={m.slug} value={`custom:${m.slug}`}>{m.name}</option>)}
+                </optgroup>
+              </select>
+            )}
             {hasRawAccess && ollamaModels.length > 0 && (
               <select value={model} onChange={(e) => onModelChange(e.target.value)}
                 className="bg-gray-900 border border-gray-800 rounded-md px-1.5 py-1 text-xs text-gray-400 focus:outline-none">

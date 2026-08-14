@@ -27,6 +27,7 @@ const ResetPage        = lazy(() => import('./pages/ResetPassword'))
 const SharePage        = lazy(() => import('./pages/Share'))
 const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallback'))
 const DownloadsPage    = lazy(() => import('./pages/Downloads'))
+const SharedModelPage  = lazy(() => import('./pages/SharedModel'))
 
 // Authenticated pages — all lazy-loaded so the initial bundle stays tiny
 const ChatPage       = lazy(() => import('./pages/Chat'))
@@ -93,6 +94,7 @@ export default function App() {
           <Route path="/oauth/callback"  element={<OAuthCallbackPage />} />
           <Route path="/pricing"        element={<PricingPage />} />
           <Route path="/downloads"      element={<DownloadsPage />} />
+          <Route path="/models/:slug"   element={<SharedModelPage />} />
 
           {/* One layout for everything. Chat is open to guests (limited);
               every other page is wrapped in PrivateRoute so it stays gated. */}

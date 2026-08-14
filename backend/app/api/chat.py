@@ -13,6 +13,7 @@ from typing import AsyncIterator, Dict, List, Optional, Tuple
 from ..core.database import get_db
 from ..core.security import get_current_user, get_optional_user
 from ..models.user import User
+from ..models.model import AIModel
 from ..models.chat import ChatSession, ChatMessage, RequestLog
 from ..schemas.chat import (
     ChatRequest, ChatSessionCreate, ChatSessionOut, ChatMessageOut, ImageIntentIn,
@@ -204,6 +205,26 @@ async def _apply_router(req: ChatRequest):
     )
 
 
+def _resolve_hub_model(req: ChatRequest, db: Session, current_user: Optional[User]):
+    """Model Hub models arrive as model='custom:<slug>'. Resolve the hub
+    entry: swap in its base (variant or raw) for routing and return it so its
+    system prompt can be appended. Public entries are usable by anyone;
+    private ones only by their owner. None when the model isn't a hub id."""
+    if not req.model.startswith("custom:"):
+        return None
+    slug = req.model[len("custom:"):]
+    m = db.query(AIModel).filter(AIModel.slug == slug).first()
+    if not m:
+        raise HTTPException(status_code=404, detail="Model not found in the Model Hub")
+    if not m.is_public and (not current_user or m.owner_id != current_user.id):
+        raise HTTPException(status_code=403, detail="This model is private")
+    if model_router.is_variant(m.base_model):
+        req.model = m.base_model
+    else:
+        req.model = m.ollama_model_name or m.base_model
+    return m
+
+
 def _resolve_attachment(req: ChatRequest, messages: List[Dict]) -> List[str]:
     """Extract attachment from request. Mutates messages in-place for text/pdf.
     Returns list of base64 image strings for multimodal, or empty list."""
@@ -265,6 +286,13 @@ async def chat_completions(
         req.system_prompt = None
         req.web_search = False
         req.attachment_base64 = req.attachment_type = req.attachment_name = None
+
+    # Model Hub models arrive as custom:<slug>; resolve the entry before any
+    # model gating so its base is what the gates evaluate (public entries are
+    # usable by anyone; private ones only by their owner).
+    custom_model = _resolve_hub_model(req, db, current_user)
+
+    if is_guest:
         # Don't let a guest hand-pick an arbitrary/expensive direct model.
         if not model_router.is_variant(req.model):
             req.model = GUEST_DEFAULT_MODEL
@@ -298,6 +326,8 @@ async def chat_completions(
 
     # Route hex-* variants → concrete Ollama model + variant params.
     eff_model, variant_prompt, eff_temp, eff_ctx, eff_max, route_meta = await _apply_router(req)
+
+    # Route hex-* variants → concrete Ollama model + variant params.
 
     # Web-grounded answers are extractive synthesis from sources we inject, so a
     # small fast model handles them well — and on this CPU box (prefill ~2 tok/s)
@@ -374,6 +404,12 @@ async def chat_completions(
     user_supplied_prompt = req.system_prompt
 
     base_system_prompt = model_router.merge_system_prompt(variant_prompt, user_supplied_prompt)
+    if custom_model and custom_model.system_prompt:
+        hub_block = f"[Model Hub — {custom_model.name}]\n{custom_model.system_prompt}"
+        base_system_prompt = (base_system_prompt + "\n\n" + hub_block) if base_system_prompt else hub_block
+        if not is_guest and custom_model.owner_id != current_user.id:
+            custom_model.downloads = (custom_model.downloads or 0) + 1
+            db.commit()
     # Personal AI preferences (Settings → AI Assistant): the user's custom
     # instructions apply to every one of their chats. Guests have no account.
     if not is_guest and (current_user.ai_instructions or "").strip():

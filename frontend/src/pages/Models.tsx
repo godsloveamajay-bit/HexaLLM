@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Plus, Search, Download, Heart, Cpu, User, Globe, Lock, Trash2, X, Loader2 } from 'lucide-react'
+import { Plus, Search, Download, Heart, Cpu, User, Globe, Lock, Trash2, X, Loader2, Share2 } from 'lucide-react'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
 import { useAuth } from '../store/auth'
@@ -33,6 +33,16 @@ function HexMark({ className = 'w-5 h-5' }: { className?: string }) {
 
 function ModelCard({ model, onDelete, onLike, isOwner }: { model: Model; onDelete: () => void; onLike: () => void; isOwner: boolean }) {
   const { user } = useAuth()
+
+  const copyShareLink = async () => {
+    const url = `${window.location.origin}/models/${model.slug}`
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.success('Share link copied')
+    } catch {
+      toast.success(url)
+    }
+  }
   // Branded variant label; raw base names are hidden from non-admins.
   const showBase = user?.is_admin || model.base_model?.startsWith('hex-')
   return (
@@ -73,11 +83,18 @@ function ModelCard({ model, onDelete, onLike, isOwner }: { model: Model; onDelet
           <span className="flex items-center gap-1"><Download className="w-3.5 h-3.5" />{model.downloads}</span>
           <span>{formatDistanceToNow(new Date(model.created_at), { addSuffix: true })}</span>
         </div>
-        {isOwner && (
-          <button onClick={onDelete} className="text-gray-600 hover:text-red-400 transition-colors">
-            <Trash2 className="w-3.5 h-3.5" />
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {model.is_public && (
+            <button onClick={copyShareLink} title="Copy share link" className="text-gray-500 hover:text-primary-400 transition-colors">
+              <Share2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+          {isOwner && (
+            <button onClick={onDelete} className="text-gray-600 hover:text-red-400 transition-colors">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

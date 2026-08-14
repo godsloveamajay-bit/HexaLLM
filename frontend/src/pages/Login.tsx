@@ -49,7 +49,8 @@ export default function LoginPage() {
     try {
       await login(email, password)
       const { user } = useAuth.getState()
-      navigate(user?.is_admin ? '/dashboard' : '/chat', { replace: true })
+      const next = searchParams.get('next')
+      navigate(next || (user?.is_admin ? '/dashboard' : '/chat'), { replace: true })
     } catch (err: any) {
       toast.error(parseApiError(err, 'Login failed — check your email and password.'))
     } finally {
