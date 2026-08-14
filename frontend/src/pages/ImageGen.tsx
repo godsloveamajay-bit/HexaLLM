@@ -1,8 +1,10 @@
 import { useState, useEffect } from 'react'
-import { ImageIcon, Sparkles, Download, RefreshCw, Loader2, X, Wand2 } from 'lucide-react'
+import { ImageIcon, Sparkles, Download, RefreshCw, Loader2, X, Wand2, Zap } from 'lucide-react'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
+
+type Provider = 'puter' | 'stability'
 
 interface ImageModel {
   id: string
@@ -13,8 +15,17 @@ interface GeneratedImage {
   url: string
   prompt: string
   enhancedPrompt?: string
-  seed: number
+  seed?: number
+  provider?: Provider
 }
+
+// Free, user-pays image models served through Puter.js (no API keys needed).
+const PUTER_MODELS: ImageModel[] = [
+  { id: 'openai/gpt-image-2', name: 'GPT Image 2' },
+  { id: 'google/gemini-3-pro-image-preview', name: 'Nano Banana Pro (Gemini 3)' },
+  { id: 'black-forest-labs/flux-2-klein-4b', name: 'FLUX.2 Klein 4B' },
+  { id: 'x-ai/grok-imagine-image', name: 'Grok Imagine' },
+]
 
 const SIZES = [
   { label: 'Square (1024×1024)', w: 1024, h: 1024 },
@@ -34,6 +45,8 @@ const STYLE_PRESETS = [
   { label: 'Fantasy', prefix: 'fantasy art, epic, magical, highly detailed, concept art, ' },
 ]
 
+const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
+
 export default function ImageGenPage() {
   const [prompt, setPrompt] = useState('')
   const [negativePrompt, setNegativePrompt] = useState('')
@@ -42,7 +55,8 @@ export default function ImageGenPage() {
     { id: 'sd3-core', name: 'Stable Diffusion 3.5 Core' },
     { id: 'sd3-ultra', name: 'Stable Diffusion 3.5 Ultra' },
   ])
-  const [model, setModel] = useState('sd3-core')
+  const [model, setModel] = useState('openai/gpt-image-2')
+  const [provider, setProvider] = useState<Provider>('puter')
   const [enhancePrompt, setEnhancePrompt] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [enhancing, setEnhancing] = useState(false)
@@ -51,12 +65,15 @@ export default function ImageGenPage() {
 
   useEffect(() => {
     api.get('/image/models').then(({ data }) => {
-      if (data.stability?.length) {
-        setModels(data.stability)
-        setModel(data.stability[0].id)
-      }
+      if (data.stability?.length) setModels(data.stability)
     }).catch(() => {})
   }, [])
+
+  const switchProvider = (p: Provider) => {
+    setProvider(p)
+    if (p === 'stability' && !models.some((m) => m.id === model)) setModel(models[0]?.id || 'sd3-core')
+    if (p === 'puter' && !PUTER_MODELS.some((m) => m.id === model)) setModel(PUTER_MODELS[0].id)
+  }
 
   const applyPreset = (prefix: string) => {
     setPrompt((p) => {
@@ -73,25 +90,52 @@ export default function ImageGenPage() {
     setGenerating(true)
     if (opts.enhance) setEnhancing(true)
     try {
-      const { data } = await api.post('/image/generate', {
-        prompt: opts.prompt.trim(),
-        negative_prompt: (opts.negativePrompt ?? '').trim(),
-        width: size.w,
-        height: size.h,
-        model,
-        enhance_prompt: enhancePrompt,
-      })
+      let finalPrompt = opts.prompt.trim()
+      let enhanced: string | undefined
+      if (opts.enhance) {
+        const { data } = await api.post('/image/enhance', { prompt: finalPrompt })
+        finalPrompt = data.prompt || finalPrompt
+        enhanced = finalPrompt
+      }
+
+      let url: string
+      let seed: number | undefined
+      if (provider === 'puter') {
+        const { puter } = await import('@heyputer/puter.js')
+        const g = gcd(size.w, size.h)
+        const imgEl = await puter.ai.txt2img({
+          prompt: finalPrompt,
+          model,
+          ratio: { w: size.w / g, h: size.h / g },
+          quality: 'medium',
+        })
+        if (!imgEl?.src) throw new Error('no image returned')
+        url = imgEl.src
+      } else {
+        const { data } = await api.post('/image/generate', {
+          prompt: finalPrompt,
+          negative_prompt: (opts.negativePrompt ?? '').trim(),
+          width: size.w,
+          height: size.h,
+          model,
+          enhance_prompt: false, // enhancement already applied above
+        })
+        url = data.url
+        seed = data.seed
+      }
+
       setEnhancing(false)
       const img: GeneratedImage = {
-        url: data.url,
-        prompt: data.prompt,
-        enhancedPrompt: data.enhanced_prompt ?? undefined,
-        seed: data.seed,
+        url,
+        prompt: opts.prompt,
+        enhancedPrompt: enhanced ?? undefined,
+        seed,
+        provider,
       }
       setCurrent(img)
       setHistory((h) => [img, ...h].slice(0, 12))
     } catch {
-      toast.error('Image generation failed')
+      toast.error(provider === 'puter' ? 'Image generation failed — sign in to Puter when prompted and try again' : 'Image generation failed')
     } finally {
       setGenerating(false)
       setEnhancing(false)
@@ -126,11 +170,44 @@ export default function ImageGenPage() {
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-100">Image Generation</h1>
-        <p className="text-gray-400 mt-1">Generate images from text using Stability AI</p>
+        <p className="text-gray-400 mt-1">Generate images from text with Puter (free) or Stability AI</p>
       </div>
 
       <div className="card mb-6">
         <form onSubmit={generate} className="space-y-4">
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => switchProvider('puter')}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors',
+                provider === 'puter'
+                  ? 'bg-primary-600/20 border-primary-600 text-primary-300'
+                  : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'
+              )}
+            >
+              <Zap className="w-3.5 h-3.5" /> Puter (free)
+            </button>
+            <button
+              type="button"
+              onClick={() => switchProvider('stability')}
+              className={clsx(
+                'flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium border transition-colors',
+                provider === 'stability'
+                  ? 'bg-primary-600/20 border-primary-600 text-primary-300'
+                  : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-gray-200'
+              )}
+            >
+              <Sparkles className="w-3.5 h-3.5" /> Stability AI
+            </button>
+          </div>
+          {provider === 'puter' && (
+            <p className="text-xs text-gray-500 -mt-1">
+              Runs in your browser via Puter — free, no API key. You may be asked to sign in to Puter on first use; each
+              user pays for their own generations.
+            </p>
+          )}
+
           <div>
             <label className="label mb-1">Style Preset</label>
             <div className="flex flex-wrap gap-2">
@@ -159,17 +236,19 @@ export default function ImageGenPage() {
             />
           </div>
 
-          <div>
-            <label className="label">
-              Negative Prompt <span className="text-gray-600 font-normal">(optional)</span>
-            </label>
-            <input
-              className="input"
-              placeholder="blurry, watermark, low quality, deformed…"
-              value={negativePrompt}
-              onChange={(e) => setNegativePrompt(e.target.value)}
-            />
-          </div>
+          {provider === 'stability' && (
+            <div>
+              <label className="label">
+                Negative Prompt <span className="text-gray-600 font-normal">(optional)</span>
+              </label>
+              <input
+                className="input"
+                placeholder="blurry, watermark, low quality, deformed…"
+                value={negativePrompt}
+                onChange={(e) => setNegativePrompt(e.target.value)}
+              />
+            </div>
+          )}
 
           <div className="flex flex-wrap gap-4">
             <div className="flex-1 min-w-[180px]">
@@ -191,7 +270,7 @@ export default function ImageGenPage() {
             <div className="flex-1 min-w-[180px]">
               <label className="label">Model</label>
               <select className="input" value={model} onChange={(e) => setModel(e.target.value)}>
-                {models.map((m) => (
+                {(provider === 'puter' ? PUTER_MODELS : models).map((m) => (
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
@@ -264,7 +343,12 @@ export default function ImageGenPage() {
               <div className="mt-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm text-gray-300 line-clamp-2">{current.prompt}</p>
-                  <p className="text-xs text-gray-600 mt-0.5">Seed: {current.seed}</p>
+                  {current.seed !== undefined && (
+                    <p className="text-xs text-gray-600 mt-0.5">Seed: {current.seed}</p>
+                  )}
+                  {current.provider === 'puter' && (
+                    <p className="text-xs text-gray-600 mt-0.5">via Puter</p>
+                  )}
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
                   <button

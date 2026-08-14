@@ -14,7 +14,7 @@ from ..models.user import User
 router = APIRouter(prefix="/image", tags=["image"])
 
 _OLLAMA_URL = "http://localhost:11434"
-_ENHANCE_MODEL = "llama3:8B"
+_ENHANCE_MODEL = "llama3.1:8b"
 
 _ENHANCE_SYSTEM = (
     "You are an expert image prompt engineer. "
@@ -154,6 +154,20 @@ async def generate_image(
         "enhanced_prompt": final_prompt if req.enhance_prompt else None,
         "provider": "stability",
     }
+
+
+class EnhanceRequest(BaseModel):
+    prompt: str
+
+
+@router.post("/enhance")
+async def enhance_prompt_only(req: EnhanceRequest, current_user: User = Depends(get_current_user)):
+    """Rewrite a prompt with AI detail — used by client-side providers (Puter)
+    that can't go through the Stability-only /image/generate path."""
+    if not req.prompt.strip():
+        raise HTTPException(status_code=400, detail="Prompt required")
+    enhanced = await _enhance_prompt(req.prompt.strip())
+    return {"prompt": enhanced or req.prompt}
 
 
 @router.get("/models")
