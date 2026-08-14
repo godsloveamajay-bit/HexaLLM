@@ -53,10 +53,14 @@ HELP_TEXT = """
   [cyan]/tools[/]           List active tools
   [cyan]/help[/]            Show this message
   [cyan]/exit[/]            Quit
+  [cyan]login URL[/]        Sign in with email + password (inside the REPL)
+  [cyan]login URL --google[/]  Sign in with Google — opens/prints a login link
 
 [bold]HexaLLM login[/]
   [cyan]hexallm login URL[/]           Sign in with email + password
   [cyan]hexallm login URL --google[/]  Sign in with Google (opens browser)
+  [dim]Typing "login URL --google" at the prompt works too — it opens the link
+  instead of sending the text to the model.[/]
 
 [bold]Backends[/]  (priority: HexaLLM › Ollama › Pollinations)
   [dim]auto[/]          HexaLLM if logged in, then Ollama if running, then Pollinations
@@ -216,6 +220,11 @@ async def _interactive(cfg) -> None:
             f"  [dim]Connected as[/] [cyan]{hexa_user.get('email', '?')}[/] "
             f"[dim]on[/] [cyan]{cfg.hexallm_url}[/]\n"
         )
+    else:
+        console.print(
+            "  [dim]Not connected to HexaLLM — log in with[/] [cyan]hexallm login URL[/]"
+            " [dim]or[/] [cyan]hexallm login URL --google[/] [dim](or type[/] [cyan]login URL --google[/] [dim]here).[/]\n"
+        )
 
     # active tools (may grow if user attaches a KB)
     active_tool_funcs = dict(TOOL_FUNCS)
@@ -255,6 +264,53 @@ async def _interactive(cfg) -> None:
         if low in ("/exit", "/quit", "exit", "quit"):
             console.print("[dim]Goodbye.[/]")
             break
+
+        if low == "login" or low.startswith("login "):
+            # In-REPL login: "login URL [--google]" — opens/prints the login
+            # link instead of sending the text to the model, then hot-swaps
+            # the session onto the HexaLLM backend.
+            parts = user_input.split()
+            login_url = cfg.hexallm_url or "https://ai.hexallm.co.uk"
+            use_google = any(p == "--google" for p in parts)
+            for p in parts[1:]:
+                if p.startswith("http"):
+                    login_url = p
+            if use_google:
+                await _google_login(login_url)
+            else:
+                email = click.prompt("Email")
+                password = click.prompt("Password", hide_input=True)
+                from .hexallm import HexaLLMClient
+                try:
+                    token = await HexaLLMClient.login(login_url, email, password)
+                except Exception as e:
+                    console.print(f"[red]Login failed:[/] {e}")
+                    continue
+                cfg.hexallm_url = login_url
+                cfg.hexallm_token = token
+                save_config(cfg)
+                console.print(f"[green]Logged in as[/] [cyan]{email}[/] [dim]on {login_url}[/]")
+            # Hot-swap this session onto the HexaLLM backend
+            from .hexallm import HexaLLMClient
+            cfg = load_config()
+            hexa = _make_hexallm_client(cfg)
+            if hexa:
+                hexa_user = await HexaLLMClient.verify(cfg.hexallm_url, cfg.hexallm_token)
+                if hexa_user:
+                    agent.backend = hexa
+                    try:
+                        models = await hexa.list_models()
+                        if cfg.model not in models and models:
+                            cfg.model = _pick_default_model(models)
+                            agent.model = cfg.model
+                    except Exception:
+                        pass
+                    console.print(f"[green]Connected as[/] [cyan]{hexa_user.get('email', '?')}[/] [dim]on {cfg.hexallm_url}[/]")
+                else:
+                    console.print("[red]Login failed: token invalid.[/]")
+            else:
+                console.print("[yellow]Login link:[/] run [cyan]hexallm login <URL>[/] from the shell (or [cyan]<URL> --google[/]) and restart.")
+            continue
 
         if low == "/help":
             console.print(HELP_TEXT)
@@ -482,6 +538,7 @@ async def _google_login(url: str) -> None:
     server.timeout = 1
 
     console.print("\n[dim]Opening browser for Google sign-in…[/]")
+    console.print(f"[dim]If the browser doesn't open, paste this link into any browser:[/]\n[cyan]{auth_url}[/]\n")
     webbrowser.open(auth_url)
     console.print("[dim]Waiting for authentication (120 s timeout)…  Ctrl-C to cancel.[/]\n")
 
