@@ -58,7 +58,7 @@ export default function DashboardPage() {
     <div className="p-4 sm:p-6 max-w-7xl mx-auto">
       {/* Header */}
       <div className="mb-8">
-        <h1 className="text-2xl font-bold text-gray-100">{greet()}, {user?.username} 👋</h1>
+        <h1 className="text-2xl font-bold text-gray-100">{greet()}, {user?.full_name || user?.username} 👋</h1>
         <p className="text-gray-400 mt-1">Here's what's happening on your AI platform today.</p>
       </div>
 

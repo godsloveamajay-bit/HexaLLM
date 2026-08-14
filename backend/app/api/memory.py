@@ -1,4 +1,5 @@
 from typing import List, Optional
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
@@ -24,7 +25,7 @@ class MemoryOut(BaseModel):
     content: str
     source: str
     session_id: Optional[int]
-    created_at: str
+    created_at: datetime
 
     class Config:
         from_attributes = True
@@ -227,59 +228,11 @@ async def extract_memories(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """Ask the LLM to extract memorable facts from a conversation."""
-    conversation = "\n".join(
-        f"{m['role'].upper()}: {m['content']}" for m in data.messages[-20:]
-    )
-    system = (
-        "Extract a short list of important, specific facts about the user from this conversation. "
-        "Each fact should be one sentence. Only include facts worth remembering long-term "
-        "(preferences, goals, context about who they are or what they're working on). "
-        "Output ONLY a JSON array of strings, e.g. [\"User prefers Python.\", \"User is building a fintech app.\"] "
-        "If there is nothing worth remembering, output []."
-    )
-    msgs = [{"role": "user", "content": f"Conversation:\n{conversation}"}]
-    # Memory extraction is a cheap throwaway pass — pick a fast model server-side
-    # (resolving a HexaLLM variant if one was sent) rather than trusting a raw id.
-    from ..services import model_router
-    extract_model = data.model
-    if model_router.is_variant(extract_model) or not extract_model:
-        avail = [m["name"] for m in await ollama.list_models()]
-        extract_model = (
-            model_router.concrete_for(extract_model, "", avail) if model_router.is_variant(extract_model)
-            else model_router.fast_model_for(avail) or extract_model
-        )
-    else:
-        # Raw model ids are a Hyper+ entitlement; substitute the fast model
-        # rather than honoring an arbitrary raw id for non-entitled users.
-        if not current_user.is_admin:
-            from ..services.billing_enforcement import get_user_limits
-            if not get_user_limits(db, current_user).get("raw_models"):
-                avail = [m["name"] for m in await ollama.list_models()]
-                extract_model = model_router.fast_model_for(avail) or extract_model
-    raw = ""
-    async for chunk in ollama.chat_stream(extract_model, msgs, system_prompt=system, temperature=0.1):
-        raw += chunk
+    """Ask the LLM to extract memorable facts from a conversation.
 
-    import json
-    import re
-    try:
-        facts = json.loads(raw.strip())
-    except Exception:
-        m = re.search(r'\[.*?\]', raw, re.DOTALL)
-        if m:
-            try:
-                facts = json.loads(m.group())
-            except Exception:
-                facts = []
-        else:
-            facts = []
-
-    saved = []
-    for fact in facts[:10]:
-        if isinstance(fact, str) and fact.strip():
-            mem = UserMemory(user_id=current_user.id, content=fact.strip(), source="auto")
-            db.add(mem)
-            saved.append(fact.strip())
-    db.commit()
+    Shared with the automatic pipeline (memory_service) so manual and auto
+    extraction behave identically (dedup + caps)."""
+    from ..services.memory_service import extract_and_store
+    messages = [{"role": m["role"], "content": m["content"]} for m in data.messages[-20:]]
+    saved = await extract_and_store(db, current_user.id, messages)
     return {"extracted": saved}

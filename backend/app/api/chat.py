@@ -379,12 +379,22 @@ async def chat_completions(
     if not is_guest and (current_user.ai_instructions or "").strip():
         ci = current_user.ai_instructions.strip()
         base_system_prompt = (base_system_prompt or "") + f"\n\n[User's custom instructions — follow these]\n{ci}"
-    # Inject user memories if the session has memory enabled (or always for now).
+    # Identity block: the model learns who it's talking to (name + optional bio)
+    # so replies and greetings feel personal. Guests have no account.
+    if not is_guest:
+        user_name = (current_user.full_name or "").strip() or (current_user.username or "").strip()
+        if user_name:
+            identity_block = f"\n\n[User profile — who you're talking to]\nName: {user_name}"
+            bio = (current_user.bio or "").strip()
+            if bio:
+                identity_block += f"\nAbout: {bio[:200]}"
+            base_system_prompt = (base_system_prompt or "") + identity_block
+    # Inject user memories — manual (user-curated) facts first, then auto ones.
     # Guests have no account, so no memory.
     from ..models.memory import UserMemory
     user_memories = [] if is_guest else db.query(UserMemory).filter(
         UserMemory.user_id == current_user.id
-    ).order_by(UserMemory.created_at.desc()).limit(20).all()
+    ).order_by(UserMemory.source == "manual", UserMemory.created_at.desc()).limit(30).all()
     if user_memories:
         mem_block = "\n".join(f"- {m.content}" for m in user_memories)
         memory_section = f"\n\n[User Memory — things you know about this user]\n{mem_block}"
@@ -502,28 +512,60 @@ async def chat_completions(
                 latency = int((time.time() - start) * 1000)
                 prompt_tok = usage_info.get("prompt_tokens", 0)
                 completion_tok = usage_info.get("completion_tokens", 0)
-                if session:
-                    if req.regenerate:
-                        # Re-rolling the last answer: the user turn is already saved,
-                        # so drop the previous assistant message instead of appending
-                        # the user message again (which duplicated it in history).
-                        prev = db.query(ChatMessage).filter(
-                            ChatMessage.session_id == session.id,
-                            ChatMessage.role == "assistant",
-                        ).order_by(ChatMessage.id.desc()).first()
-                        if prev:
-                            db.delete(prev)
-                    else:
-                        last_user_msg = next((m for m in reversed(req.messages) if m.role == "user"), None)
-                        if last_user_msg:
-                            db.add(ChatMessage(session_id=session.id, role="user", content=last_user_msg.content))
-                    db.add(ChatMessage(
-                        session_id=session.id, role="assistant", content=full_response,
-                        latency_ms=latency,
-                        tokens_used=(prompt_tok + completion_tok) or None,
-                    ))
-                    session.updated_at = datetime.now(timezone.utc)
-                    db.commit()
+                try:
+                    if session:
+                        if req.regenerate:
+                            # Re-rolling the last answer: the user turn is already saved,
+                            # so drop the previous assistant message instead of appending
+                            # the user message again (which duplicated it in history).
+                            prev = db.query(ChatMessage).filter(
+                                ChatMessage.session_id == session.id,
+                                ChatMessage.role == "assistant",
+                            ).order_by(ChatMessage.id.desc()).first()
+                            if prev:
+                                db.delete(prev)
+                        else:
+                            last_user_msg = next((m for m in reversed(req.messages) if m.role == "user"), None)
+                            if last_user_msg:
+                                db.add(ChatMessage(session_id=session.id, role="user", content=last_user_msg.content))
+                        db.add(ChatMessage(
+                            session_id=session.id, role="assistant", content=full_response,
+                            latency_ms=latency,
+                            tokens_used=(prompt_tok + completion_tok) or None,
+                        ))
+                        session.updated_at = datetime.now(timezone.utc)
+                        db.commit()
+                        # Fully automatic memory: after each substantive exchange,
+                        # extract durable facts about the user in the background
+                        # (capped + deduped). Throttled to one pass per session per
+                        # 5 minutes so chit-chat doesn't hammer the fast model.
+                        if not is_guest and not img_prompt:
+                            try:
+                                from ..models.memory import UserMemory as _UM
+                                recent_mem = db.query(_UM).filter(
+                                    _UM.user_id == current_user.id, _UM.session_id == session.id
+                                ).order_by(_UM.created_at.desc()).first()
+                                throttle = (
+                                    recent_mem
+                                    and (datetime.now(timezone.utc) - recent_mem.created_at).total_seconds() < 300
+                                )
+                                last_user_txt = next(
+                                    (m.content for m in reversed(req.messages) if m.role == "user"), ""
+                                )
+                                if not throttle and len(last_user_txt.strip()) >= 40:
+                                    turns = [
+                                        {"role": m.role, "content": m.content}
+                                        for m in req.messages[-6:]
+                                    ]
+                                    turns.append({"role": "assistant", "content": full_response[:2000]})
+                                    from ..services.memory_service import run_auto_extract
+                                    asyncio.create_task(run_auto_extract(current_user.id, turns, session.id))
+                            except Exception:
+                                pass
+                except Exception:
+                    # A save failure must never truncate the user's stream — the
+                    # conversation still answered; persistence can retry next time.
+                    pass
                 if not is_guest:
                     log_request(db, current_user.id, "/chat/completions", "POST", 200,
                                 model_name=req.model, latency_ms=latency,
@@ -827,12 +869,44 @@ def get_shared_session(token: str, db: Session = Depends(get_db)):
 @router.post("/greeting")
 async def generate_greeting(
     request: Request,
+    db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
 ):
+    # Personalize for logged-in users: name, time of day, memories, last chat.
+    user_name = None
+    phase = None
+    context = ""
+    if current_user:
+        user_name = (current_user.full_name or "").strip() or (current_user.username or "").strip() or "there"
+        hour = datetime.now().astimezone().hour
+        phase = "morning" if hour < 12 else "afternoon" if hour < 18 else "evening"
+        bits = [f"address the user as {user_name}", f"it is {phase} for them"]
+        from ..models.memory import UserMemory
+        mems = (
+            db.query(UserMemory)
+            .filter(UserMemory.user_id == current_user.id)
+            .order_by(UserMemory.source == "manual", UserMemory.created_at.desc())
+            .limit(4)
+            .all()
+        )
+        if mems:
+            bits.append("you know these things about them: " + "; ".join(m.content for m in mems)[:300])
+        last_session = (
+            db.query(ChatSession)
+            .filter(ChatSession.user_id == current_user.id)
+            .order_by(ChatSession.updated_at.desc())
+            .first()
+        )
+        if last_session and last_session.title and last_session.title != "New Chat":
+            bits.append(f"their most recent chat was '{last_session.title[:80]}'")
+        context = "Context for the greeting: " + "; ".join(bits) + ". "
+
     prompt = (
-        "Generate exactly one short welcome greeting for the AI assistant HexaLLM. "
-        "One sentence only. Warm, unique, creative. Vary it each time. "
-        "Do not include multiple options or any extra text — just the single greeting."
+        f"{context}"
+        "Write exactly one short warm welcome greeting from the AI assistant HexaLLM, "
+        "addressed to the user by name, lightly referencing the given context if it fits "
+        "naturally (do not force it). One sentence only. Warm, unique, creative. "
+        "No extra text or options."
     )
 
     try:
@@ -851,5 +925,9 @@ async def generate_greeting(
             greeting = "What can I help with?"
     except Exception:
         greeting = "What can I help with?"
+
+    # Deterministic fallback when the model is unavailable — still personal.
+    if greeting == "What can I help with?" and current_user and user_name and phase:
+        greeting = f"Good {phase}, {user_name}! What can I help with?"
 
     return {"greeting": greeting}
