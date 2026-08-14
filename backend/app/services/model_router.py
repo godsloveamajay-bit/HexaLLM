@@ -164,7 +164,8 @@ _GENERAL = "llama3.1:8b"              # writing/general
 _LARGE = "qwen3:14b"                  # balanced default + universal fallback (fits 12 GB)
 _BIG = "gemma3:27b"                   # heavy reasoning tier — spills to CPU (48%/52%), needs ~6 GB system RAM
 _FAST = "llama3.2:3b"                # snappy 3B for titles / quick replies
-_VISION = "moondream:latest"             # image understanding (small + fast on CPU; llama3.2-vision's mllama arch can't load on this ollama build)
+_VISION = "moondream:latest"             # fallback vision (small + fast on CPU; llama3.2-vision's mllama arch can't load on this ollama build)
+_VISION_BIG = "gemma3:27b"              # primary vision — far smarter reading of screenshots/diagrams/UI (spills 50/50 to CPU, slower)
 _MATH = "qwen2-math:7b"             # math-tuned for equations, proofs, step-by-step
 _EMBED = "nomic-embed-text"          # embeddings for RAG / knowledge bases (~0.3 GB)
 # Legacy models kept as safety fallbacks (only used if a primary is missing):
@@ -262,7 +263,7 @@ def detect_image_request(text: str) -> Optional[str]:
 
 
 # Substrings identifying a vision-capable (multimodal) model.
-_VISION_MODELS = ("vision", "llava", "-vl", "moondream", "minicpm-v", "bakllava")
+_VISION_MODELS = ("vision", "llava", "-vl", "moondream", "gemma3", "minicpm-v", "bakllava")
 
 
 def is_vision_model(model: str) -> bool:
@@ -286,11 +287,13 @@ def fast_model_for(available_models: List[str]) -> Optional[str]:
 
 
 def vision_model_for(available_models: List[str]) -> Optional[str]:
-    """Pick a pulled vision model (prefer the configured default), else None.
+    """Pick a pulled vision model (prefer the big 27B for real understanding,
+    fall back to the tiny fast one), else None.
     Used to auto-route any request carrying an image to a model that can see."""
     avail_lc = {m.lower(): m for m in available_models}
-    if _VISION.lower() in avail_lc:
-        return avail_lc[_VISION.lower()]
+    for pref in (_VISION_BIG, _VISION):
+        if pref.lower() in avail_lc:
+            return avail_lc[pref.lower()]
     for m in available_models:
         if is_vision_model(m):
             return m
@@ -451,7 +454,7 @@ VARIANTS: Dict[str, Variant] = {
         id="hex-4.1-vision",
         label="HexaLLM Vision",
         description="Understands images — screenshots, diagrams, charts, photos, UI mockups, handwriting.",
-        default_model=_VISION,
+        default_model=_VISION_BIG,
         routes=[],
         system_prompt=(
             "You are HexaLLM Vision, a multimodal assistant that can see images. "
@@ -463,9 +466,9 @@ VARIANTS: Dict[str, Variant] = {
         temperature=0.5,
         num_ctx=8192,
         num_predict=2048,
-        # No text-only fallback: vision needs a vision model. If _VISION isn't
-        # pulled the router raises a clear "pull one of: …" error.
-        fallbacks=[],
+        # No text-only fallback: vision needs a vision model. If neither gemma3
+        # nor moondream is pulled the router raises a clear "pull one of: …" error.
+        fallbacks=[_VISION],
     ),
 
     # ── 8. Math ─────────────────────────────────────────────────────────────
