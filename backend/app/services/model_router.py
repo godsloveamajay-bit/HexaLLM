@@ -152,15 +152,17 @@ class Variant:
 #
 # Each "department" has a fast default plus heavier opt-in tiers that only kick
 # in on explicit cues (see the escalation heuristics below). Tuned for the
-# 12 GB RTX 4080 (laptop) GPU: the heaviest tier is 14B, which fits the VRAM
-# alongside its KV cache at the context sizes used below. Nothing exceeds 12 GB.
+# 12 GB RTX 4080 (laptop) GPU: everyday tiers (14B and under) fit the VRAM
+# alongside their KV cache at the context sizes used below. The 27B tier spills
+# ~half its layers to CPU (48%/52% CPU/GPU), so it's reserved for heavy asks.
 _CODING = "qwen2.5-coder:7b"          # default coder (fast on GPU)
 _CODING_HEAVY = "qwen2.5-coder:14b"   # hard refactors/architecture (fits 12 GB @8k ctx)
 _CHAT = "qwen2.5:7b"                   # general chat
-_THINKING = "deepseek-r1:1.5b"        # default reasoner — tiny, streams <think> fast
+_THINKING = "deepseek-r1:1.5b"        # default reasoner — tiny, streams  thinking fast
 _THINKING_DEEP = "deepseek-r1:8b"     # heavier reasoner; ~6 GB, fits 12 GB VRAM
 _GENERAL = "llama3.1:8b"              # writing/general
 _LARGE = "qwen3:14b"                  # balanced default + universal fallback (fits 12 GB)
+_BIG = "gemma3:27b"                   # heavy reasoning tier — spills to CPU (48%/52%), needs ~6 GB system RAM
 _FAST = "llama3.2:3b"                # snappy 3B for titles / quick replies
 _VISION = "moondream:latest"             # image understanding (small + fast on CPU; llama3.2-vision's mllama arch can't load on this ollama build)
 _MATH = "qwen2-math:7b"             # math-tuned for equations, proofs, step-by-step
@@ -385,6 +387,7 @@ VARIANTS: Dict[str, Variant] = {
         description="Deep analysis, research, strategy, and complex problem solving. Digs deeper when you ask for rigour.",
         default_model=_THINKING,
         routes=[
+            RoutedModel(_BIG, "reasoning_heavy"),       # long, deep asks → 27B (CPU-offloaded)
             RoutedModel(_THINKING_DEEP, "reasoning_deep"),  # "rigorous", "in depth", very long prompts
         ],
         system_prompt=(
@@ -395,11 +398,12 @@ VARIANTS: Dict[str, Variant] = {
             "End every response with a clear, actionable conclusion."
         ),
         temperature=0.4,
-        # 8k context keeps every tier (incl. the 14B coders) within the 12 GB
-        # VRAM budget once the KV cache is included.
+        # 8k context keeps every everyday tier (incl. the 14B coders) within the
+        # 12 GB VRAM budget once the KV cache is included; the 27B heavy tier
+        # spills to CPU instead.
         num_ctx=8192,
         num_predict=4096,
-        fallbacks=[_THINKING, _LARGE, _GENERAL],
+        fallbacks=[_THINKING, _LARGE, _BIG, _GENERAL],
     ),
 
     # ── 5. Prime ─────────────────────────────────────────────────────────────
@@ -632,6 +636,8 @@ def route(
             return heavy_code
         if condition == "code":
             return code
+        if condition == "reasoning_heavy":
+            return deep and len(user_text) > 240
         if condition == "reasoning_deep":
             return deep
         if condition == "reasoning":
