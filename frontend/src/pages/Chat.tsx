@@ -446,6 +446,8 @@ export default function ChatPage() {
   const [transcribing, setTranscribing] = useState(false) // uploading → Whisper
   const [greeting, setGreeting] = useState<string | null>(null)
   const [greetingLoading, setGreetingLoading] = useState(false)
+  const [suggestions, setSuggestions] = useState<string[]>(SUGGESTIONS)
+  const [suggestionsPersonal, setSuggestionsPersonal] = useState(false)
 
   // ── Voice mode (hands-free talk-and-hear) ───────────────────────────────
   // Continuous loop: mic → VAD → server Whisper (invisible plumbing) → send →
@@ -563,6 +565,21 @@ export default function ChatPage() {
         setGreetingLoading(false)
       }
     })
+    return () => { cancelled = true }
+  }, [messages.length === 0])
+
+  // Personalized starter prompts ("continue where you left off" + new ideas),
+  // grounded in the user's memories and recent chats. Falls back to the static
+  // defaults for guests / empty history.
+  useEffect(() => {
+    if (messages.length > 0) return
+    let cancelled = false
+    api.post('/chat/suggestions').then(({ data }) => {
+      if (!cancelled && Array.isArray(data?.suggestions) && data.suggestions.length >= 2) {
+        setSuggestions(data.suggestions)
+        setSuggestionsPersonal(!!data.personalized)
+      }
+    }).catch(() => { /* keep defaults */ })
     return () => { cancelled = true }
   }, [messages.length === 0])
 
@@ -1690,13 +1707,18 @@ export default function ChatPage() {
                 {panels}
               </div>
 
-              <div className="mt-5 grid sm:grid-cols-2 gap-2 w-full">
-                {SUGGESTIONS.map((s) => (
-                  <button key={s} onClick={() => pickSuggestion(s)}
-                    className="text-left rounded-xl border border-gray-800 bg-gray-900/60 hover:border-primary-500/50 hover:bg-gray-900 px-4 py-3 text-sm text-gray-300 transition-colors">
-                    {s}
-                  </button>
-                ))}
+              <div className="mt-5 w-full">
+                <p className="text-xs font-medium tracking-wide text-gray-500 uppercase mb-2">
+                  {suggestionsPersonal ? 'Recommended for you' : 'Try something'}
+                </p>
+                <div className="grid sm:grid-cols-2 gap-2 w-full">
+                  {suggestions.map((s) => (
+                    <button key={s} onClick={() => pickSuggestion(s)}
+                      className="text-left rounded-xl border border-gray-800 bg-gray-900/60 hover:border-primary-500/50 hover:bg-gray-900 px-4 py-3 text-sm text-gray-300 transition-colors">
+                      {s}
+                    </button>
+                  ))}
+                </div>
               </div>
             </div>
             <div ref={bottomRef} />

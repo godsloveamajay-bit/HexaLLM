@@ -654,6 +654,86 @@ def detect_image_intent(payload: ImageIntentIn, current_user: User = Depends(get
     return {"prompt": model_router.detect_image_request(payload.text or "")}
 
 
+DEFAULT_SUGGESTIONS = [
+    "Explain a complex topic simply",
+    "Help me write or debug code",
+    "Summarize an article or document",
+    "Brainstorm ideas for a project",
+]
+
+
+@router.post("/suggestions")
+async def generate_suggestions(
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_optional_user),
+):
+    """Personalized chat starter prompts — a mix of "continue where you left off"
+    and "start something new", grounded in the user's memories and recent chats.
+    Guests (and users with no history) get the static defaults."""
+    if not current_user:
+        return {"suggestions": DEFAULT_SUGGESTIONS, "personalized": False}
+    user_name = (current_user.full_name or "").strip() or (current_user.username or "").strip()
+    from ..models.memory import UserMemory
+    mems = (
+        db.query(UserMemory)
+        .filter(UserMemory.user_id == current_user.id)
+        .order_by(UserMemory.source == "manual", UserMemory.created_at.desc())
+        .limit(8)
+        .all()
+    )
+    titles = [
+        s.title
+        for s in db.query(ChatSession)
+        .filter(ChatSession.user_id == current_user.id)
+        .order_by(ChatSession.updated_at.desc())
+        .limit(5)
+        .all()
+        if s.title and s.title != "New Chat"
+    ]
+    if not mems and not titles:
+        return {"suggestions": DEFAULT_SUGGESTIONS, "personalized": False}
+
+    bits: List[str] = []
+    if user_name:
+        bits.append(f"the user is named {user_name}")
+    if mems:
+        bits.append("things you know about them: " + "; ".join(m.content for m in mems)[:400])
+    if titles:
+        bits.append("their recent chats: " + "; ".join(f'"{t[:60]}"' for t in titles)[:300])
+    context = " ".join(bits)
+
+    system = (
+        "You are a helpful assistant suggesting the next things a user could ask their AI. "
+        "Propose exactly FOUR short chat starter prompts, written in the first person "
+        "('I'/'my'), as if the user would type them. Mix roughly two that CONTINUE their "
+        "ongoing work or interests and two that start something NEW they'd likely enjoy, "
+        "based on the context. Keep each under 12 words. Output only the four prompts, "
+        "one per line, no numbering, no bullets, no extra text."
+    )
+    from ..services.ollama_service import ollama
+    avail = [m["name"] for m in await ollama.list_models()]
+    fast = model_router.fast_model_for(avail) or "llama3.2:3b"
+    raw = ""
+    async for chunk in ollama.chat_stream(
+        fast,
+        [{"role": "user", "content": f"Context about the user: {context}"}],
+        system_prompt=system,
+        temperature=0.8,
+    ):
+        raw += chunk
+
+    parsed: List[str] = []
+    for line in raw.splitlines():
+        line = line.strip().lstrip("-•*0123456789). ").strip()
+        if 8 <= len(line) <= 100 and line not in parsed:
+            parsed.append(line)
+        if len(parsed) == 4:
+            break
+    if len(parsed) < 2:
+        return {"suggestions": DEFAULT_SUGGESTIONS, "personalized": False}
+    return {"suggestions": parsed, "personalized": True}
+
+
 
 def _snippet(content: str, query: str, radius: int = 60) -> str:
     """Return a short excerpt of `content` centred on the first match of `query`."""
