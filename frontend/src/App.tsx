@@ -39,6 +39,7 @@ const ImageGenPage   = lazy(() => import('./pages/ImageGen'))
 const VideoGenPage   = lazy(() => import('./pages/VideoGen'))
 const MemoryPage     = lazy(() => import('./pages/Memory'))
 const TrainPage      = lazy(() => import('./pages/Train'))
+const RemoteCliPage  = lazy(() => import('./pages/RemoteCLI'))
 
 // Dev-variant pages — only bundled/routed when VITE_DEV_FEATURES=1.
 const DevPages: Record<string, React.LazyExoticComponent<() => JSX.Element>> = DEV_FEATURES ? {
@@ -52,7 +53,6 @@ const DevPages: Record<string, React.LazyExoticComponent<() => JSX.Element>> = D
   Personas:  lazy(() => import('./pages/Personas')),
   Workflows: lazy(() => import('./pages/Workflows')),
   MCPServers: lazy(() => import('./pages/MCPServers')),
-  RemoteCLI: lazy(() => import('./pages/RemoteCLI')),
   Logs:      lazy(() => import('./pages/Logs')),
 } : {}
 
@@ -104,6 +104,7 @@ export default function App() {
             <Route path="/video"      element={<PrivateRoute><VideoGenPage /></PrivateRoute>} />
             <Route path="/models"     element={<PrivateRoute><ModelsPage /></PrivateRoute>} />
             <Route path="/train"      element={<PrivateRoute><TrainPage /></PrivateRoute>} />
+            <Route path="/remote-cli" element={<PrivateRoute><RemoteCliPage /></PrivateRoute>} />
             <Route path="/memory"     element={<PrivateRoute><MemoryPage /></PrivateRoute>} />
             <Route path="/settings"   element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
             <Route path="/billing"    element={<PrivateRoute><BillingPage /></PrivateRoute>} />
@@ -118,7 +119,6 @@ export default function App() {
                 <Route path="/personas"   element={<PrivateRoute><DevPages.Personas /></PrivateRoute>} />
                 <Route path="/workflows"  element={<PrivateRoute><DevPages.Workflows /></PrivateRoute>} />
                 <Route path="/mcp"        element={<PrivateRoute><DevPages.MCPServers /></PrivateRoute>} />
-                <Route path="/remote-cli" element={<PrivateRoute><DevPages.RemoteCLI /></PrivateRoute>} />
                 <Route path="/analytics"  element={<PrivateRoute><DevPages.Analytics /></PrivateRoute>} />
                 <Route path="/api-keys"   element={<PrivateRoute><DevPages.ApiKeys /></PrivateRoute>} />
                 <Route path="/logs"       element={<PrivateRoute><AdminRoute><DevPages.Logs /></AdminRoute></PrivateRoute>} />
