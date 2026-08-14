@@ -38,6 +38,7 @@ const PricingPage    = lazy(() => import('./pages/Pricing'))
 const BillingPage    = lazy(() => import('./pages/Billing'))
 const ImageGenPage   = lazy(() => import('./pages/ImageGen'))
 const VideoGenPage   = lazy(() => import('./pages/VideoGen'))
+const ApiKeysPage    = lazy(() => import('./pages/ApiKeys'))
 const MemoryPage     = lazy(() => import('./pages/Memory'))
 const TrainPage      = lazy(() => import('./pages/Train'))
 const RemoteCliPage  = lazy(() => import('./pages/RemoteCLI'))
@@ -107,6 +108,7 @@ export default function App() {
             <Route path="/models"     element={<PrivateRoute><ModelsPage /></PrivateRoute>} />
             <Route path="/train"      element={<PrivateRoute><TrainPage /></PrivateRoute>} />
             <Route path="/remote-cli" element={<PrivateRoute><RemoteCliPage /></PrivateRoute>} />
+            <Route path="/api-keys" element={<PrivateRoute><ApiKeysPage /></PrivateRoute>} />
             <Route path="/memory"     element={<PrivateRoute><MemoryPage /></PrivateRoute>} />
             <Route path="/settings"   element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
             <Route path="/billing"    element={<PrivateRoute><BillingPage /></PrivateRoute>} />
@@ -122,7 +124,6 @@ export default function App() {
                 <Route path="/workflows"  element={<PrivateRoute><DevPages.Workflows /></PrivateRoute>} />
                 <Route path="/mcp"        element={<PrivateRoute><DevPages.MCPServers /></PrivateRoute>} />
                 <Route path="/analytics"  element={<PrivateRoute><DevPages.Analytics /></PrivateRoute>} />
-                <Route path="/api-keys"   element={<PrivateRoute><DevPages.ApiKeys /></PrivateRoute>} />
                 <Route path="/logs"       element={<PrivateRoute><AdminRoute><DevPages.Logs /></AdminRoute></PrivateRoute>} />
               </>
             )}
