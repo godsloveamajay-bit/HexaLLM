@@ -66,6 +66,20 @@ const SUGGESTIONS = [
 // Guests have no server-side session; this local-only id keeps the streaming
 // plumbing (liveStreams map) working while the backend persists nothing.
 const GUEST_SESSION_ID = -1
+// Generate an image client-side via Puter and return a persistable data URL
+// (blob URLs die on reload, and the backend stores the reply as markdown).
+async function puterImageDataUrl(prompt: string): Promise<string> {
+  const { puter } = await import('@heyputer/puter.js')
+  const img = await puter.ai.txt2img({ prompt, model: 'openai/gpt-image-2', ratio: { w: 1, h: 1 }, quality: 'medium' })
+  if (!img?.src) throw new Error('no image returned')
+  const blob = await (await fetch(img.src)).blob()
+  return await new Promise<string>((resolve, reject) => {
+    const r = new FileReader()
+    r.onload = () => resolve(r.result as string)
+    r.onerror = () => reject(new Error('read failed'))
+    r.readAsDataURL(blob)
+  })
+}
 // Typewriter smoothing: the visible text drains its backlog toward the received
 // text over roughly this window, so bursty/slow tokens read as a steady flow.
 const STREAM_SMOOTH_MS = 350
@@ -690,6 +704,27 @@ export default function ChatPage() {
     setStreamPhase('thinking')
     voiceBusyRef.current = true
 
+    // Text-to-image requests are generated client-side with Puter (no server
+    // key needed): detect the intent, generate, then hand the data URL to the
+    // backend so it streams the reply exactly like the old Stability path.
+    const lastUserText = [...userMessages].reverse().find((m) => m.role === 'user')?.content || ''
+    let imageResultB64: string | null = null
+    if (!attachment && lastUserText.trim()) {
+      try {
+        const { data } = await api.post('/chat/image-intent', { text: lastUserText })
+        if (data?.prompt) {
+          setStreamActivity('Generating an image…')
+          try {
+            imageResultB64 = await puterImageDataUrl(data.prompt)
+          } catch {
+            imageResultB64 = null // fall back to the backend (Stability) path
+          }
+        }
+      } catch {
+        // endpoint unavailable — let the backend decide server-side
+      }
+    }
+
     // Typewriter smoothing buffer: tokens arrive in bursts (and slowly, on CPU),
     // so rather than repainting whole tokens we animate the *visible* length
     // toward the received length at an adaptive cadence — a burst speeds up to
@@ -767,7 +802,7 @@ export default function ChatPage() {
       const resp = await fetch(`${baseURL}/chat/completions`, {
         method: 'POST',
         headers,
-        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), ...(personalityActive(personality) ? { personality } : {}), ...(opts.regenerate ? { regenerate: true } : {}), ...(webSearch ? { web_search: true } : {}), attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, ...(Object.keys(ollamaOptions).length > 0 ? { ollama_options: ollamaOptions } : {}) }),
+        body: JSON.stringify({ model, messages: userMessages, session_id: session.id > 0 ? session.id : null, system_prompt: systemPrompt || null, stream: true, ...(temperature != null ? { temperature } : {}), ...(personalityActive(personality) ? { personality } : {}), ...(opts.regenerate ? { regenerate: true } : {}), ...(webSearch ? { web_search: true } : {}), attachment_base64: attachment?.base64 || null, attachment_type: attachment?.type || null, attachment_name: attachment?.name || null, image_result_base64: imageResultB64, ...(Object.keys(ollamaOptions).length > 0 ? { ollama_options: ollamaOptions } : {}) }),
         signal: abortRef.current.signal,
       })
 

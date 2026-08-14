@@ -15,7 +15,7 @@ from ..core.security import get_current_user, get_optional_user
 from ..models.user import User
 from ..models.chat import ChatSession, ChatMessage, RequestLog
 from ..schemas.chat import (
-    ChatRequest, ChatSessionCreate, ChatSessionOut, ChatMessageOut,
+    ChatRequest, ChatSessionCreate, ChatSessionOut, ChatMessageOut, ImageIntentIn,
 )
 from ..services.ollama_service import ollama
 from ..services import model_router
@@ -420,15 +420,20 @@ async def chat_completions(
                     yield f"event: citations\ndata: {json.dumps(citations)}\n\n"
 
                 if img_prompt:
-                    # Text-to-image short-circuit: stream a status note, generate
-                    # via Stability AI, then stream the image as a one-line markdown
-                    # data URL (no newlines — the SSE framing splits on \n\n).
-                    from .image import generate_image_data_url
+                    # Text-to-image short-circuit: stream a status note, then stream
+                    # the image as a one-line markdown data URL (no newlines — the
+                    # SSE framing splits on \n\n). If the client already generated
+                    # the image locally (Puter), use that data URL; otherwise fall
+                    # back to the server-side Stability AI engine.
                     status = f"🎨 Generating an image of *{img_prompt}*… "
                     full_response += status
                     yield _sse_data(status)
                     try:
-                        result = await generate_image_data_url(img_prompt)
+                        if req.image_result_base64 and req.image_result_base64.startswith("data:image/"):
+                            result = {"data_url": req.image_result_base64}
+                        else:
+                            from .image import generate_image_data_url
+                            result = await generate_image_data_url(img_prompt)
                         chunk = f"![{img_prompt}]({result['data_url']})"
                     except Exception as exc:
                         chunk = f"⚠️ Image generation failed: {exc}"
@@ -543,8 +548,11 @@ async def chat_completions(
     if img_prompt:
         from .image import generate_image_data_url
         try:
-            result = await generate_image_data_url(img_prompt)
-            full_response = f"🎨 Generating an image of *{img_prompt}*… ![{img_prompt}]({result['data_url']})"
+            if req.image_result_base64 and req.image_result_base64.startswith("data:image/"):
+                data_url = req.image_result_base64
+            else:
+                data_url = (await generate_image_data_url(img_prompt))["data_url"]
+            full_response = f"🎨 Generating an image of *{img_prompt}*… ![{img_prompt}]({data_url})"
         except Exception as exc:
             full_response = f"⚠️ Image generation failed: {exc}"
     else:
@@ -594,6 +602,15 @@ async def chat_completions(
 @router.get("/sessions", response_model=List[ChatSessionOut])
 def list_sessions(db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     return db.query(ChatSession).filter(ChatSession.user_id == current_user.id).order_by(ChatSession.updated_at.desc()).all()
+
+
+@router.post("/image-intent")
+def detect_image_intent(payload: ImageIntentIn, current_user: User = Depends(get_current_user)):
+    """Tell the client whether this message is a text-to-image request (and with
+    which prompt), so it can generate the image client-side with Puter before
+    streaming the chat reply."""
+    return {"prompt": model_router.detect_image_request(payload.text or "")}
+
 
 
 def _snippet(content: str, query: str, radius: int = 60) -> str:

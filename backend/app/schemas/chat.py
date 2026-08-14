@@ -23,6 +23,11 @@ class ChatRequest(BaseModel):
     regenerate: bool = False                 # re-roll the last answer: replace it in history, don't re-append the user turn
     web_search: bool = False                 # ground the answer with live web results
     ollama_options: Optional[Dict[str, Any]] = None  # advanced Ollama generation params (Hyper+ plan)
+    image_result_base64: Optional[str] = None  # client-generated (Puter) image data URL — skips the server-side Stability call
+
+
+class ImageIntentIn(BaseModel):
+    text: str
 
 
 class ChatSessionCreate(BaseModel):
