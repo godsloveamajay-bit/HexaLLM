@@ -130,7 +130,7 @@ def list_cli_sessions(current_user: User = Depends(get_current_user)):
 class CliRunRequest(BaseModel):
     task: str
     session_id: Optional[str] = None
-    model: str = "llama3:8B"
+    model: str = "hex-auto"
     tools: List[str] = ["read_file", "write_file", "patch_file", "list_files", "run_command", "search_files", "web_search", "fetch_url", "git_run", "ssh_run"]
     images: Optional[List[str]] = None  # base64 images for vision-aware tasks
 

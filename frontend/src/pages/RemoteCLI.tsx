@@ -95,6 +95,13 @@ function StepRow({ step }: { step: StepEvent }) {
 
 const DEFAULT_TOOLS = ['read_file', 'write_file', 'patch_file', 'list_files', 'run_command', 'search_files', 'web_search', 'fetch_url', 'git_run', 'ssh_run']
 
+interface VariantInfo {
+  id: string
+  label: string
+  description: string
+  ready: boolean
+}
+
 export default function RemoteCLIPage() {
   const { user } = useAuth()
   const [sessions, setSessions] = useState<CliSession[]>([])
@@ -102,11 +109,22 @@ export default function RemoteCLIPage() {
   const [selectedSession, setSelectedSession] = useState<string>('')
   const [task, setTask] = useState('')
   const [cliImage, setCliImage] = useState<string | null>(null)
-  const [model, setModel] = useState('llama3:8B')
+  const [model, setModel] = useState(() => localStorage.getItem('remoteCliModel') || '')
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
+  const [variants, setVariants] = useState<VariantInfo[]>([])
   const [runState, setRunState] = useState<RunState>({ status: 'idle', steps: [] })
   const outputRef = useRef<HTMLDivElement>(null)
   const cliImgRef = useRef<HTMLInputElement>(null)
+
+  const isAdmin = !!user?.is_admin
+  const modelOptions = isAdmin
+    ? ollamaModels
+    : variants.map(v => v.id)
+
+  const selectModel = (m: string) => {
+    setModel(m)
+    localStorage.setItem('remoteCliModel', m)
+  }
 
   const loadSessions = async () => {
     setLoadingSessions(true)
@@ -125,12 +143,27 @@ export default function RemoteCLIPage() {
     loadSessions()
     api.get('/models/ollama/list').then(({ data }) => {
       const names = (data.models || []).map((m: any) => m.name)
-      if (names.length) setOllamaModels(names)
+      setOllamaModels(names)
+    }).catch(() => {})
+    api.get('/models/hexallm/variants').then(({ data }) => {
+      setVariants(Array.isArray(data?.variants) ? data.variants : [])
     }).catch(() => {})
 
     const interval = setInterval(loadSessions, 8000)
     return () => clearInterval(interval)
   }, [])
+
+  // Resolve a sensible default once the model list arrives: keep the saved
+  // choice if still available, else pick the first variant (non-admins) or
+  // first raw model (admins). The old "llama3:8B" default doesn't exist on
+  // this server and would fail every task.
+  useEffect(() => {
+    const options = modelOptions
+    if (options.length === 0) return
+    if (model && options.includes(model)) return
+    selectModel(isAdmin ? (ollamaModels[0] || '') : (variants[0]?.id || 'hex-auto'))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ollamaModels, variants])
 
   useEffect(() => {
     outputRef.current?.scrollTo({ top: outputRef.current.scrollHeight, behavior: 'smooth' })
@@ -154,8 +187,7 @@ export default function RemoteCLIPage() {
         },
         body: JSON.stringify({
           task,
-          // Non-admins let the connected machine use its own default model.
-          model: user?.is_admin ? model : '',
+          model: model || undefined,
           session_id: selectedSession || undefined,
           tools: DEFAULT_TOOLS,
           images: cliImage ? [cliImage] : undefined,
@@ -320,16 +352,29 @@ export default function RemoteCLIPage() {
               )}
             </div>
 
-            {user?.is_admin && (
-              <div>
-                <label className="label">Model</label>
-                <select value={model} onChange={e => setModel(e.target.value)} className="input text-sm">
+            <div>
+              <label className="label">Model</label>
+              {isAdmin ? (
+                <select value={model} onChange={e => selectModel(e.target.value)} className="input text-sm">
                   {ollamaModels.length > 0
                     ? ollamaModels.map(m => <option key={m} value={m}>{m}</option>)
-                    : <option value={model}>{model}</option>}
+                    : <option value={model}>{model || 'Loading…'}</option>}
                 </select>
-              </div>
-            )}
+              ) : (
+                <select value={model} onChange={e => selectModel(e.target.value)} className="input text-sm">
+                  {variants.length > 0
+                    ? variants.map(v => (
+                      <option key={v.id} value={v.id}>
+                        {v.label}{v.ready ? '' : ' (needs setup)'}
+                      </option>
+                    ))
+                    : <option value={model}>{model || 'Loading…'}</option>}
+                </select>
+              )}
+              <p className="text-xs text-gray-500 mt-1">
+                {isAdmin ? 'Raw Ollama model on the connected machine.' : 'HexaLLM variant — runs on your connected machine.'}
+              </p>
+            </div>
 
             {activeSession && (
               <div className="text-xs text-gray-500 bg-gray-800/40 rounded-lg px-3 py-2">
