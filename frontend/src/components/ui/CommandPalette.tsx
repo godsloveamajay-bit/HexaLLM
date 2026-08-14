@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { useNavigate } from 'react-router-dom'
 import {
-  Search, MessageSquare, Bot, Brain, Image, Database, BookOpen,
+  Search, MessageSquare, Bot, Brain, Image, Clapperboard, Database, BookOpen,
   BarChart2, Terminal, Download, Settings, Key, FileText, Workflow,
   Server, Cpu, User, Hash, ChevronRight,
 } from 'lucide-react'
@@ -27,6 +27,7 @@ interface Session {
 const NAV_ITEMS: NavItem[] = [
   { id: 'chat',       label: 'Chat',           path: '/chat',       icon: <MessageSquare className="w-4 h-4" />, keywords: 'message talk ai' },
   { id: 'image',      label: 'Image Gen',      path: '/image',      icon: <Image className="w-4 h-4" />,         keywords: 'generate picture draw' },
+  { id: 'video',      label: 'Video Gen',      path: '/video',      icon: <Clapperboard className="w-4 h-4" />,   keywords: 'generate clip sora veo' },
   { id: 'agents',     label: 'Agents',         path: '/agents',     icon: <Bot className="w-4 h-4" />,           keywords: 'automation run', dev: true },
   { id: 'models',     label: 'Models',         path: '/models',     icon: <Brain className="w-4 h-4" />,         keywords: 'ollama llm' },
   { id: 'train',      label: 'Train',          path: '/train',      icon: <Cpu className="w-4 h-4" />,           keywords: 'fine-tune finetune dataset' },

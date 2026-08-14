@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
-  MessageSquare, Cpu, ImageIcon, Brain, Wand2, LayoutDashboard,
+  MessageSquare, Cpu, ImageIcon, Clapperboard, Brain, Wand2, LayoutDashboard,
   LogOut, Settings, Sun, Moon, MonitorSmartphone, LogIn, UserPlus,
   Pencil, ChevronDown, X,
 } from 'lucide-react'
@@ -36,6 +36,7 @@ const GROUP_ORDER = ['Today', 'Yesterday', 'Previous 7 days', 'Older']
 const EXTRA_LINKS = [
   { to: '/models', icon: Cpu, label: 'Model Hub' },
   { to: '/image', icon: ImageIcon, label: 'Image Gen' },
+  { to: '/video', icon: Clapperboard, label: 'Video Gen' },
   { to: '/memory', icon: Brain, label: 'Memory' },
   { to: '/train', icon: Wand2, label: 'Training' },
 ]

@@ -35,6 +35,7 @@ const SettingsPage   = lazy(() => import('./pages/Settings'))
 const PricingPage    = lazy(() => import('./pages/Pricing'))
 const BillingPage    = lazy(() => import('./pages/Billing'))
 const ImageGenPage   = lazy(() => import('./pages/ImageGen'))
+const VideoGenPage   = lazy(() => import('./pages/VideoGen'))
 const MemoryPage     = lazy(() => import('./pages/Memory'))
 const TrainPage      = lazy(() => import('./pages/Train'))
 
@@ -99,6 +100,7 @@ export default function App() {
             <Route path="/chat"       element={<ChatPage />} />
             <Route path="/admin"      element={<PrivateRoute><AdminRoute><AdminPage /></AdminRoute></PrivateRoute>} />
             <Route path="/image"      element={<PrivateRoute><ImageGenPage /></PrivateRoute>} />
+            <Route path="/video"      element={<PrivateRoute><VideoGenPage /></PrivateRoute>} />
             <Route path="/models"     element={<PrivateRoute><ModelsPage /></PrivateRoute>} />
             <Route path="/train"      element={<PrivateRoute><TrainPage /></PrivateRoute>} />
             <Route path="/memory"     element={<PrivateRoute><MemoryPage /></PrivateRoute>} />
