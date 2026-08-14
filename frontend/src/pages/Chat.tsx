@@ -446,6 +446,7 @@ export default function ChatPage() {
   const [transcribing, setTranscribing] = useState(false) // uploading → Whisper
   const [greeting, setGreeting] = useState<string | null>(null)
   const [greetingLoading, setGreetingLoading] = useState(false)
+  const [continueSession, setContinueSession] = useState<{ id: number; title: string } | null>(null)
   const [suggestions, setSuggestions] = useState<string[]>(SUGGESTIONS)
   const [suggestionsPersonal, setSuggestionsPersonal] = useState(false)
 
@@ -558,6 +559,9 @@ export default function ChatPage() {
       if (!cancelled) {
         setGreeting(data.greeting)
         setGreetingLoading(false)
+        if (data?.continue_session?.id && data.continue_session.title) {
+          setContinueSession({ id: data.continue_session.id, title: data.continue_session.title })
+        }
       }
     }).catch(() => {
       if (!cancelled) {
@@ -1688,6 +1692,13 @@ export default function ChatPage() {
               ) : (
                 <>
                   <h1 className="text-2xl font-semibold text-gray-100 leading-relaxed text-center">{greeting}</h1>
+                  {continueSession && (
+                    <button onClick={() => requestSession(continueSession.id)}
+                      className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary-500/40 bg-primary-500/10 hover:bg-primary-500/20 px-4 py-1.5 text-sm text-primary-300 transition-colors">
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      Continue: {continueSession.title}
+                    </button>
+                  )}
                   <p className="text-sm text-gray-500 mt-3 max-w-md mx-auto text-center">
                     I'm HexaLLM — code, write, analyze, create. Pick a model and start chatting.
                   </p>

@@ -965,6 +965,7 @@ async def generate_greeting(
     user_name = None
     phase = None
     context = ""
+    continue_session = None
     if current_user:
         user_name = (current_user.full_name or "").strip() or (current_user.username or "").strip() or "there"
         hour = datetime.now().astimezone().hour
@@ -988,13 +989,22 @@ async def generate_greeting(
         )
         if last_session and last_session.title and last_session.title != "New Chat":
             bits.append(f"their most recent chat was '{last_session.title[:80]}'")
+            continue_session = {"id": last_session.id, "title": last_session.title[:80]}
         context = "Context for the greeting: " + "; ".join(bits) + ". "
 
     prompt = (
         f"{context}"
         "Write exactly one short warm welcome greeting from the AI assistant HexaLLM, "
         "addressed to the user by name, lightly referencing the given context if it fits "
-        "naturally (do not force it). One sentence only. Warm, unique, creative. "
+        "naturally (do not force it). "
+    )
+    if continue_session:
+        prompt += (
+            "The user has an ongoing chat they may want to continue — warmly invite them "
+            "to pick up where they left off, mentioning its title. "
+        )
+    prompt += (
+        "One sentence only. Warm, unique, creative. "
         "No extra text or options."
     )
 
@@ -1017,6 +1027,9 @@ async def generate_greeting(
 
     # Deterministic fallback when the model is unavailable — still personal.
     if greeting == "What can I help with?" and current_user and user_name and phase:
-        greeting = f"Good {phase}, {user_name}! What can I help with?"
+        if continue_session:
+            greeting = f"Good {phase}, {user_name}! Ready to pick up '{continue_session['title']}' — or start something new?"
+        else:
+            greeting = f"Good {phase}, {user_name}! What can I help with?"
 
-    return {"greeting": greeting}
+    return {"greeting": greeting, "continue_session": continue_session}
