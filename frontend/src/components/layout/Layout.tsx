@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Outlet, Link } from 'react-router-dom'
+import { Outlet, Link, useLocation } from 'react-router-dom'
 import Sidebar from './Sidebar'
 import ThemeToggle from '../ui/ThemeToggle'
 import { Menu, Search } from 'lucide-react'
@@ -11,6 +11,7 @@ import { clsx } from 'clsx'
 
 export default function Layout() {
   const { user } = useAuth()
+  const location = useLocation()
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem('hexa-sidebar') === '1')
   const [mobileOpen, setMobileOpen] = useState(false)
   useAutoUpdate()
@@ -99,7 +100,9 @@ export default function Layout() {
         />
 
         <main className="flex-1 min-w-0 min-h-0 overflow-y-auto">
-          <Outlet />
+          <div key={location.pathname} className="page-in">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>

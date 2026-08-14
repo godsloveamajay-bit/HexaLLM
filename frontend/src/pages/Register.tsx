@@ -55,9 +55,9 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md page-in">
         <div className="flex flex-col items-center mb-8">
-          <LogoMark size={56} className="mb-4" />
+          <LogoMark size={56} className="mb-4 float-y" />
           <h1 className="text-2xl font-bold text-gray-100">HexaLLM</h1>
           <p className="text-gray-500 text-sm mt-1">Open-source AI Platform</p>
         </div>

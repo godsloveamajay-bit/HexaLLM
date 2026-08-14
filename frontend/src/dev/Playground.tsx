@@ -498,7 +498,7 @@ export default function Playground() {
                   auto → {prettyModel(routeNote.routed_variant)}
                 </span>
               )}
-              {phase && <span style={{ color: '#fbbf24' }}>{phase}</span>}
+              {phase && <span className={running ? 'shimmer-text' : ''} style={{ color: '#fbbf24' }}>{phase}</span>}
               {stats && (
                 <span style={{ color: '#8b949e' }}>
                   {stats.prompt_tokens}→{stats.completion_tokens} tok · {stats.latency_ms} ms

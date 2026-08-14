@@ -241,7 +241,7 @@ function MessageBubble({
   }
 
   return (
-    <div className={clsx('flex gap-3 group fade-in', msg.role === 'user' ? 'flex-row-reverse' : '')}>
+    <div className={clsx('flex gap-3 group msg-in', msg.role === 'user' ? 'flex-row-reverse' : '')}>
       {/* Avatar */}
       {msg.role === 'user' ? (
         <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 bg-primary-600 shadow">

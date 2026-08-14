@@ -24,7 +24,7 @@ export default function ForgotPasswordPage() {
 
   return (
     <div className="min-h-screen bg-gray-950 flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-w-md page-in">
         <div className="flex flex-col items-center mb-8">
           <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-primary-500 to-secondary-500 flex items-center justify-center shadow-2xl shadow-primary-900/60 mb-4">
             <Sparkle className="w-8 h-8 text-white fill-white" />

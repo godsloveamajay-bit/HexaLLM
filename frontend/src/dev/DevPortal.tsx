@@ -1,5 +1,5 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
-import { Routes, Route, Navigate, NavLink, Outlet } from 'react-router-dom'
+import { Routes, Route, Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
 import { FlaskConical, Braces, Server, Activity, LogOut, LogIn, TerminalSquare, FolderKanban } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { baseURL } from '../lib/api'
@@ -168,6 +168,7 @@ function MobileNav() {
 }
 
 function Shell() {
+  const location = useLocation()
   return (
     <div className="h-screen flex flex-col" style={{ background: '#0d1117' }}>
       <TopBar />
@@ -175,7 +176,9 @@ function Shell() {
         <Sidebar />
         <main className="flex-1 min-w-0 overflow-y-auto">
           <Suspense fallback={<Spinner />}>
-            <Outlet />
+            <div key={location.pathname} className="page-in">
+              <Outlet />
+            </div>
           </Suspense>
         </main>
       </div>

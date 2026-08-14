@@ -282,6 +282,83 @@ html, body { transition: background-color 0.3s ease, color 0.3s ease; }
   .ai-sparkle-pop-2 { animation: none; }
 }
 
+/* ── Site-wide animation pass ─────────────────────────────────────────────
+   Entrance, ambient and hover motion for both sites. Pure CSS so it works
+   everywhere, with a single reduced-motion kill-switch below. */
+
+/* Hero entrance — staggered rise (add .hero-rise-N for delay) */
+@keyframes hero-rise {
+  from { opacity: 0; transform: translateY(26px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.hero-rise { animation: hero-rise 0.9s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+.hero-rise-1 { animation-delay: 0.10s; }
+.hero-rise-2 { animation-delay: 0.22s; }
+.hero-rise-3 { animation-delay: 0.34s; }
+.hero-rise-4 { animation-delay: 0.46s; }
+.hero-rise-5 { animation-delay: 0.58s; }
+.hero-rise-6 { animation-delay: 0.70s; }
+
+/* Gentle levitation for hero marks/orbs */
+@keyframes float-y {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-10px); }
+}
+.float-y { animation: float-y 5.5s ease-in-out infinite; }
+
+/* Breathing glow behind hero marks */
+@keyframes glow-breathe {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50%      { opacity: 0.85; transform: scale(1.08); }
+}
+.glow-breathe { animation: glow-breathe 4.5s ease-in-out infinite; }
+
+/* Slow pan for repeating patterned backgrounds (hex tile) */
+@keyframes bg-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 56px 0; }
+}
+.bg-drift { animation: bg-drift 40s linear infinite; }
+
+/* Pulsing status dot (dev portal "online") */
+@keyframes dot-pulse {
+  0%   { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.45); }
+  70%  { box-shadow: 0 0 0 7px rgba(74, 222, 128, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0); }
+}
+.dot-pulse { animation: dot-pulse 2.2s ease-out infinite; }
+
+/* Chat message entrance */
+@keyframes msg-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.985); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
+}
+.msg-in { animation: msg-in 0.38s cubic-bezier(0.22, 0.61, 0.36, 1) both; }
+
+/* Route/page transition */
+@keyframes page-in {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.page-in { animation: page-in 0.32s ease-out both; }
+
+/* Typewriter caret for code blocks */
+.caret::after {
+  content: '▍';
+  margin-left: 2px;
+  animation: blink 1s steps(1) infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero-rise, .hero-rise-1, .hero-rise-2, .hero-rise-3, .hero-rise-4,
+  .hero-rise-5, .hero-rise-6, .float-y, .glow-breathe, .bg-drift,
+  .dot-pulse, .msg-in, .page-in, .caret::after {
+    animation: none;
+  }
+  .hero-rise, .hero-rise-1, .hero-rise-2, .hero-rise-3, .hero-rise-4,
+  .hero-rise-5, .hero-rise-6 { opacity: 1; transform: none; }
+}
+
 /* Stream cursor */
 @keyframes blink {
   0%, 45% { opacity: 1; }

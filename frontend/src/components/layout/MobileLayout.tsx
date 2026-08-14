@@ -1,4 +1,4 @@
-import { Outlet, NavLink, useNavigate } from 'react-router-dom'
+import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { MessageSquare, Cpu, Bot, BookOpen, Settings, Brain, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { clsx } from 'clsx'
@@ -17,6 +17,7 @@ const PRIMARY_TABS = [
 ].filter(i => DEV_FEATURES || !i.dev)
 
 export default function MobileLayout() {
+  const location = useLocation()
   const { user, logout } = useAuth()
   const navigate = useNavigate()
   const [moreOpen, setMoreOpen] = useState(false)
@@ -51,7 +52,9 @@ export default function MobileLayout() {
 
       {/* Main content */}
       <main className="flex-1 overflow-auto min-h-0">
-        <Outlet />
+        <div key={location.pathname} className="page-in">
+          <Outlet />
+        </div>
       </main>
 
       {/* Bottom tab bar */}
