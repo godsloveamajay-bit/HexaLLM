@@ -65,6 +65,36 @@ def _resolve(key: APIKey, req: OAIChatRequest):
             detail="No model specified. This key isn't bound to a model, so include a 'model' field.",
         )
 
+    # Model Hub models arrive as model='custom:<slug>': resolve the entry,
+    # swap in its base (variant or raw) for routing, and remember it so its
+    # system prompt is appended below. Public entries work for any key owner;
+    # private ones only for the owner. Key-bound models still win over a
+    # caller-supplied custom id (the binding above takes precedence).
+    hub_model = None
+    hub_name = None
+    hub_prompt = None
+    if req.model and req.model.startswith("custom:") and not (key.model_name or (persona.base_model if persona else None)):
+        from ..core.database import SessionLocal
+        from ..models.model import AIModel
+        scope_db = SessionLocal()
+        try:
+            m = scope_db.query(AIModel).filter(
+                AIModel.slug == req.model[len("custom:"):]
+            ).first()
+            if not m:
+                raise HTTPException(status_code=404, detail="Model not found in the Model Hub")
+            if not m.is_public and (not key.user or m.owner_id != key.user_id):
+                raise HTTPException(status_code=403, detail="This model is private")
+            req.model = m.base_model if model_router.is_variant(m.base_model) else (m.ollama_model_name or m.base_model)
+            hub_name = m.name
+            hub_prompt = m.system_prompt
+            if key.user and m.owner_id != key.user_id:
+                m.downloads = (m.downloads or 0) + 1
+                scope_db.commit()
+        finally:
+            scope_db.close()
+        model = req.model
+
     # Raw (non-variant) model ids are a Hyper+ entitlement. Keys are always
     # bound to a variant or persona unless the owner is admin/Hyper+, so a
     # caller-supplied raw model on an unbound key is never honored for
@@ -96,6 +126,8 @@ def _resolve(key: APIKey, req: OAIChatRequest):
             convo.append({"role": m.role, "content": m.content})
     if req.system:
         system_parts.append(req.system)
+    if hub_prompt:
+        system_parts.append(f"[Model Hub — {hub_name}]\n{hub_prompt}")
     system_prompt = "\n\n".join(p for p in system_parts if p)
 
     # Personality Engine sliders: persona binding → per-request override →
