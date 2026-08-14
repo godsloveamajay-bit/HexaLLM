@@ -113,6 +113,16 @@ class CliTunnel:
 
         on_event({"type": "task_start", "task_id": task_id, "task": task})
 
+        # The LLM API meters usage against an API key; make sure we have one
+        # (covers long-running daemons and clients that missed the key fetch).
+        backend = agent.backend
+        get_key = getattr(backend, "get_or_create_api_key", None)
+        if get_key and not getattr(backend, "api_key", None):
+            try:
+                await get_key()
+            except Exception:
+                pass
+
         # run with fresh history; restore interactive history afterwards
         saved_history = list(agent.history)
         agent.history = []
