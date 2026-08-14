@@ -63,9 +63,20 @@ class HexaLLMClient:
 
     async def list_models(self) -> List[str]:
         async with httpx.AsyncClient(timeout=10) as c:
-            r = await c.get(f"{self.base_url}/api/v1/models/ollama/list", headers=self._h_user)
+            try:
+                r = await c.get(f"{self.base_url}/api/v1/models/ollama/list", headers=self._h_user)
+                r.raise_for_status()
+                models = [m["name"] for m in r.json().get("models", [])]
+                if models:
+                    return models
+            except Exception:
+                pass
+            # Restricted accounts (no raw-model entitlement) get an empty raw
+            # list — fall back to the HexaLLM variants so we still pick a model
+            # the server will accept instead of 403ing on every request.
+            r = await c.get(f"{self.base_url}/api/v1/models/hexallm/variants", headers=self._h_user)
             r.raise_for_status()
-            return [m["name"] for m in r.json().get("models", [])]
+            return [v["id"] for v in r.json().get("variants", [])]
 
     async def stream_response(
         self,

@@ -1,6 +1,6 @@
 [package]
 name = "hexallm-ai"
-version = "14.0.4"
+version = "14.0.5"
 description = "HexaLLM — local AI hub"
 authors = ["HexaLLM"]
 license = "MIT"
