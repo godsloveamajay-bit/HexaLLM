@@ -69,7 +69,6 @@ See **[README_CLI.md](README_CLI.md)** for the full command and tool reference.
 HexaLLM is part of the **Hexa** product family — integrated AI products built on one shared engine:
 
 - **HexaCore** — the inference and routing engine behind every Hexa product
-- **HexaCloud** — managed hosting and scaling for Hexa deployments
 - **HexaAPI** — OpenAI-compatible API with per-key access (see *Expose as API*)
 - **HexaStudio** — build, evaluate, and ship prompts, agents, and workflows
 - **HexaConsole** — monitoring, analytics, and key management

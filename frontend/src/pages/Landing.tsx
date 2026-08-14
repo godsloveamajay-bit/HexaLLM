@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
-  Hexagon, Cpu, Cloud, Code2, Github, Twitter, Check, ArrowRight,
+  Hexagon, Cpu, Code2, Github, Twitter, Check, ArrowRight,
 } from 'lucide-react'
 import { Logo as BrandLogo } from '../components/Logo'
 import Reveal from '../components/ui/Reveal'
@@ -66,11 +66,6 @@ const FEATURES = [
     icon: Cpu,
     title: 'HexaCore',
     text: 'The engine powering HexaLLM. Local, GPU-accelerated inference tuned for a single powerful host.',
-  },
-  {
-    icon: Cloud,
-    title: 'HexaCloud',
-    text: 'Scalable inference and deployment — secure tunnel access from anywhere, zero port-forwarding.',
   },
   {
     icon: Code2,
@@ -262,10 +257,10 @@ export default function LandingPage() {
         <div className="mx-auto max-w-6xl px-6">
           <Reveal>
             <h2 className="font-display font-bold text-3xl sm:text-4xl tracking-tight text-center">
-              Built in three geometric parts.
+              Built in two geometric parts.
             </h2>
           </Reveal>
-          <div className="mt-14 grid gap-8 md:grid-cols-3">
+          <div className="mt-14 grid gap-8 md:grid-cols-2 max-w-3xl mx-auto">
             {FEATURES.map((f, i) => (
               <Reveal key={f.title} delay={i * 100}>
                 <div className="group text-center md:text-left">
