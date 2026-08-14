@@ -162,8 +162,9 @@ class EnhanceRequest(BaseModel):
 
 @router.post("/enhance")
 async def enhance_prompt_only(req: EnhanceRequest, current_user: User = Depends(get_current_user)):
-    """Rewrite a prompt with AI detail — used by client-side providers (Puter)
-    that can't go through the Stability-only /image/generate path."""
+    """Rewrite a prompt with AI detail — used by the Image Generation page
+    before client-side Puter generation (the browser SDK can't call the
+    Stability-only /image/generate path)."""
     if not req.prompt.strip():
         raise HTTPException(status_code=400, detail="Prompt required")
     enhanced = await _enhance_prompt(req.prompt.strip())
