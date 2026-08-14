@@ -72,6 +72,11 @@ class OllamaService:
         top_p: Optional[float] = None,
         extra_options: Optional[Dict] = None,
     ) -> AsyncGenerator[str, None]:
+        # moondream's sampler on this ollama build degenerates to an EMPTY stream
+        # for temperatures 0.6/0.7 (everything else works). Snap them so image
+        # chats actually answer instead of streaming nothing.
+        if "moondream" in model.lower() and temperature in (0.6, 0.7):
+            temperature = 0.8
         # Ollama's /api/chat takes system messages via the messages array,
         # NOT a top-level "system" field (that's only for /api/generate).
         # Prepend a system message if a prompt was supplied AND the caller

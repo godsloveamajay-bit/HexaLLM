@@ -162,7 +162,7 @@ _THINKING_DEEP = "deepseek-r1:8b"     # heavier reasoner; ~6 GB, fits 12 GB VRAM
 _GENERAL = "llama3.1:8b"              # writing/general
 _LARGE = "qwen3:14b"                  # balanced default + universal fallback (fits 12 GB)
 _FAST = "llama3.2:3b"                # snappy 3B for titles / quick replies
-_VISION = "llama3.2-vision:11b"      # image understanding (fits 12 GB)
+_VISION = "moondream:latest"             # image understanding (small + fast on CPU; llama3.2-vision's mllama arch can't load on this ollama build)
 _MATH = "qwen2-math:7b"             # math-tuned for equations, proofs, step-by-step
 _EMBED = "nomic-embed-text"          # embeddings for RAG / knowledge bases (~0.3 GB)
 # Legacy models kept as safety fallbacks (only used if a primary is missing):
