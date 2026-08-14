@@ -177,6 +177,7 @@ export default function LandingPage() {
             <a href="#features" className="hover:text-primary-400 transition-colors">Features</a>
             <a href="#api" className="hover:text-primary-400 transition-colors">API</a>
             <a href="#catalog" className="hover:text-primary-400 transition-colors">Catalog</a>
+            <Link to="/downloads" className="hover:text-primary-400 transition-colors">Downloads</Link>
           </div>
           <div className="flex items-center gap-3">
             <Link to="/login" className="text-sm text-[#C8C8C8] hover:text-white transition-colors">
@@ -389,6 +390,7 @@ export default function LandingPage() {
               <a href="#api" className="hover:text-primary-400 transition-colors">Docs</a>
               <a href="#families" className="hover:text-primary-400 transition-colors">Models</a>
               <a href="#api" className="hover:text-primary-400 transition-colors">API</a>
+              <Link to="/downloads" className="hover:text-primary-400 transition-colors">Downloads</Link>
               <a href="https://github.com/HexaLLM" className="hover:text-primary-400 transition-colors">GitHub</a>
             </nav>
           </Reveal>

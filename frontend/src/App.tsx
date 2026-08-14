@@ -26,6 +26,7 @@ const ForgotPage       = lazy(() => import('./pages/ForgotPassword'))
 const ResetPage        = lazy(() => import('./pages/ResetPassword'))
 const SharePage        = lazy(() => import('./pages/Share'))
 const OAuthCallbackPage = lazy(() => import('./pages/OAuthCallback'))
+const DownloadsPage    = lazy(() => import('./pages/Downloads'))
 
 // Authenticated pages — all lazy-loaded so the initial bundle stays tiny
 const ChatPage       = lazy(() => import('./pages/Chat'))
@@ -52,7 +53,6 @@ const DevPages: Record<string, React.LazyExoticComponent<() => JSX.Element>> = D
   Workflows: lazy(() => import('./pages/Workflows')),
   MCPServers: lazy(() => import('./pages/MCPServers')),
   RemoteCLI: lazy(() => import('./pages/RemoteCLI')),
-  Downloads: lazy(() => import('./pages/Downloads')),
   Logs:      lazy(() => import('./pages/Logs')),
 } : {}
 
@@ -92,6 +92,7 @@ export default function App() {
           <Route path="/share/:token"    element={<SharePage />} />
           <Route path="/oauth/callback"  element={<OAuthCallbackPage />} />
           <Route path="/pricing"        element={<PricingPage />} />
+          <Route path="/downloads"      element={<DownloadsPage />} />
 
           {/* One layout for everything. Chat is open to guests (limited);
               every other page is wrapped in PrivateRoute so it stays gated. */}
@@ -118,7 +119,6 @@ export default function App() {
                 <Route path="/workflows"  element={<PrivateRoute><DevPages.Workflows /></PrivateRoute>} />
                 <Route path="/mcp"        element={<PrivateRoute><DevPages.MCPServers /></PrivateRoute>} />
                 <Route path="/remote-cli" element={<PrivateRoute><DevPages.RemoteCLI /></PrivateRoute>} />
-                <Route path="/downloads"  element={<PrivateRoute><DevPages.Downloads /></PrivateRoute>} />
                 <Route path="/analytics"  element={<PrivateRoute><DevPages.Analytics /></PrivateRoute>} />
                 <Route path="/api-keys"   element={<PrivateRoute><DevPages.ApiKeys /></PrivateRoute>} />
                 <Route path="/logs"       element={<PrivateRoute><AdminRoute><DevPages.Logs /></AdminRoute></PrivateRoute>} />

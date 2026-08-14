@@ -372,6 +372,16 @@ interface Release {
 
 const CHANGELOG: Release[] = [
   {
+    version: '14.0.3',
+    date: '2026-08-14',
+    summary: 'CLI login link fixed, desktop + mobile builds refreshed.',
+    changes: [
+      { type: 'fixed',    text: 'Typing "login URL --google" inside the CLI now opens/prints the login link instead of sending the text to the model — and the session hot-swaps onto your HexaLLM account' },
+      { type: 'new',      text: 'The CLI prints the Google sign-in link when no browser can be opened (headless/remote setups) and reminds you to log in when you start unauthenticated' },
+      { type: 'improved', text: 'Chat starters are personalized — the greeting invites you to continue your last chat, and suggestions mix "continue where you left off" with new ideas grounded in your memories' },
+    ],
+  },
+  {
     version: '14.0.2',
     date: '2026-06-06',
     summary: 'Web search is dramatically faster and shows live progress instead of looking stuck.',
@@ -625,7 +635,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '14.0.2'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '14.0.3'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 
@@ -659,7 +669,36 @@ export default function DownloadsPage() {
             <Cpu className="w-4 h-4 animate-spin" />Loading…
           </div>
         ) : cliItems.length === 0 ? (
-          <div className="card text-sm text-gray-500">No CLI packages available yet.</div>
+          <div className="card space-y-3">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 rounded-xl bg-emerald-900/30 border border-emerald-700/40 flex items-center justify-center flex-shrink-0">
+                <Terminal className="w-6 h-6 text-emerald-400" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <h2 className="text-base font-semibold text-gray-100">HexaLLM CLI</h2>
+                  <span className="badge bg-emerald-900/30 text-emerald-400 border border-emerald-800/40">v{version}</span>
+                  <span className="badge bg-gray-800 text-gray-400">Python wheel</span>
+                </div>
+                <p className="text-sm text-gray-400 mt-1">
+                  Terminal AI coding assistant — works instantly, no Ollama required.
+                </p>
+              </div>
+              <a
+                href={`https://pypi.org/project/hexallm/${version === '14.0.3' ? '#files' : ''}`}
+                target="_blank" rel="noopener noreferrer"
+                className="btn-primary gap-2 flex-shrink-0 text-sm"
+              >
+                <Download className="w-4 h-4" />
+                PyPI
+              </a>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide">Installation</p>
+              <CodeLine code={`pip install hexallm==${version}`} label="Latest release on PyPI" />
+              <CodeLine code="hexallm" label="Start the interactive coding session" />
+            </div>
+          </div>
         ) : (
           cliItems.map(item => <CliCard key={item.filename} item={item} />)
         )}
