@@ -830,6 +830,15 @@ def delete_session(session_id: int, db: Session = Depends(get_db), current_user:
     ).first()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+    # Erasing a chat also erases the facts it auto-learned about the user —
+    # conversation-level memory dies with the conversation. Manually pinned
+    # memories (source="manual") are user-curated and always survive.
+    from ..models.memory import UserMemory
+    db.query(UserMemory).filter(
+        UserMemory.user_id == current_user.id,
+        UserMemory.session_id == session.id,
+        UserMemory.source == "auto",
+    ).delete(synchronize_session=False)
     db.delete(session)
     db.commit()
 
