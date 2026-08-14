@@ -740,6 +740,10 @@ def cmd_daemon(no_reconnect: bool):
             console.print("[red]Token expired.[/] Run [cyan]hexallm login URL[/] again.")
             sys.exit(1)
 
+        # The LLM API meters usage against an API key — get or create one,
+        # otherwise every task fails with 401.
+        await hexa.get_or_create_api_key()
+
         backend = hexa
 
         # Validate / auto-select model — same logic as interactive mode.

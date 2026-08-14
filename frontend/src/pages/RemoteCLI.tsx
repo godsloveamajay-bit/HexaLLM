@@ -93,7 +93,7 @@ function StepRow({ step }: { step: StepEvent }) {
   )
 }
 
-const DEFAULT_TOOLS = ['web_search', 'code_exec', 'bash_exec', 'read_file', 'write_file', 'search_files']
+const DEFAULT_TOOLS = ['read_file', 'write_file', 'patch_file', 'list_files', 'run_command', 'search_files', 'web_search', 'fetch_url', 'git_run', 'ssh_run']
 
 export default function RemoteCLIPage() {
   const { user } = useAuth()

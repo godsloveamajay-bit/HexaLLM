@@ -105,6 +105,11 @@ class CliTunnel:
         task    = msg["task"]
         model   = msg.get("model")
         images  = msg.get("images") or None
+        tools   = msg.get("tools")
+        if tools:
+            allowed = set(tools)
+            tool_funcs = {k: v for k, v in tool_funcs.items() if k in allowed}
+            tool_descriptions = {k: v for k, v in tool_descriptions.items() if k in allowed}
 
         on_event({"type": "task_start", "task_id": task_id, "task": task})
 

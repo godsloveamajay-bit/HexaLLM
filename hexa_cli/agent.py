@@ -45,15 +45,22 @@ FIX_PROMPT = (
 def _extract_json(text: str) -> Optional[dict]:
     text = text.strip()
     # Reasoning models (qwen3, deepseek-r1) wrap their chain-of-thought in
-    # <think>...</think> before the real answer. That block frequently contains
+    #  thinking... response before the real answer. That block frequently contains
     # JSON-like braces, which would derail the balanced-brace scan below, so
-    # strip it (and any unclosed leading <think>) before parsing.
-    text = re.sub(r"<think>.*?</think>", "", text, flags=re.DOTALL).strip()
-    if text.startswith("<think>"):
+    # strip it (and any unclosed leading  thinking) before parsing.
+    text = re.sub(r" thinking.*? response", "", text, flags=re.DOTALL).strip()
+    if text.startswith(" thinking"):
         # Unclosed think block (truncated/streamed) — drop everything up to the
         # first real JSON object if there is one.
         brace = text.find("{")
         text = text[brace:].strip() if brace != -1 else ""
+    # Models sometimes emit single-quoted values — `"input": '{"a": 1}'` —
+    # which is invalid JSON. Repair them by re-encoding as proper JSON strings.
+    text = re.sub(
+        r'"(\w+)"\s*:\s*\'((?:[^\'\\]|\\.)*)\'',
+        lambda m: f'"{m.group(1)}": {json.dumps(m.group(2))}',
+        text,
+    )
     try:
         return json.loads(text)
     except json.JSONDecodeError:
