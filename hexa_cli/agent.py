@@ -318,11 +318,15 @@ class Agent:
         user_message: str,
         tool_funcs: Dict[str, Any],
         tool_descriptions: Dict[str, str],
+        images: Optional[List[str]] = None,
     ) -> AsyncIterator[Dict]:
         tool_list = "\n".join(f"  {k}: {v}" for k, v in tool_descriptions.items())
         system = SYSTEM_PROMPT.format(tools=tool_list)
 
-        self.history.append({"role": "user", "content": user_message})
+        first_user: Dict = {"role": "user", "content": user_message}
+        if images:
+            first_user["images"] = [i.split(",", 1)[1] if "," in i else i for i in images]
+        self.history.append(first_user)
         messages = list(self.history)
         run_steps: List[Dict] = []
         tools_used: List[str] = []

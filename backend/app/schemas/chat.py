@@ -66,6 +66,7 @@ class AgentTaskCreate(BaseModel):
     generated_tool_ids: List[int] = []
     subagent_model: Optional[str] = None
     subagent_max_depth: Optional[int] = None
+    images: Optional[List[str]] = None  # base64 images for vision-aware runs
 
 
 class AgentStepOut(BaseModel):

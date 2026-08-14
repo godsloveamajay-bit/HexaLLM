@@ -3,7 +3,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List, Optional
 import json
 from ..core.database import get_db, SessionLocal
 from ..core.security import get_current_user
@@ -20,7 +20,7 @@ from ..services.ollama_service import ollama
 from ..services import model_router
 
 
-async def _resolve_agent_model(model: str, task: str) -> str:
+async def _resolve_agent_model(model: str, task: str, has_image: bool = False) -> str:
     """Resolve a HexaLLM variant selection to a concrete Ollama model so the
     agent loop can run it. Non-variant ids pass through unchanged."""
     if not model_router.is_variant(model):
@@ -29,7 +29,28 @@ async def _resolve_agent_model(model: str, task: str) -> str:
         available = [m["name"] for m in await ollama.list_models()]
     except Exception:
         available = []
-    return model_router.concrete_for(model, task, available)
+    eff = model_router.concrete_for(model, task, available)
+    # Image tasks need a multimodal model — fall back to a pulled vision model
+    # so any variant transparently handles images (mirrors chat.py).
+    if has_image and not model_router.is_vision_model(eff):
+        _vis = model_router.vision_model_for(available)
+        if _vis:
+            eff = _vis
+    return eff
+
+
+def _clean_images(images) -> Optional[List[str]]:
+    """Normalize a base64 image list for Ollama (strip data: URI prefixes)."""
+    if not images:
+        return None
+    cleaned = []
+    for img in images:
+        raw = img
+        if "," in raw:
+            raw = raw.split(",", 1)[1]
+        if raw.strip():
+            cleaned.append(raw.strip())
+    return cleaned or None
 
 
 def _build_dynamic_tools(db: Session, user_id: int, tool_ids: List[int], sandbox):
@@ -134,7 +155,8 @@ async def run_agent_task(
     try:
         mcp_clients = _resolve_mcp_clients(db, data.mcp_server_ids, current_user.id)
         dynamic_tools = _build_dynamic_tools(db, current_user.id, data.generated_tool_ids, sandbox)
-        eff_model = await _resolve_agent_model(data.model, data.task)
+        images = _clean_images(data.images)
+        eff_model = await _resolve_agent_model(data.model, data.task, has_image=bool(images))
         result = await run_agent(
             task=data.task,
             model=eff_model,
@@ -147,6 +169,7 @@ async def run_agent_task(
             dynamic_tools=dynamic_tools,
             subagent_model=data.subagent_model,
             subagent_max_depth=data.subagent_max_depth,
+            images=images,
         )
         agent_run.status = "completed"
         agent_run.result = result.get("result")
@@ -212,7 +235,8 @@ async def run_agent_stream(
 
         async def agent_task():
             try:
-                eff_model = await _resolve_agent_model(data.model, data.task)
+                images = _clean_images(data.images)
+                eff_model = await _resolve_agent_model(data.model, data.task, has_image=bool(images))
                 result = await run_agent(
                     task=data.task,
                     model=eff_model,
@@ -225,6 +249,7 @@ async def run_agent_stream(
                     dynamic_tools=dynamic_tools,
                     subagent_model=data.subagent_model,
                     subagent_max_depth=data.subagent_max_depth,
+                    images=images,
                 )
                 await queue.put({"__done__": True, **result})
             except Exception as e:

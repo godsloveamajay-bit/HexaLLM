@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server, Brain, Terminal, ShieldCheck, ShieldAlert, Wrench, GitBranch, FolderSearch, Clock, Zap } from 'lucide-react'
+import { Bot, Play, ChevronDown, ChevronRight, Globe, Code2, FileText, Check, Loader2, Search, BarChart2, Sliders, Server, Brain, Terminal, ShieldCheck, ShieldAlert, Wrench, GitBranch, FolderSearch, Clock, Zap, Paperclip, X, Image as ImageIcon } from 'lucide-react'
 import api, { baseURL } from '../lib/api'
 import { loadModelOptions, defaultModelValue, ModelOption } from '../lib/models'
 import { useAuth } from '../store/auth'
@@ -260,6 +260,7 @@ function ThoughtDrawer({ steps, running }: { steps: Step[]; running: boolean }) 
 export default function AgentsPage() {
   const { user } = useAuth()
   const [task, setTask] = useState('')
+  const [agentImage, setAgentImage] = useState<string | null>(null)
   const [model, setModel] = useState('hex-5.1-prime')
   const [persona, setPersona] = useState<string>('research')
   const [selectedTools, setSelectedTools] = useState(PERSONAS[0].tools)
@@ -278,6 +279,7 @@ export default function AgentsPage() {
   const [subagentModel, setSubagentModel] = useState('')
   const [subagentMaxDepth, setSubagentMaxDepth] = useState(3)
   const stepsRef = useRef<HTMLDivElement>(null)
+  const agentImgRef = useRef<HTMLInputElement>(null)
 
   const activePersona = PERSONAS.find((p) => p.id === persona) ?? PERSONAS[0]
 
@@ -327,6 +329,7 @@ export default function AgentsPage() {
           generated_tool_ids: selectedGenTools,
           subagent_model: subagentModel || undefined,
           subagent_max_depth: subagentMaxDepth,
+          images: agentImage ? [agentImage] : undefined,
         }),
       })
 
@@ -431,6 +434,26 @@ export default function AgentsPage() {
                   rows={4}
                   className="input resize-none"
                 />
+                <div className="flex items-center gap-2 mt-2">
+                  <input ref={agentImgRef} type="file" accept="image/*" className="hidden" onChange={e => {
+                    const file = e.target.files?.[0]; if (!file) return; e.target.value = ''
+                    const reader = new FileReader()
+                    reader.onload = () => setAgentImage(reader.result as string)
+                    reader.readAsDataURL(file)
+                  }} />
+                  <button onClick={() => agentImgRef.current?.click()} className="btn-ghost px-2.5 py-1.5 text-xs flex items-center gap-1.5">
+                    <Paperclip className="w-3 h-3" />Attach image
+                  </button>
+                  {agentImage && (
+                    <span className="flex items-center gap-1.5 bg-gray-800/60 rounded-lg px-2 py-1 text-[11px] text-gray-300">
+                      <ImageIcon className="w-3 h-3 text-primary-400" />image attached
+                      <button onClick={() => setAgentImage(null)} className="hover:text-red-400"><X className="w-3 h-3" /></button>
+                    </span>
+                  )}
+                </div>
+                {agentImage && (
+                  <img src={agentImage} alt="attachment" className="mt-2 rounded-lg border border-gray-700/50 max-h-40 object-contain" />
+                )}
               </div>
 
               <div>

@@ -132,6 +132,7 @@ class CliRunRequest(BaseModel):
     session_id: Optional[str] = None
     model: str = "llama3:8B"
     tools: List[str] = ["web_search", "code_exec", "bash_exec", "read_file", "write_file"]
+    images: Optional[List[str]] = None  # base64 images for vision-aware tasks
 
 
 @router.post("/cli/run")
@@ -161,6 +162,7 @@ async def run_on_cli(
         "task":    data.task,
         "model":   data.model,
         "tools":   data.tools,
+        "images":  data.images,
     })
 
     async def event_stream():

@@ -254,11 +254,11 @@ _TOOL_FUNCS = {
 
 # ── Agent loop ─────────────────────────────────────────────────────────────
 
-async def _llm_call(model: str, messages: list, system: str, usage: Optional[Dict] = None) -> str:
+async def _llm_call(model: str, messages: list, system: str, usage: Optional[Dict] = None, images: Optional[List[str]] = None) -> str:
     """Collect a full response from the streaming LLM. If `usage` is passed it is
     populated with prompt_tokens/completion_tokens for the call (LLMOps telemetry)."""
     text = ""
-    async for chunk in ollama.chat_stream(model, messages, system_prompt=system, temperature=0.1, usage=usage):
+    async for chunk in ollama.chat_stream(model, messages, system_prompt=system, temperature=0.1, usage=usage, images=images):
         text += chunk
     return text
 
@@ -285,6 +285,7 @@ async def run_agent(
     dynamic_tools: Optional[Dict[str, Dict[str, Any]]] = None,  # name -> {"description", "func"}
     subagent_model: Optional[str] = None,  # model used by sub-agents (default: SUBAGENT_MODEL)
     subagent_max_depth: Optional[int] = None,  # max delegation depth (default: MAX_SUBAGENT_DEPTH)
+    images: Optional[List[str]] = None,    # base64 images for the initial task message
 ) -> Dict[str, Any]:
     """Run an agent to completion. Wraps _run_agent_inner so the sub-agent
     delegation context (_agent_ctx) is always restored after the run, even on
@@ -295,6 +296,7 @@ async def run_agent(
         return await _run_agent_inner(
             task, model, tools, max_steps, on_step, persona_prompt,
             mcp_clients, sandbox, dynamic_tools, subagent_model, subagent_max_depth,
+            images,
         )
     finally:
         if not had_ctx:
@@ -313,6 +315,7 @@ async def _run_agent_inner(
     dynamic_tools: Optional[Dict[str, Dict[str, Any]]] = None,  # name -> {"description", "func"}
     subagent_model: Optional[str] = None,  # model used by sub-agents (default: SUBAGENT_MODEL)
     subagent_max_depth: Optional[int] = None,  # max delegation depth (default: MAX_SUBAGENT_DEPTH)
+    images: Optional[List[str]] = None,    # base64 images for the initial task message
 ) -> Dict[str, Any]:
     # Initialize per-run agent context for sub-agent delegation tracking.
     # Only set when no context is active (a sub-agent call inherits the depth
@@ -392,7 +395,8 @@ async def _run_agent_inner(
             call_usage: Dict = {}
             try:
                 last_response = await asyncio.wait_for(
-                    _llm_call(model, messages, system, call_usage),
+                    _llm_call(model, messages, system, call_usage,
+                              images=images if (step_num == 1 and attempt == 0) else None),
                     timeout=120,
                 )
             except asyncio.TimeoutError:

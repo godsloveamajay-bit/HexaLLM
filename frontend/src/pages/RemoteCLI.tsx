@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react'
 import {
   Terminal, Play, Loader2, MonitorCheck, MonitorX,
-  ChevronDown, ChevronRight, Globe, Code2, FileText, RefreshCw,
+  ChevronDown, ChevronRight, Globe, Code2, FileText, RefreshCw, Paperclip, X, Image as ImageIcon,
 } from 'lucide-react'
 import api, { baseURL } from '../lib/api'
 import { useAuth } from '../store/auth'
@@ -101,10 +101,12 @@ export default function RemoteCLIPage() {
   const [loadingSessions, setLoadingSessions] = useState(true)
   const [selectedSession, setSelectedSession] = useState<string>('')
   const [task, setTask] = useState('')
+  const [cliImage, setCliImage] = useState<string | null>(null)
   const [model, setModel] = useState('llama3:8B')
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [runState, setRunState] = useState<RunState>({ status: 'idle', steps: [] })
   const outputRef = useRef<HTMLDivElement>(null)
+  const cliImgRef = useRef<HTMLInputElement>(null)
 
   const loadSessions = async () => {
     setLoadingSessions(true)
@@ -156,6 +158,7 @@ export default function RemoteCLIPage() {
           model: user?.is_admin ? model : '',
           session_id: selectedSession || undefined,
           tools: DEFAULT_TOOLS,
+          images: cliImage ? [cliImage] : undefined,
         }),
       })
 
@@ -294,6 +297,27 @@ export default function RemoteCLIPage() {
                 onKeyDown={e => { if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) runTask() }}
               />
               <p className="text-xs text-gray-600 mt-1">Ctrl/Cmd + Enter to run</p>
+              <div className="flex items-center gap-2 mt-2">
+                <input ref={cliImgRef} type="file" accept="image/*" className="hidden" onChange={e => {
+                  const file = e.target.files?.[0]; if (!file) return; e.target.value = ''
+                  const reader = new FileReader()
+                  reader.onload = () => setCliImage(reader.result as string)
+                  reader.readAsDataURL(file)
+                }} />
+                <button onClick={() => cliImgRef.current?.click()} className="btn-ghost px-2.5 py-1.5 text-xs flex items-center gap-1.5">
+                  <Paperclip className="w-3 h-3" />Attach image
+                </button>
+                {cliImage && (
+                  <span className="flex items-center gap-1.5 bg-gray-800/60 rounded-lg px-2 py-1 text-[11px] text-gray-300">
+                    <ImageIcon className="w-3 h-3 text-primary-400" />
+                    image attached
+                    <button onClick={() => setCliImage(null)} className="hover:text-red-400"><X className="w-3 h-3" /></button>
+                  </span>
+                )}
+              </div>
+              {cliImage && (
+                <img src={cliImage} alt="attachment" className="mt-2 rounded-lg border border-gray-700/50 max-h-40 object-contain" />
+              )}
             </div>
 
             {user?.is_admin && (

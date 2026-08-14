@@ -3,7 +3,7 @@ import {
   Send, Loader2, ChevronDown,
   FileText, Sparkles, Zap, Scale, Brain, Settings2, User,
   X, Paperclip, BookMarked, Clipboard, ClipboardCheck,
-  Mic, MicOff, Square, Download, RotateCcw,
+  Mic, MicOff, Square, Download, RotateCcw, AudioLines, Volume2, Pause,
   ChevronRight, Wrench, Lock, Sparkle, SlidersHorizontal, Globe, Sigma,
   Sliders, Shuffle,
 } from 'lucide-react'
@@ -426,6 +426,28 @@ export default function ChatPage() {
   const [greeting, setGreeting] = useState<string | null>(null)
   const [greetingLoading, setGreetingLoading] = useState(false)
 
+  // ── Voice mode (hands-free talk-and-hear) ───────────────────────────────
+  // Continuous loop: mic → VAD → server Whisper (invisible plumbing) → send →
+  // spoken reply via TTS. Transcripts still land in chat history — that's how
+  // the models "hear". The plain mic button (toggleVoice) is untouched.
+  const [voiceMode, setVoiceMode] = useState(false)       // master toggle
+  const [voiceLive, setVoiceLive] = useState(false)       // VAD mic is recording
+  const [voiceSpeaking, setVoiceSpeaking] = useState(false) // TTS playback
+  const [voiceHeld, setVoiceHeld] = useState(false)       // utterance queued
+  const voiceModeRef = useRef(false)
+  const voiceStreamRef = useRef<MediaStream | null>(null)
+  const voiceRecRef = useRef<MediaRecorder | null>(null)
+  const voiceChunksRef = useRef<Blob[]>([])
+  const voiceVadRef = useRef<{ raf: number; analyser: AnalyserNode | null; inSpeech: boolean; said: boolean; lastSpeechAt: number; startAt: number } | null>(null)
+  const voiceMicStateRef = useRef<'off' | 'recording' | 'paused' | 'transcribing'>('off')
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null)
+  const voiceQueueRef = useRef<HTMLAudioElement[]>([])
+  const voiceHeldTextRef = useRef('')
+  const voiceBusyRef = useRef(false)
+  const voiceSpeakRef = useRef<(t: string) => void>(() => {})
+  const voiceResumeRef = useRef<() => void>(() => {})
+  const voiceDrainRef = useRef<() => void>(() => {})
+
   // Raw model access (Hyper+ plans) + advanced Ollama params
   const hasRawAccess = !!user?.is_admin || user?.subscription?.plan?.slug === 'hyper' || user?.subscription?.plan?.slug === 'supreme'
   const [ollamaOptions, setOllamaOptions] = useState<Record<string, any>>({})
@@ -448,6 +470,7 @@ export default function ChatPage() {
       mountedRef.current = false
       try { mediaRecorderRef.current?.stop() } catch {}
       mediaStreamRef.current?.getTracks().forEach(t => t.stop())
+      stopVoice()
     }
   }, [])
 
@@ -633,6 +656,7 @@ export default function ChatPage() {
     setStreamError(null)
     setReasoningPhase(false)
     setStreamPhase('thinking')
+    voiceBusyRef.current = true
 
     // Typewriter smoothing buffer: tokens arrive in bursts (and slowly, on CPU),
     // so rather than repainting whole tokens we animate the *visible* length
@@ -671,6 +695,8 @@ export default function ChatPage() {
       if (!mountedRef.current) return
       setLast({ content: entry.content, citations: entry.citations.length ? entry.citations : undefined, route: entry.route, usage: entry.usage, latency_ms: entry.latency_ms })
       setSending(false); setStreamPhase('idle'); setWarmingModel(''); setStreamActivity(null); setActivitySince(null); setReasoningPhase(false)
+      voiceBusyRef.current = false
+      voiceDrainRef.current?.()
     }
     const pump = (ts: number) => {
       if (!lastTs) lastTs = ts
@@ -804,6 +830,7 @@ export default function ChatPage() {
       liveStreams.delete(session.id)
       entry.done = true
       if (mountedRef.current) { setSending(false); setStreamPhase('idle'); setStreamActivity(null); setActivitySince(null); setReasoningPhase(false) }
+      voiceBusyRef.current = false
       return
     } finally {
       entry.done = true
@@ -815,6 +842,12 @@ export default function ChatPage() {
         // the zero-token case where the pump never started.
         ensurePump()
       }
+      // Voice mode: speak the finished reply, or hand the mic back if it failed.
+      if (voiceModeRef.current) {
+        const body = entry.content.trim()
+        if (!errored && body) voiceSpeakRef.current(body)
+        else voiceResumeRef.current()
+      }
       setAttachment(null)
       if (!errored && isFirst && session && session.id > 0) {
         api.post(`/chat/sessions/${session.id}/rename`).then(({ data }) => {
@@ -824,10 +857,10 @@ export default function ChatPage() {
     }
   }, [model, systemPrompt, attachment])
 
-  const sendMessage = async () => {
-    if (!input.trim() || streamPhase !== 'idle' || sending) return
+  const pushText = async (text: string) => {
+    if (!text.trim() || streamPhase !== 'idle' || sending) return
     if (isGuest && guestBlocked) return
-    const userMsg: Message = { role: 'user', content: input.trim() }
+    const userMsg: Message = { role: 'user', content: text.trim() }
     const newMessages = [...messages, userMsg]
     setMessages([...newMessages, { role: 'assistant', content: '' }])
     setInput('')
@@ -839,11 +872,15 @@ export default function ChatPage() {
       // Session couldn't be created — undo the optimistic user/assistant bubbles
       // so the composer isn't left in a half-sent state.
       setStreamError('Could not start the chat. Please try again.')
-      if (mountedRef.current) { setMessages(messages); setInput(userMsg.content) }
+      if (mountedRef.current) { setMessages(messages); setInput(text.trim()) }
       return
     }
     if (!session) return
     await doStream(newMessages, session, isFirst)
+  }
+
+  const sendMessage = async () => {
+    await pushText(input)
   }
 
   const regenerate = async () => {
@@ -969,6 +1006,254 @@ export default function ChatPage() {
     if (mountedRef.current) setListening(true)
   }
 
+  const transcribeBlob = async (blob: Blob, mimeType: string): Promise<string> => {
+    const ext = mimeType.includes('mp4') ? 'mp4' : mimeType.includes('ogg') ? 'ogg' : 'webm'
+    const fd = new FormData()
+    fd.append('file', blob, `voice.${ext}`)
+    const tok = localStorage.getItem('token')
+    const headers: Record<string, string> = {}
+    if (tok) headers.Authorization = `Bearer ${tok}`
+    const resp = await fetch(`${baseURL}/transcribe`, { method: 'POST', headers, body: fd })
+    if (!resp.ok) {
+      let detail = 'Transcription failed'
+      try { detail = (await resp.json()).detail || detail } catch {}
+      throw new Error(detail)
+    }
+    const { text } = await resp.json()
+    return (text || '').trim()
+  }
+
+  // ── Voice mode loop ─────────────────────────────────────────────────────
+  const voicePlayNext = () => {
+    if (voiceAudioRef.current) return
+    const a = voiceQueueRef.current.shift()
+    if (!a) {
+      setVoiceSpeaking(false)
+      voiceResumeRef.current()
+      return
+    }
+    voiceAudioRef.current = a
+    setVoiceSpeaking(true)
+    voicePauseMic()
+    a.play().catch(() => {})
+    a.onended = () => {
+      URL.revokeObjectURL(a.src)
+      voiceAudioRef.current = null
+      voicePlayNext()
+    }
+  }
+
+  const speakText = async (text: string) => {
+    if (!voiceModeRef.current) return
+    const clean = text.replace(/[#*`_~>\[\]|]/g, ' ').replace(/\s+/g, ' ').trim()
+    if (!clean) return
+    try {
+      const tok = localStorage.getItem('token')
+      const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+      if (tok) headers.Authorization = `Bearer ${tok}`
+      const resp = await fetch(`${baseURL}/voice/synthesize`, {
+        method: 'POST', headers, body: JSON.stringify({ text: clean.slice(0, 3000) }),
+      })
+      if (!resp.ok) throw new Error('tts')
+      const blob = await resp.blob()
+      if (!blob.size) throw new Error('tts')
+      const url = URL.createObjectURL(blob)
+      const a = new Audio(url)
+      voiceQueueRef.current.push(a)
+      voicePlayNext()
+    } catch {
+      // Synthesis failed — don't leave the mic paused forever.
+      if (!voiceQueueRef.current.length && !voiceAudioRef.current) voiceResumeRef.current()
+    }
+  }
+
+  const voicePauseMic = () => {
+    if (voiceMicStateRef.current !== 'recording') return
+    const v = voiceVadRef.current
+    if (v) { cancelAnimationFrame(v.raf); voiceVadRef.current = null }
+    try { voiceRecRef.current?.stop() } catch {}
+    voiceRecRef.current = null
+    voiceChunksRef.current = []
+    voiceMicStateRef.current = 'paused'
+    setVoiceLive(false)
+  }
+
+  const voiceResumeMic = async () => {
+    if (!voiceModeRef.current) return
+    if (voiceMicStateRef.current === 'recording' || voiceMicStateRef.current === 'transcribing') return
+    if (voiceQueueRef.current.length || voiceAudioRef.current) return
+    try { await startVoiceMic() } catch {}
+  }
+
+  const sendVoiceText = (text: string) => {
+    if (!voiceModeRef.current) return
+    if (voiceBusyRef.current || voiceSpeaking) {
+      voiceHeldTextRef.current += (voiceHeldTextRef.current ? ' ' : '') + text
+      setVoiceHeld(true)
+      voiceResumeMic()
+      return
+    }
+    voicePauseMic()
+    pushText(text)
+  }
+
+  const drainVoice = () => {
+    if (!voiceModeRef.current || voiceBusyRef.current) return
+    const t = voiceHeldTextRef.current.trim()
+    if (!t) return
+    voiceHeldTextRef.current = ''
+    setVoiceHeld(false)
+    sendVoiceText(t)
+  }
+
+  const finalizeUtterance = () => {
+    const v = voiceVadRef.current
+    if (v) cancelAnimationFrame(v.raf)
+    voiceMicStateRef.current = 'transcribing'
+    setVoiceLive(false)
+    try { voiceRecRef.current?.stop() } catch {}
+  }
+
+  const startVoiceMic = async () => {
+    if (voiceMicStateRef.current === 'recording' || voiceMicStateRef.current === 'transcribing') return
+    if (!voiceModeRef.current) return
+    if (!voiceStreamRef.current) {
+      if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
+        toast.error('Voice mode isn’t supported in this browser.')
+        stopVoice()
+        return
+      }
+      try {
+        voiceStreamRef.current = await navigator.mediaDevices.getUserMedia({ audio: true })
+      } catch (e: any) {
+        toast.error(
+          e?.name === 'NotAllowedError' ? 'Microphone blocked. Allow mic access and try again.'
+          : e?.name === 'NotFoundError' ? 'No microphone was found.'
+          : 'Could not access the microphone.')
+        stopVoice()
+        return
+      }
+    }
+    const stream = voiceStreamRef.current
+    const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+      .find(t => (window as any).MediaRecorder?.isTypeSupported?.(t)) || ''
+    let mr: MediaRecorder
+    try { mr = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined) }
+    catch { toast.error('Voice recording is unavailable in this browser.'); stopVoice(); return }
+
+    // VAD — energy threshold on the live stream decides when speech starts/ends.
+    if (!voiceVadRef.current) {
+      const Ctx = window.AudioContext || (window as any).webkitAudioContext
+      if (Ctx) {
+        try {
+          const ctx = new Ctx()
+          const src = ctx.createMediaStreamSource(stream)
+          const analyser = ctx.createAnalyser()
+          analyser.fftSize = 2048
+          analyser.smoothingTimeConstant = 0.3
+          src.connect(analyser)
+          voiceVadRef.current = { raf: 0, analyser, inSpeech: false, said: false, lastSpeechAt: 0, startAt: performance.now() }
+        } catch { voiceVadRef.current = null }
+      }
+    }
+
+    voiceChunksRef.current = []
+    mr.ondataavailable = (e) => { if (e.data && e.data.size) voiceChunksRef.current.push(e.data) }
+    mr.onerror = () => { voicePauseMic(); voiceResumeMic() }
+    mr.onstop = async () => {
+      voiceRecRef.current = null
+      const vad = voiceVadRef.current
+      const blob = new Blob(voiceChunksRef.current, { type: mr.mimeType || 'audio/webm' })
+      voiceChunksRef.current = []
+      const hadSpeech = !!(vad && vad.said)
+      voiceVadRef.current = null
+      let text = ''
+      if (blob.size && hadSpeech && voiceModeRef.current) {
+        try { text = await transcribeBlob(blob, mr.mimeType || 'audio/webm') } catch { toast.error('Could not understand that — try again') }
+      }
+      if (!voiceModeRef.current) return
+      if (text) sendVoiceText(text)
+      else voiceResumeMic()
+    }
+
+    try { mr.start() } catch { voicePauseMic(); voiceResumeMic(); return }
+    voiceRecRef.current = mr
+    voiceMicStateRef.current = 'recording'
+    setVoiceLive(true)
+
+    // VAD pump: watch RMS; finalize the utterance after ~1.3s of silence
+    // (or 25s of continuous speech, so Whisper never gets a monster file).
+    const vad = voiceVadRef.current
+    if (vad) {
+      const loop = () => {
+        if (voiceMicStateRef.current !== 'recording' || !voiceModeRef.current) return
+        const a = vad.analyser
+        const now = performance.now()
+        if (a) {
+          const buf = new Float32Array(a.fftSize)
+          a.getFloatTimeDomainData(buf)
+          let sum = 0
+          for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i]
+          const rms = Math.sqrt(sum / buf.length)
+          if (rms > 0.008) {
+            if (!vad.inSpeech) vad.inSpeech = true
+            vad.said = true
+            vad.lastSpeechAt = now
+          } else if (vad.inSpeech) {
+            vad.inSpeech = false
+            vad.lastSpeechAt = now
+          }
+          if (vad.said && now - vad.lastSpeechAt > 1300 && now - vad.startAt > 1500) { finalizeUtterance(); return }
+          if (vad.said && now - vad.startAt > 25000) { finalizeUtterance(); return }
+        }
+        vad.raf = requestAnimationFrame(loop)
+      }
+      vad.raf = requestAnimationFrame(loop)
+    }
+  }
+
+  const startVoiceMode = async () => {
+    if (voiceMode) return
+    voiceModeRef.current = true
+    setVoiceMode(true)
+    setVoiceHeld(false)
+    await startVoiceMic()
+    toast('Voice mode on — just talk, and replies are spoken back.')
+  }
+
+  const stopVoiceTts = () => {
+    voiceQueueRef.current.forEach(a => { try { a.pause() } catch {} URL.revokeObjectURL(a.src) })
+    voiceQueueRef.current = []
+    if (voiceAudioRef.current) {
+      try { voiceAudioRef.current.pause() } catch {}
+      voiceAudioRef.current = null
+    }
+    setVoiceSpeaking(false)
+    voiceResumeMic()
+  }
+
+  const stopVoice = () => {
+    voiceModeRef.current = false
+    setVoiceMode(false)
+    setVoiceHeld(false)
+    voiceHeldTextRef.current = ''
+    stopVoiceTts()
+    const v = voiceVadRef.current
+    if (v) { cancelAnimationFrame(v.raf); voiceVadRef.current = null }
+    try { voiceRecRef.current?.stop() } catch {}
+    voiceRecRef.current = null
+    voiceChunksRef.current = []
+    voiceMicStateRef.current = 'off'
+    voiceStreamRef.current?.getTracks().forEach(t => t.stop())
+    voiceStreamRef.current = null
+    setVoiceLive(false)
+  }
+
+  // Keep the freshest voice callbacks reachable from doStream's closures.
+  voiceSpeakRef.current = speakText
+  voiceResumeRef.current = voiceResumeMic
+  voiceDrainRef.current = drainVoice
+
   const applyTemplate = (t: Template) => { setSystemPrompt(t.content); setShowSystem(true); setShowTemplates(false); if (model !== CUSTOM_VARIANT_ID) setModel(CUSTOM_VARIANT_ID) }
   const saveTemplate = async () => {
     if (!newTemplateName.trim() || !systemPrompt.trim()) return
@@ -997,6 +1282,23 @@ export default function ChatPage() {
     <div data-templates-panel
       className="w-full rounded-3xl border border-gray-700/50 bg-gray-900/70 light:bg-white/80 backdrop-blur
                  shadow-lg shadow-black/20 focus-within:border-primary-500/60 transition-colors">
+      {voiceMode && (
+        <div className="flex items-center gap-2 px-3 pt-2.5 text-[11px] text-gray-400">
+          {voiceSpeaking ? <Volume2 className="w-3.5 h-3.5 text-cyan-400 animate-pulse flex-shrink-0" />
+            : voiceLive ? <AudioLines className="w-3.5 h-3.5 text-cyan-400 animate-pulse flex-shrink-0" />
+            : <MicOff className="w-3.5 h-3.5 text-gray-500 flex-shrink-0" />}
+          <span className="flex-1 truncate">
+            {voiceSpeaking ? 'Speaking…' : voiceLive ? 'Listening — just talk' : 'Mic paused'}
+            {voiceHeld && ' · queued'}
+          </span>
+          <button onClick={stopVoiceTts} className="hover:text-gray-200 transition-colors" title="Stop speaking">
+            <Pause className="w-3.5 h-3.5" />
+          </button>
+          <button onClick={stopVoice} className="hover:text-red-400 transition-colors" title="Exit voice mode">
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
       {isGuest && guestBlocked ? (
         <div className="max-w-xl mx-auto text-center py-4 px-4">
           <Lock className="w-5 h-5 text-primary-400 mx-auto mb-2" />
@@ -1016,6 +1318,9 @@ export default function ChatPage() {
                 <Paperclip className="w-4 h-4" />
               </button>
             )}
+            <button onClick={() => (voiceMode ? stopVoice() : startVoiceMode())} className={clsx('btn-ghost p-2 flex-shrink-0 transition-colors', voiceMode && 'text-cyan-400 bg-cyan-900/30')} title={voiceMode ? 'Exit voice mode' : 'Voice mode — talk, and hear replies spoken'}>
+              <AudioLines className={clsx('w-4 h-4', voiceLive && 'animate-pulse')} />
+            </button>
             <button onClick={toggleVoice} disabled={transcribing} className={clsx('btn-ghost p-2 flex-shrink-0 transition-colors', listening && 'text-red-400 bg-red-900/20', transcribing && 'opacity-60 cursor-not-allowed')} title={transcribing ? 'Transcribing…' : listening ? 'Stop recording' : 'Voice input (Whisper)'}>
               {transcribing ? <Loader2 className="w-4 h-4 animate-spin" /> : listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
@@ -1024,7 +1329,7 @@ export default function ChatPage() {
             </button>
             <textarea
               ref={textareaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
-              placeholder={listening ? 'Recording… click the mic to stop' : transcribing ? 'Transcribing…' : messages.length === 0 ? 'What would you like to know?' : 'Message… (Enter to send, Shift+Enter for newline)'}
+              placeholder={voiceMode ? (voiceSpeaking ? 'Speaking…' : 'Voice mode — just talk') : listening ? 'Recording… click the mic to stop' : transcribing ? 'Transcribing…' : messages.length === 0 ? 'What would you like to know?' : 'Message… (Enter to send, Shift+Enter for newline)'}
               rows={1} style={{ maxHeight: '200px' }} className="input flex-1 resize-none leading-relaxed"
             />
             {isStreaming ? (

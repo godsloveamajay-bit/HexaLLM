@@ -47,7 +47,7 @@ def _transcribe_file(path: str) -> dict:
 
 
 @router.post("")
-@limiter.limit("10/minute")
+@limiter.limit("60/minute")  # voice mode sends short chunks continuously
 async def transcribe(
     request: Request,
     file: UploadFile = File(...),

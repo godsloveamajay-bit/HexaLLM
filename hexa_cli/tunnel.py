@@ -104,6 +104,7 @@ class CliTunnel:
         task_id = msg["task_id"]
         task    = msg["task"]
         model   = msg.get("model")
+        images  = msg.get("images") or None
 
         on_event({"type": "task_start", "task_id": task_id, "task": task})
 
@@ -114,7 +115,7 @@ class CliTunnel:
             saved_model, agent.model = agent.model, model
 
         try:
-            async for event in agent.run(task, tool_funcs, tool_descriptions):
+            async for event in agent.run(task, tool_funcs, tool_descriptions, images=images):
                 if event["type"] == "tool":
                     on_event({"type": "step", "task_id": task_id, **event})
                     await ws.send(json.dumps({

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { Play, Square, Copy, Check, Trash2, Terminal, Save, FolderOpen } from 'lucide-react'
+import { Play, Square, Copy, Check, Trash2, Terminal, Save, FolderOpen, Paperclip, FileText, X } from 'lucide-react'
 import Markdown from '../components/ui/Markdown'
 import { prettyModel } from '../lib/models'
 import { api, baseURL } from '../lib/api'
@@ -94,6 +94,7 @@ export default function Playground() {
   const [topP, setTopP] = useState(0.9)
   const [maxTokens, setMaxTokens] = useState(2048)
   const [stream, setStream] = useState(true)
+  const [pgAttachment, setPgAttachment] = useState<{ base64: string; type: string; name: string } | null>(null)
 
   const [output, setOutput] = useState('')
   const [running, setRunning] = useState(false)
@@ -106,6 +107,7 @@ export default function Playground() {
 
   const abortRef = useRef<AbortController | null>(null)
   const outputRef = useRef<HTMLDivElement | null>(null)
+  const pgImgRef = useRef<HTMLInputElement | null>(null)
 
   const { activeWorkspaceId, setActiveWorkspace, pendingPreset, loadPreset } = useDevStore()
   const [workspaces, setWorkspaces] = useState<Workspace[]>([])
@@ -175,6 +177,9 @@ export default function Playground() {
       temperature,
       max_tokens: maxTokens,
       ollama_options: ollamaOptions,
+      attachment_base64: pgAttachment?.base64 || null,
+      attachment_type: pgAttachment?.type || null,
+      attachment_name: pgAttachment?.name || null,
     }
     if (system.trim()) body.system_prompt = system.trim()
     return body
@@ -402,7 +407,29 @@ export default function Playground() {
 
             <div>
               <div style={LABEL_STYLE} className="mb-1">prompt</div>
-              <Input value={prompt} onChange={setPrompt} placeholder="> ask the model something…" />
+              <div className="flex items-center gap-2">
+                <Input value={prompt} onChange={setPrompt} placeholder="> ask the model something…" />
+                <input ref={pgImgRef} type="file" accept="image/*,.pdf,.txt,.md" className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0]; if (!file) return; e.target.value = ''
+                    const type = file.type.startsWith('image/') ? 'image' : file.type === 'application/pdf' ? 'pdf' : 'text'
+                    const reader = new FileReader()
+                    reader.onload = () => setPgAttachment({ base64: reader.result as string, type, name: file.name })
+                    reader.readAsDataURL(file)
+                  }} />
+                <button onClick={() => pgImgRef.current?.click()} title="Attach image or document" className="p-1.5 rounded-md hover:bg-[#1e2430] text-secondary-500 hover:text-primary-400 transition-colors flex-shrink-0">
+                  <Paperclip className="w-4 h-4" />
+                </button>
+              </div>
+              {pgAttachment && (
+                <div className="mt-2 flex items-center gap-2">
+                  {pgAttachment.type === 'image'
+                    ? <img src={pgAttachment.base64} alt="attachment" className="max-h-28 rounded-md border border-secondary-800 object-contain" />
+                    : <FileText className="w-4 h-4 text-secondary-400" />}
+                  <span className="text-[11px] font-mono text-secondary-400 flex-1 truncate">{pgAttachment.name}</span>
+                  <button onClick={() => setPgAttachment(null)} className="p-1 rounded hover:bg-[#1e2430] text-secondary-500 hover:text-red-400 transition-colors"><X className="w-3.5 h-3.5" /></button>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-2 gap-3">
