@@ -47,11 +47,14 @@ class OAIChatRequest(BaseModel):
     max_tokens: Optional[int] = None
     system: Optional[str] = None
     stream_options: Optional[OAIStreamOptions] = None
+    personality: Optional[Dict[str, int]] = None
 
 
 def _resolve(key: APIKey, req: OAIChatRequest):
-    """Work out the served model, system prompt and temperature for this call,
-    honouring the key's persona binding (if any) over caller-supplied values."""
+    """Work out the served model, system prompt, sampling and personality for
+    this call. Personality precedence: the key's persona binding, else a
+    per-request `personality` override, else the key owner's saved sliders —
+    so CLI/daemon calls with a plain key still carry the user's voice."""
     persona = key.persona if key.persona_id else None
 
     # Served model: persona's snapshot, else the key's raw model, else caller's.
@@ -95,14 +98,25 @@ def _resolve(key: APIKey, req: OAIChatRequest):
         system_parts.append(req.system)
     system_prompt = "\n\n".join(p for p in system_parts if p)
 
-    # A persona bound to this key carries its Personality Engine settings into
-    # the exposed API: its voice fragment + sampling, unless the caller overrides.
-    pspec = personality_engine.compose(persona.personality) if persona else {"active": False}
+    # Personality Engine sliders: persona binding → per-request override →
+    # the key owner's saved default. The fragment + sampling reach the model
+    # only when the engine is active (any trait moved ≥8 from neutral).
+    traits = None
+    if persona:
+        traits = persona.personality
+    elif req.personality is not None:
+        traits = req.personality
+    elif key.user:
+        traits = key.user.ai_personality
+    pspec = personality_engine.compose(traits)
     top_p: Optional[float] = None
+    eff_max: Optional[int] = None
     if pspec.get("active"):
         if pspec["system_fragment"]:
             system_prompt = (system_prompt + "\n\n" + pspec["system_fragment"]) if system_prompt else pspec["system_fragment"]
         top_p = pspec["top_p"]
+        if pspec["max_tokens"] and req.max_tokens is None:
+            eff_max = pspec["max_tokens"]
 
     if req.temperature is not None:
         temperature = req.temperature
@@ -113,7 +127,7 @@ def _resolve(key: APIKey, req: OAIChatRequest):
     else:
         temperature = 0.7
 
-    return model, system_prompt, temperature, top_p, convo
+    return model, system_prompt, temperature, top_p, eff_max, convo
 
 
 def _meter(db: Session, key_id: int, user_id: int, model: str, usage: dict, latency_ms: int):
@@ -140,7 +154,7 @@ async def chat_completions(
     key: APIKey = Depends(get_api_key_record),
     db: Session = Depends(get_db),
 ):
-    model, system_prompt, temperature, top_p, messages = _resolve(key, req)
+    model, system_prompt, temperature, top_p, eff_max, messages = _resolve(key, req)
     # `model` is the advertised id (may be a HexaLLM variant); resolve it to a
     # concrete Ollama model for the actual inference call.
     concrete = model
@@ -164,7 +178,7 @@ async def chat_completions(
             try:
                 async for chunk in ollama.chat_stream(
                     concrete, messages, system_prompt=system_prompt,
-                    temperature=temperature, max_tokens=req.max_tokens, usage=usage, top_p=top_p,
+                    temperature=temperature, max_tokens=eff_max if eff_max is not None else req.max_tokens, usage=usage, top_p=top_p,
                 ):
                     delta = {
                         "id": request_id, "object": "chat.completion.chunk",
@@ -204,7 +218,7 @@ async def chat_completions(
     full = ""
     async for chunk in ollama.chat_stream(
         concrete, messages, system_prompt=system_prompt,
-        temperature=temperature, max_tokens=req.max_tokens, usage=usage, top_p=top_p,
+        temperature=temperature, max_tokens=eff_max if eff_max is not None else req.max_tokens, usage=usage, top_p=top_p,
     ):
         full += chunk
 
