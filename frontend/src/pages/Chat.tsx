@@ -397,6 +397,10 @@ export default function ChatPage() {
   const [searchParams] = useSearchParams()
   const wantsNew = searchParams.get('new') === '1'
   const requestedIdRef = useRef<number | null>(null)
+  // In-flight session creation from "New Chat". Sends made while it resolves
+  // must reuse it — otherwise they'd fall back to the stale active session and
+  // quietly continue the previous chat (the reported bug).
+  const pendingSessionRef = useRef<Promise<Session | null> | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [model, setModel] = useState(user?.ai_default_model || 'hex-5.1-prime')
@@ -503,14 +507,18 @@ export default function ChatPage() {
     }
   }, [activeId, isGuest, sessionsLoaded])
 
-  // First visit: open the most recent chat. "?new=1" (sidebar button) starts fresh.
+  // First visit: open the most recent chat. "?new=1" (sidebar button) starts
+  // fresh — and must do so even when a chat is already active (previously the
+  // activeId guard swallowed the param, so "New Chat" silently kept the last
+  // session and new messages continued that chat).
   useEffect(() => {
-    if (isGuest || !sessionsLoaded || activeId !== null) return
+    if (isGuest || !sessionsLoaded) return
     if (wantsNew) {
       newChat()
       navigate('/chat', { replace: true })
       return
     }
+    if (activeId !== null) return
     if (sessions.length > 0) requestSession(sessions[0].id)
   }, [isGuest, sessionsLoaded, wantsNew, sessions.length, activeId])
 
@@ -658,11 +666,12 @@ export default function ChatPage() {
     setInput('')
     setAttachment(null)
     setStreamError(null)
-    try {
-      await createSession(model, systemPrompt)
-    } catch {
-      setStreamError('Could not start a new chat.')
-    }
+    if (isGuest) return
+    const p = createSession(model, systemPrompt).catch(() => null)
+    pendingSessionRef.current = p
+    const created = await p
+    if (pendingSessionRef.current === p) pendingSessionRef.current = null
+    if (!created) setStreamError('Could not start a new chat.')
   }
 
   useEffect(() => {
@@ -890,7 +899,16 @@ export default function ChatPage() {
     const isFirst = messages.length === 0
     let session: { id: number } | null
     try {
-      session = isGuest ? { id: GUEST_SESSION_ID } : (activeSession ?? await createSession(model, systemPrompt))
+      const pending = pendingSessionRef.current
+      if (pending) {
+        const created = await pending
+        if (!created) throw new Error('session create failed')
+        session = created
+      } else if (isGuest) {
+        session = { id: GUEST_SESSION_ID }
+      } else {
+        session = activeSession ?? await createSession(model, systemPrompt)
+      }
     } catch {
       // Session couldn't be created — undo the optimistic user/assistant bubbles
       // so the composer isn't left in a half-sent state.
