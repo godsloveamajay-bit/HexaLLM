@@ -1,7 +1,23 @@
 import httpx
 import json
+import os
 from typing import AsyncGenerator, List, Dict, Optional
 from ..core.config import settings
+
+
+# Per-model GPU layer budget (CPU-RAM offload for big models). The 12GB VRAM
+# can hold the 7B/8B chat models at full GPU, but the 14B (~9.3GB) evicts
+# them. Setting a layer count here keeps the big model resident (RAM for the
+# rest) alongside ONE small model — at ~2× slower generation. Measured on
+# this box: CPU-only 14B ≈ 0.6 tok/s (unusable); half-offload ≈ 7 tok/s;
+# full GPU ≈ 30-40 tok/s. Default empty = full GPU for everything (best
+# single-model latency; mixed traffic pays occasional cold loads).
+# Override via env: OLLAMA_NUM_GPU_OFFLOAD='{"qwen3:14b": 20}'
+_NUM_GPU_OFFLOAD: Dict[str, Optional[int]] = {}
+try:
+    _NUM_GPU_OFFLOAD = json.loads(os.environ.get("OLLAMA_NUM_GPU_OFFLOAD") or "{}")
+except (ValueError, TypeError):
+    pass
 
 
 class OllamaService:
@@ -106,6 +122,13 @@ class OllamaService:
             payload["options"]["top_p"] = top_p
         if extra_options:
             payload["options"].update(extra_options)
+        # Big models (>~9GB) that can't co-reside in the 12GB VRAM with the
+        # fast chat models get HALF their layers offloaded to CPU RAM. They run
+        # ~2× slower than full-GPU but stay resident alongside the 7B/8B models
+        # (OLLAMA_KEEP_ALIVE=-1), so mixed traffic never pays a 10-20s reload.
+        num_gpu = _NUM_GPU_OFFLOAD.get(model)
+        if num_gpu is not None:
+            payload["options"]["num_gpu"] = num_gpu
         # think=False suppresses chain-of-thought on reasoning models (deepseek-r1,
         # qwen3) so trivial inputs answer instantly instead of reasoning for minutes.
         # Leave it unset (None) for normal queries / non-reasoning models.
