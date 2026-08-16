@@ -161,9 +161,9 @@ _CHAT = "qwen2.5:7b"                   # general chat
 _THINKING = "deepseek-r1:1.5b"        # default reasoner — tiny, streams  thinking fast
 _THINKING_DEEP = "deepseek-r1:8b"     # heavier reasoner; ~6 GB, fits 12 GB VRAM
 _GENERAL = "llama3.1:8b"              # writing/general
-_LARGE = "qwen3:14b"                  # balanced default + universal fallback (fits 12 GB)
+_LARGE = "qwen3:14b"                  # heavy tier — universal fallback (kept CPU-split resident alongside the fast 7B)
 _BIG = "gemma3:27b"                   # heavy reasoning tier — spills to CPU (48%/52%), needs ~6 GB system RAM
-_FAST = "llama3.2:3b"                # snappy 3B for titles / quick replies
+_FAST = "qwen2.5:7b"                # snappy replies for titles / quick replies — shares residency with the 14B (the old 3B would evict it)
 _VISION = "moondream:latest"             # fallback vision (small + fast on CPU; llama3.2-vision's mllama arch can't load on this ollama build)
 _VISION_BIG = "gemma3:27b"              # primary vision — far smarter reading of screenshots/diagrams/UI (spills 50/50 to CPU, slower)
 _MATH = "qwen2-math:7b"             # math-tuned for equations, proofs, step-by-step
@@ -309,7 +309,7 @@ VARIANTS: Dict[str, Variant] = {
         id="hex-auto",
         label="HexaLLM Auto",
         description="Picks the best variant for each message — code, maths, deep reasoning, vision or everyday chat.",
-        default_model=_GENERAL,
+        default_model=_CHAT,
         routes=[],
         system_prompt=(
             "You are HexaLLM Auto, a versatile assistant that adapts to the task. "
@@ -320,7 +320,7 @@ VARIANTS: Dict[str, Variant] = {
         temperature=0.7,
         num_ctx=8192,
         num_predict=2048,
-        fallbacks=[_LARGE, _GENERAL],
+        fallbacks=[_CHAT, _GENERAL, _LARGE],
     ),
     "hex-4.2-code": Variant(
         id="hex-4.2-code",
@@ -414,7 +414,7 @@ VARIANTS: Dict[str, Variant] = {
         id="hex-5.1-prime",
         label="HexaLLM Prime",
         description="Spreads work across all models. Routes each message to the best model for the job.",
-        default_model=_LARGE,
+        default_model=_CHAT,
         routes=[
             RoutedModel(_CODING_HEAVY, "code_heavy"),
             RoutedModel(_CODING, "code"),
