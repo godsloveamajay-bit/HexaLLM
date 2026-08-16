@@ -383,8 +383,7 @@ export default function LandingPage() {
 
       {/* ═══ 6 · FOOTER — Hex Black ═══ */}
       <footer className="mx-2 sm:mx-4 rounded-[2rem] overflow-hidden bg-[#0D0D0D] border border-white/5">
-        <div className="mx-auto max-w-6xl px-6 py-14 flex flex-col md:flex-row items-center justify-between gap-8">
-          <Reveal><Logo /></Reveal>
+        <div className="mx-auto max-w-6xl px-6 py-14 flex flex-col md:flex-row items-center justify-center gap-8">
           <Reveal delay={80}>
             <nav className="flex flex-wrap items-center justify-center gap-6 text-sm text-[#C8C8C8]">
               <a href="#api" className="hover:text-primary-400 transition-colors">Docs</a>
