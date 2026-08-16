@@ -1,0 +1,38 @@
+# Systemd service to run the full HexaLLM stack (ollama + backend + worker + frontend + nginx + db + redis)
+# as a single systemd unit. Place at /etc/systemd/system/hexallm.service
+#
+# Usage:
+#   sudo cp deploy/systemd/hexallm.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now hexallm
+#
+# The service runs docker compose from the repo root. Ensure:
+#   - Docker is installed and the hexallm user is in the docker group
+#   - .env file exists at /home/hexallm/HexaLLM/.env with required variables
+
+[Unit]
+Description=HexaLLM full stack (ollama + backend + worker + frontend + nginx + db + redis)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/home/hexallm/HexaLLM
+# Build and start the stack
+ExecStartPre=/usr/bin/docker compose -f docker-compose.standalone.yml build
+ExecStart=/usr/bin/docker compose -f docker-compose.standalone.yml up -d
+# Stop the stack on service stop
+ExecStop=/usr/bin/docker compose -f docker-compose.standalone.yml down
+# Clean restart on failure
+Restart=on-failure
+RestartSec=30
+TimeoutStartSec=300
+TimeoutStopSec=60
+# Run as the hexallm user (adjust if different)
+User=hexallm
+Group=docker
+
+[Install]
+WantedBy=multi-user.target

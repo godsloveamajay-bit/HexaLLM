@@ -1,0 +1,172 @@
+# Unified single-file stack for simple standalone deployment.
+# Usage: docker compose -f docker-compose.standalone.yml up -d
+# (Contrasts with the split architecture: this runs its own Ollama in-container
+# instead of sharing the host's model store. Use when you don't need model
+# sharing across multiple HexaLLM instances.)
+#
+# Required .env: POSTGRES_PASSWORD, SECRET_KEY
+# Optional .env: APP_URL, DEBUG, STABILITY_API_KEY, GOOGLE_CLIENT_ID, etc.
+
+services:
+  ollama:
+    image: ollama/ollama:0.32.6
+    # Expose on host for local CLI/dev access; remove ports: if not needed.
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      - ollama-data:/root/.ollama
+    restart: unless-stopped
+    # For GPU: uncomment deploy block and ensure nvidia-container-toolkit is installed
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: all
+    #           capabilities: [gpu]
+
+  backend:
+    image: ghcr.io/godsloveamajay-bit/hexallm-backend:${TAG:-local}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DATABASE_URL=postgresql://hexallm:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/hexallm
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
+      - APP_URL=${APP_URL:-http://localhost}
+      - DEBUG=${DEBUG:-false}
+      - STABILITY_API_KEY=${STABILITY_API_KEY:-}
+      - GOOGLE_CLIENT_ID=${GOOGLE_CLIENT_ID:-}
+      - GOOGLE_CLIENT_SECRET=${GOOGLE_CLIENT_SECRET:-}
+      - MICROSOFT_CLIENT_ID=${MICROSOFT_CLIENT_ID:-}
+      - MICROSOFT_CLIENT_SECRET=${MICROSOFT_CLIENT_SECRET:-}
+      - YAHOO_CLIENT_ID=${YAHOO_CLIENT_ID:-}
+      - YAHOO_CLIENT_SECRET=${YAHOO_CLIENT_SECRET:-}
+      - APPLE_CLIENT_ID=${APPLE_CLIENT_ID:-}
+      - APPLE_TEAM_ID=${APPLE_TEAM_ID:-}
+      - APPLE_KEY_ID=${APPLE_KEY_ID:-}
+      - APPLE_PRIVATE_KEY=${APPLE_PRIVATE_KEY:-}
+      - SAMSUNG_CLIENT_ID=${SAMSUNG_CLIENT_ID:-}
+      - SAMSUNG_CLIENT_SECRET=${SAMSUNG_CLIENT_SECRET:-}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASSWORD=${SMTP_PASSWORD:-}
+      - SMTP_FROM=${SMTP_FROM:-noreply@hexallm.local}
+      - PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID:-}
+      - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET:-}
+      - PAYPAL_WEBHOOK_ID=${PAYPAL_WEBHOOK_ID:-}
+      - PAYPAL_SANDBOX=${PAYPAL_SANDBOX:-true}
+    volumes:
+      - ./data/models:/app/models
+      - ./data/datasets:/app/datasets
+      - ./data/uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/api/v1/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  worker:
+    image: ghcr.io/godsloveamajay-bit/hexallm-backend:${TAG:-local}
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    command: celery -A app.worker worker --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql://hexallm:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}@db:5432/hexallm
+      - REDIS_URL=redis://redis:6379/0
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - SECRET_KEY=${SECRET_KEY:?SECRET_KEY is required}
+      - APP_URL=${APP_URL:-http://localhost}
+      - STABILITY_API_KEY=${STABILITY_API_KEY:-}
+      - PAYPAL_CLIENT_ID=${PAYPAL_CLIENT_ID:-}
+      - PAYPAL_CLIENT_SECRET=${PAYPAL_CLIENT_SECRET:-}
+      - PAYPAL_WEBHOOK_ID=${PAYPAL_WEBHOOK_ID:-}
+      - PAYPAL_SANDBOX=${PAYPAL_SANDBOX:-true}
+    volumes:
+      - ./data/models:/app/models
+      - ./data/datasets:/app/datasets
+      - ./data/uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+
+  frontend:
+    image: ghcr.io/godsloveamajay-bit/hexallm-frontend:${TAG:-local}
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    depends_on:
+      - backend
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    restart: unless-stopped
+
+  # nginx reverse proxy (production: terminates TLS, rate limits, WS proxy)
+  # For dev, you can hit frontend:80 directly or add a ports mapping here.
+  nginx:
+    image: nginx:alpine
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./nginx.prod.conf:/etc/nginx/nginx.conf:ro
+      - ./data/certbot:/var/www/certbot:ro
+      - /etc/letsencrypt:/etc/letsencrypt:ro
+    depends_on:
+      - frontend
+      - backend
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      - POSTGRES_USER=hexallm
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD is required}
+      - POSTGRES_DB=hexallm
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U hexallm"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: redis-server --appendonly yes
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  ollama-data:
