@@ -754,7 +754,13 @@ export default function ChatPage() {
         if (data?.prompt) {
           setStreamActivity('Generating an image…')
           try {
-            imageResultB64 = await puterImageDataUrl(data.prompt)
+            // Puter can hang indefinitely when its popup/WebSocket is blocked
+            // (some browsers/networks). Never let a send stall on it — fall
+            // back to the server-side Stability path after a timeout.
+            imageResultB64 = await Promise.race([
+              puterImageDataUrl(data.prompt),
+              new Promise<null>((res) => setTimeout(() => res(null), 20000)),
+            ])
           } catch {
             imageResultB64 = null // fall back to the backend (Stability) path
           }

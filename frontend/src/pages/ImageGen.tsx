@@ -15,12 +15,11 @@ interface GeneratedImage {
   enhancedPrompt?: string
 }
 
-// Free, user-pays image models served through Puter.js (no API keys needed).
-const PUTER_MODELS: ImageModel[] = [
-  { id: 'openai/gpt-image-2', name: 'GPT Image 2' },
-  { id: 'google/gemini-3-pro-image-preview', name: 'Nano Banana Pro (Gemini 3)' },
-  { id: 'black-forest-labs/flux-2-klein-4b', name: 'FLUX.2 Klein 4B' },
-  { id: 'x-ai/grok-imagine-image', name: 'Grok Imagine' },
+// Server-side generation via Stability AI — works in every browser (no
+// browser-side SDK or popup auth).
+const IMAGE_MODELS: ImageModel[] = [
+  { id: 'sd3-ultra', name: 'Stable Diffusion 3.5 Ultra' },
+  { id: 'sd3-core', name: 'Stable Diffusion 3.5 Core' },
 ]
 
 const SIZES = [
@@ -41,12 +40,10 @@ const STYLE_PRESETS = [
   { label: 'Fantasy', prefix: 'fantasy art, epic, magical, highly detailed, concept art, ' },
 ]
 
-const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b))
-
 export default function ImageGenPage() {
   const [prompt, setPrompt] = useState('')
   const [size, setSize] = useState(SIZES[0])
-  const [model, setModel] = useState('openai/gpt-image-2')
+  const [model, setModel] = useState('sd3-ultra')
   const [enhancePrompt, setEnhancePrompt] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [enhancing, setEnhancing] = useState(false)
@@ -75,26 +72,24 @@ export default function ImageGenPage() {
         enhanced = finalPrompt
       }
 
-      const { puter } = await import('@heyputer/puter.js')
-      const g = gcd(size.w, size.h)
-      const imgEl = await puter.ai.txt2img({
+      const { data } = await api.post('/image/generate', {
         prompt: finalPrompt,
+        width: size.w,
+        height: size.h,
         model,
-        ratio: { w: size.w / g, h: size.h / g },
-        quality: 'medium',
       })
-      if (!imgEl?.src) throw new Error('no image returned')
+      if (!data?.url) throw new Error('no image returned')
 
       setEnhancing(false)
       const img: GeneratedImage = {
-        url: imgEl.src,
+        url: data.url,
         prompt: opts.prompt,
         enhancedPrompt: enhanced ?? undefined,
       }
       setCurrent(img)
       setHistory((h) => [img, ...h].slice(0, 12))
     } catch {
-      toast.error('Image generation failed — sign in to Puter when prompted and try again')
+      toast.error('Image generation failed — please try again')
     } finally {
       setGenerating(false)
       setEnhancing(false)
@@ -129,15 +124,14 @@ export default function ImageGenPage() {
     <div className="p-4 sm:p-6 max-w-5xl mx-auto">
       <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-100">Image Generation</h1>
-        <p className="text-gray-400 mt-1">Generate images from text with Puter — free, no API key</p>
+        <p className="text-gray-400 mt-1">Generate images from text with Stable Diffusion</p>
       </div>
 
       <div className="card mb-6">
         <form onSubmit={generate} className="space-y-4">
           <p className="text-xs text-gray-500 flex items-center gap-1.5">
             <Zap className="w-3.5 h-3.5 text-primary-400" />
-            Runs in your browser via Puter. You may be asked to sign in to Puter on first use; each user pays for their
-            own generations.
+            Generated on the server with Stable Diffusion — works in any browser.
           </p>
 
           <div>
@@ -188,7 +182,7 @@ export default function ImageGenPage() {
             <div className="flex-1 min-w-[180px]">
               <label className="label">Model</label>
               <select className="input" value={model} onChange={(e) => setModel(e.target.value)}>
-                {PUTER_MODELS.map((m) => (
+                {IMAGE_MODELS.map((m) => (
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
               </select>
@@ -261,7 +255,7 @@ export default function ImageGenPage() {
               <div className="mt-3 flex items-start justify-between gap-3">
                 <div className="min-w-0">
                   <p className="text-sm text-gray-300 line-clamp-2">{current.prompt}</p>
-                  <p className="text-xs text-gray-600 mt-0.5">via Puter</p>
+                  <p className="text-xs text-gray-600 mt-0.5">via Stability AI</p>
                 </div>
                 <div className="flex gap-2 flex-shrink-0">
                   <button
