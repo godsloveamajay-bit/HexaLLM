@@ -1,6 +1,7 @@
-import { useEffect, useState, useCallback } from 'react'
-import { Gauge, RefreshCw, Cpu, MemoryStick, HardDrive, Thermometer, Zap, Activity } from 'lucide-react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import { api } from '../lib/api'
+import { Gauge, RefreshCw, Cpu, MemoryStick, HardDrive, Thermometer, Zap, Activity } from 'lucide-react'
+import { useAuth } from '../store/auth'
 
 type Host = {
   cpu_percent: number
@@ -24,11 +25,12 @@ type Gpu = {
   power_w: number
   power_limit_w: number
 }
+type Service = { unit: string; active: boolean; since?: string; pid?: string }
 type SystemData = {
   fetched_at: string
   host: Host
   gpu: Gpu[]
-  services: { unit: string; active: boolean; since?: string; pid?: string }[]
+  services: Service[]
   ollama: { ok: boolean; models?: string[]; detail?: string }
   vllm: { ok: boolean; status?: number; model?: string | null; detail?: string }
 }
@@ -64,27 +66,93 @@ function Kpi({ icon: Icon, label, value, sub, ok = true }: { icon: any; label: s
 }
 
 export default function System() {
+  const { user, token } = useAuth()
   const [data, setData] = useState<SystemData | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [stale, setStale] = useState(false)
+  const [wsConnected, setWsConnected] = useState(false)
+  const [polling, setPolling] = useState(false)
+  const [intervalRef, setIntervalRef] = useState<ReturnType<typeof setInterval> | null>(null)
+  const wsRef = useRef<WebSocket | null>(null)
 
   const load = useCallback(async () => {
     try {
       const r = await api.get('/dev/system', { timeout: 20000 })
       setData(r.data)
       setError(null)
-      setStale(false)
     } catch (e: any) {
       setError(e?.response?.data?.detail || e?.message || 'failed')
-      setStale(true)
     }
+  }, [])
+
+  const startPolling = useCallback(() => {
+    if (intervalRef) clearInterval(intervalRef)
+    const t = setInterval(load, 5000)
+    setIntervalRef(t)
+    setPolling(true)
+  }, [load])
+
+  const stopPolling = useCallback(() => {
+    if (intervalRef) {
+      clearInterval(intervalRef)
+      setIntervalRef(null)
+    }
+    setPolling(false)
   }, [])
 
   useEffect(() => {
     load()
-    const t = setInterval(load, 5000)
-    return () => clearInterval(t)
   }, [load])
+
+  // WebSocket connection — pushes system stats ~every 3s; falls back to polling
+  useEffect(() => {
+    if (!token) return
+
+    try {
+      wsRef.current = new WebSocket(`wss://dev.hexallm.co.uk/api/v1/dev/ws/system?token=${token}`)
+    } catch (e) {
+      setPolling(true)
+      return
+    }
+
+    wsRef.current.onopen = () => {
+      setWsConnected(true)
+      stopPolling()
+    }
+
+    wsRef.current.onmessage = (event: MessageEvent) => {
+      try {
+        const msg = JSON.parse(event.data as string)
+        if (msg.fetched_at) {
+          setData(msg)
+          setError(null)
+        }
+      } catch (e) {
+        // ignore malformed messages
+      }
+    }
+
+    wsRef.current.onclose = () => {
+      setWsConnected(false)
+      const ft = setTimeout(() => setPolling(true), 3000)
+      return () => clearTimeout(ft)
+    }
+
+    wsRef.current.onerror = () => {
+      setWsConnected(false)
+      const ft = setTimeout(() => setPolling(true), 3000)
+      return () => clearTimeout(ft)
+    }
+
+    return () => {
+      wsRef.current?.close()
+    }
+  }, [token])
+
+  // Keep polling state in sync
+  useEffect(() => {
+    if (polling && !intervalRef) startPolling()
+    if (!polling && intervalRef) stopPolling()
+  }, [polling])
 
   const h = data?.host
 
@@ -95,17 +163,60 @@ export default function System() {
         <div className="flex-1">
           <h1 className="font-mono font-bold text-lg" style={{ color: '#e6edf3' }}>system monitor</h1>
           <p className="font-mono text-xs" style={{ color: '#8b949e' }}>
-            host · gpu · engines · processes — polled every 5s
-            {data && <span className="ml-2" style={{ color: '#6e7681' }}>· {new Date(data.fetched_at).toLocaleTimeString()}</span>}
+            host · gpu · engines · processes {wsConnected ? '· WS' : ''} {polling && '· polling'} {data && <span className="ml-2" style={{ color: '#6e7681' }}>· {new Date(data.fetched_at).toLocaleTimeString()}</span>}
           </p>
         </div>
-        <button
-          onClick={load}
-          className="flex items-center gap-1.5 font-mono text-xs px-2 py-1 rounded border transition-colors hover:bg-[#161b22]"
-          style={{ borderColor: '#30363d', color: '#8b949e' }}
-        >
-          <RefreshCw size={12} /> refresh
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              wsRef.current?.close()
+              setPolling(false)
+              setWsConnected(false)
+              setData(null)
+              setError(null)
+            }}
+            className="flex items-center gap-1.5 font-mono text-xs px-2 py-1 rounded border transition-colors hover:bg-[#161b22]"
+            style={{ borderColor: '#30363d', color: '#8b949e' }}
+          >
+            <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+              <path d="M21 15l-5-5l-5 5H5l5 5l5-5z"/>
+              <path d="M18 6l6 6m0 0l-6 6m6-6H3"/>
+            </svg>
+            disconnect WS
+          </button>
+          {polling && (
+            <button
+              onClick={() => stopPolling()}
+              className="flex items-center gap-1.5 font-mono text-xs px-2 py-1 rounded border transition-colors hover:bg-[#161b22]"
+              style={{ borderColor: '#30363d', color: '#8b949e' }}
+            >
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <circle cx="12" cy="12" r="10"/>
+                <path d="m16 12-4 4-4-4"/>
+              </svg>
+              stop polling
+            </button>
+          )}
+          {!polling && (
+            <button
+              onClick={load}
+              className="flex items-center gap-1.5 font-mono text-xs px-2 py-1 rounded border transition-colors hover:bg-[#161b22]"
+              style={{ borderColor: '#30363d', color: '#8b949e' }}
+            >
+              <svg width={12} height={12} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+                <line x1={12} y1={1} x2={12} y2={7}/>
+                <line x1={12} y1={5} x2={12} y2={9}/>
+                <line x1={4.23} y1={15.23} x2={5.64} y2={17.77}/>
+                <line x1={19.77} y1={5.64} x2={18.23} y2={4.23}/>
+                <line x1={12} y1={19} x2={12} y2={23}/>
+                <line x1={5.64} y1={17.77} x2={4.23} y2={15.23}/>
+                <line x1={18.23} y1={4.23} x2={19.77} y2={5.64}/>
+                <line x1={12} y1={7} x2={12} y2={1}/>
+              </svg>
+              refresh
+            </button>
+          )}
+        </div>
       </div>
 
       {error && (
@@ -166,7 +277,7 @@ export default function System() {
                 ))}
               </tbody>
             </table>
-            <div className="px-3 py-2 border-t font-mono text-[11px]" style={{ borderColor: '#30363d', color: '#8b949e' }}>
+            <div className="px-3 py-2 border-t font-mono text-xs font-semibold" style={{ borderColor: '#30363d', color: '#8b949e' }}>
               ollama: {data?.ollama?.ok ? `connected · ${data.ollama.models?.length ?? '?'} models` : `down · ${data?.ollama?.detail ?? '?'}`}
               <span className="mx-2" style={{ color: '#30363d' }}>|</span>
               vllm: {data?.vllm?.ok ? `healthy · ${data.vllm.model ?? '?'}` : `down · ${data?.vllm?.detail ?? '?'}`}
@@ -207,7 +318,7 @@ export default function System() {
         </div>
       )}
 
-      {stale && <div className="fixed bottom-4 right-4 font-mono text-[11px] px-2 py-1 rounded" style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }}>API unreachable — retrying…</div>}
+      {error && <div className="fixed bottom-4 right-4 font-mono text-[11px] px-2 py-1 rounded" style={{ background: 'rgba(248,113,113,0.12)', color: '#f87171', border: '1px solid rgba(248,113,113,0.3)' }}>API unreachable — retrying…</div>}
     </div>
   )
 }
