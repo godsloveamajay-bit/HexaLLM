@@ -93,6 +93,9 @@ class APIKeyCreate(BaseModel):
     name: str
     persona_id: Optional[int] = None   # bind to a saved persona ("Expose as API")
     model: Optional[str] = None        # or expose a raw model directly
+    temperature: Optional[float] = None  # per-key sampling overrides: when set,
+    top_p: Optional[float] = None        # they win over the caller's own values
+    max_tokens: Optional[int] = None
 
 
 class APIKeyOut(BaseModel):
@@ -104,6 +107,9 @@ class APIKeyOut(BaseModel):
     persona_id: Optional[int] = None
     persona_name: Optional[str] = None
     model_name: Optional[str] = None
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_tokens: Optional[int] = None
     request_count: int = 0
     prompt_tokens: int = 0
     completion_tokens: int = 0

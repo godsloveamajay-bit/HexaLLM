@@ -97,6 +97,7 @@ class OllamaService:
         think: Optional[bool] = None,
         top_p: Optional[float] = None,
         extra_options: Optional[Dict] = None,
+        format: Optional[Dict] = None,
     ) -> AsyncGenerator[str, None]:
         # moondream's sampler on this ollama build degenerates to an EMPTY stream
         # for temperatures 0.6/0.7 (everything else works). Snap them so image
@@ -117,6 +118,7 @@ class OllamaService:
         if vllm_name and not images:
             async for chunk in self._vllm_chat_stream(
                 vllm_name, messages, temperature, max_tokens, top_p, usage,
+                format=format,
             ):
                 yield chunk
             return
@@ -143,6 +145,19 @@ class OllamaService:
             payload["options"]["top_p"] = top_p
         if extra_options:
             payload["options"].update(extra_options)
+        # Structured output: OpenAI-style response_format spec →
+        # ollama's `format` field ("json" or a JSON-schema dict; regex isn't
+        # supported by ollama, so it's dropped — the model just answers free-form).
+        # OpenAI wraps the schema as {"name": ..., "schema": {...}} — ollama
+        # wants the bare schema, so unwrap it.
+        if format:
+            fmt_type = format.get("type")
+            if fmt_type == "json_object":
+                payload["format"] = "json"
+            elif fmt_type == "json_schema":
+                js = format.get("json_schema") or {}
+                schema = js.get("schema") if isinstance(js, dict) and "schema" in js else js
+                payload["format"] = schema or "json"
         # Big models (>~9GB) that can't co-reside in the 12GB VRAM with the
         # fast chat models get HALF their layers offloaded to CPU RAM. They run
         # ~2× slower than full-GPU but stay resident alongside the 7B/8B models
@@ -155,6 +170,12 @@ class OllamaService:
         # Leave it unset (None) for normal queries / non-reasoning models.
         if think is not None:
             payload["think"] = think
+        # Structured output with a reasoning model: the format constraint only
+        # binds the final response, so chain-of-thought just burns the output
+        # budget (and pollutes the stream with  thinking wrappers the JSON
+        # consumer has to strip). Suppress it unless the caller asked explicitly.
+        if format and think is None and any(t in model.lower() for t in ("qwen3", "deepseek", "r1")):
+            payload["think"] = False
 
         timeout = httpx.Timeout(connect=10.0, read=600.0, write=30.0, pool=10.0)
         async with self._client(timeout=timeout) as client:
@@ -277,6 +298,7 @@ class OllamaService:
         max_tokens: Optional[int],
         top_p: Optional[float],
         usage: Optional[Dict],
+        format: Optional[Dict] = None,
     ) -> AsyncGenerator[str, None]:
         """Stream a chat completion from vLLM's OpenAI-compatible API.
 
@@ -294,6 +316,15 @@ class OllamaService:
             payload["max_tokens"] = max_tokens
         if top_p is not None:
             payload["top_p"] = top_p
+        # Structured output: vLLM accepts json_object / json_schema via the
+        # OpenAI response_format field. "regex" isn't a valid response_format
+        # type on this vLLM build (0.19.x) — use the guided_regex extension.
+        if format:
+            fmt_type = format.get("type")
+            if fmt_type in ("json_object", "json_schema"):
+                payload["response_format"] = format
+            elif fmt_type == "regex":
+                payload["guided_regex"] = format.get("regex")
         timeout = httpx.Timeout(connect=10.0, read=600.0, write=30.0, pool=10.0)
         async with self._client(timeout=timeout) as client:
             async with client.stream(
@@ -312,7 +343,16 @@ class OllamaService:
                         chunk = json.loads(data)
                     except json.JSONDecodeError:
                         continue
-                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                    # vLLM ends the stream with a usage-only chunk (choices: []).
+                    # Consume it for the usage dict and move on.
+                    choices = chunk.get("choices") or []
+                    if not choices:
+                        if usage is not None and chunk.get("usage"):
+                            u = chunk["usage"]
+                            usage["prompt_tokens"] = u.get("prompt_tokens", 0)
+                            usage["completion_tokens"] = u.get("completion_tokens", 0)
+                        continue
+                    delta = choices[0].get("delta", {})
                     content = delta.get("content", "")
                     if content:
                         yield content

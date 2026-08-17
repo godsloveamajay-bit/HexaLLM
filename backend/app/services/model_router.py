@@ -601,7 +601,54 @@ class RouteDecision:
     temperature: float
     num_ctx: int
     num_predict: Optional[int]
+    top_p: Optional[float] = None             # admin override, not a variant default
     routed_variant: Optional[str] = None  # set only for hex-auto: the variant actually used
+
+
+def sampling_defaults(variant_id: str) -> Dict:
+    """The variant's baked-in sampling defaults + any admin overrides
+    (Model Settings). Keys: default_temperature/default_top_p/default_num_ctx/
+    default_num_predict (variant defaults) and temperature/top_p/max_tokens/
+    num_ctx (admin overrides, None = unset). Used by the admin API to build
+    the editable table and by route() to apply it to every call."""
+    v = VARIANTS[variant_id]
+    overrides: Dict = {"temperature": None, "top_p": None, "max_tokens": None, "num_ctx": None}
+    try:
+        from ..core.database import SessionLocal
+        from ..models.model_settings import ModelSettings
+        db = SessionLocal()
+        try:
+            s = db.query(ModelSettings).filter(ModelSettings.variant_id == variant_id).first()
+        finally:
+            db.close()
+        if s:
+            overrides = {
+                "temperature": s.temperature,
+                "top_p": s.top_p,
+                "max_tokens": s.max_tokens,
+                "num_ctx": s.num_ctx,
+            }
+    except Exception:
+        pass  # DB unavailable (imports at boot); serve baked-in defaults
+    return {
+        "default_temperature": v.temperature,
+        "default_top_p": None,
+        "default_num_ctx": v.num_ctx,
+        "default_num_predict": v.num_predict,
+        **overrides,
+    }
+
+
+def _apply_settings(variant_id: str, decision: RouteDecision) -> RouteDecision:
+    """Overlay admin-configured Model Settings on a route decision."""
+    s = sampling_defaults(variant_id)
+    return replace(
+        decision,
+        temperature=s["temperature"] if s["temperature"] is not None else decision.temperature,
+        top_p=s["top_p"] if s["top_p"] is not None else decision.top_p,
+        num_ctx=s["num_ctx"] if s["num_ctx"] is not None else decision.num_ctx,
+        num_predict=s["max_tokens"] if s["max_tokens"] is not None else decision.num_predict,
+    )
 
 
 def route(
@@ -618,7 +665,10 @@ def route(
     if variant_id == AUTO_VARIANT_ID:
         sub = _auto_sub_variant(user_text, available_models, has_image)
         inner = route(sub, user_text, available_models, has_image)
-        return replace(inner, variant_id=AUTO_VARIANT_ID, routed_variant=sub)
+        return _apply_settings(
+            AUTO_VARIANT_ID,
+            replace(inner, variant_id=AUTO_VARIANT_ID, routed_variant=sub),
+        )
 
     v = VARIANTS[variant_id]
     # Case-insensitive resolution: Ollama reports tags with inconsistent casing
@@ -687,14 +737,17 @@ def route(
             f"Pull one of: {', '.join(v.all_candidates())}"
         )
 
-    return RouteDecision(
-        variant_id=variant_id,
-        chosen_model=chosen,
-        reason=reason,
-        system_prompt=v.system_prompt,
-        temperature=v.temperature,
-        num_ctx=v.num_ctx,
-        num_predict=v.num_predict,
+    return _apply_settings(
+        variant_id,
+        RouteDecision(
+            variant_id=variant_id,
+            chosen_model=chosen,
+            reason=reason,
+            system_prompt=v.system_prompt,
+            temperature=v.temperature,
+            num_ctx=v.num_ctx,
+            num_predict=v.num_predict,
+        ),
     )
 
 

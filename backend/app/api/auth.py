@@ -386,6 +386,9 @@ def create_api_key(data: APIKeyCreate, db: Session = Depends(get_db), current_us
         key=generate_api_key(),
         persona_id=persona_id,
         model_name=model_name,
+        temperature=data.temperature,
+        top_p=data.top_p,
+        max_tokens=data.max_tokens,
     )
     db.add(key)
     db.commit()

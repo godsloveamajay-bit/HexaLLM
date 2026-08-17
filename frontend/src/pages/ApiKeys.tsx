@@ -11,6 +11,7 @@ import { clsx } from 'clsx'
 interface APIKey {
   id: number; name: string; key: string; is_active: boolean
   persona_id?: number | null; persona_name?: string | null; model_name?: string | null
+  temperature?: number | null; top_p?: number | null; max_tokens?: number | null
   request_count: number; prompt_tokens: number; completion_tokens: number
   created_at: string; last_used_at?: string
 }
@@ -69,6 +70,9 @@ export default function ApiKeysPage() {
   const [models, setModels] = useState<ModelOption[]>([])
   const [name, setName] = useState('')
   const [expose, setExpose] = useState('')          // '' | persona:<id> | model:<name>
+  const [keyTemp, setKeyTemp] = useState('')        // per-key sampling overrides ('' = unset)
+  const [keyTopP, setKeyTopP] = useState('')
+  const [keyMaxTok, setKeyMaxTok] = useState('')
   const [creating, setCreating] = useState(false)
   const [newKey, setNewKey] = useState<APIKey | null>(null)
   const [tab, setTab] = useState<'curl' | 'python' | 'js'>('python')
@@ -102,10 +106,13 @@ export default function ApiKeysPage() {
       const body: any = { name }
       if (expose.startsWith('persona:')) body.persona_id = +expose.slice(8)
       else if (expose.startsWith('model:')) body.model = expose.slice(6)
+      if (keyTemp.trim() !== '') body.temperature = parseFloat(keyTemp)
+      if (keyTopP.trim() !== '') body.top_p = parseFloat(keyTopP)
+      if (keyMaxTok.trim() !== '') body.max_tokens = parseInt(keyMaxTok)
       const { data } = await api.post('/auth/api-keys', body)
       setNewKey(data)
       setKeys((k) => [data, ...k])
-      setName(''); setExpose('')
+      setName(''); setExpose(''); setKeyTemp(''); setKeyTopP(''); setKeyMaxTok('')
       toast.success('API key created')
     } catch {
       toast.error('Failed to create key')
@@ -192,8 +199,23 @@ export default function ApiKeysPage() {
             <Plus className="w-4 h-4" /> Create
           </button>
         </form>
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mt-3">
+          <div>
+            <label className="label">Temperature (optional)</label>
+            <input value={keyTemp} onChange={(e) => setKeyTemp(e.target.value)} placeholder="e.g. 0.2" type="number" min={0} max={2} step={0.05} className="input w-full" />
+          </div>
+          <div>
+            <label className="label">top_p (optional)</label>
+            <input value={keyTopP} onChange={(e) => setKeyTopP(e.target.value)} placeholder="e.g. 0.9" type="number" min={0} max={1} step={0.05} className="input w-full" />
+          </div>
+          <div>
+            <label className="label">Max tokens (optional)</label>
+            <input value={keyMaxTok} onChange={(e) => setKeyMaxTok(e.target.value)} placeholder="e.g. 512" type="number" min={1} step={1} className="input w-full" />
+          </div>
+        </div>
         <p className="text-xs text-gray-600 mt-2">
           Bind a key to a persona and callers automatically get its model, system prompt and temperature — no setup on their end.
+          Sampling overrides (when set) win over whatever the caller passes, so you can pin a key's behaviour.
         </p>
       </div>
 
@@ -228,6 +250,12 @@ export default function ApiKeysPage() {
                       {k.persona_name ? <Boxes className="w-3 h-3" /> : <Terminal className="w-3 h-3" />}
                       {exposesLabel(k)}
                     </span>
+                    {(k.temperature != null || k.top_p != null || k.max_tokens != null) && (
+                      <span className="ml-2 inline-flex items-center gap-1 badge bg-primary-900/40 text-primary-300 text-xs">
+                        <Activity className="w-3 h-3" />
+                        {[k.temperature != null && `temp ${k.temperature}`, k.top_p != null && `top_p ${k.top_p}`, k.max_tokens != null && `${k.max_tokens} tok`].filter(Boolean).join(' · ')}
+                      </span>
+                    )}
                   </td>
                   <td className="px-4 py-3"><code className="font-mono text-xs text-gray-500">{mask(k.key)}</code></td>
                   <td className="px-4 py-3">

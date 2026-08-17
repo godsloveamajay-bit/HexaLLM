@@ -282,3 +282,113 @@ def remove_whitelist(
     db.delete(entry)
     db.commit()
     return {"status": "removed", "ip": entry.ip_address}
+
+
+# ── Model Settings (per-variant sampling defaults) ───────────────────────────
+
+class ModelSettingsOut(BaseModel):
+    variant_id: str
+    label: str
+    default_temperature: Optional[float] = None
+    default_top_p: Optional[float] = None
+    default_num_ctx: Optional[int] = None
+    default_num_predict: Optional[int] = None
+    temperature: Optional[float] = None     # admin override (None = unset)
+    top_p: Optional[float] = None
+    max_tokens: Optional[int] = None
+    num_ctx: Optional[int] = None
+
+    model_config = {"from_attributes": True}
+
+
+class ModelSettingsUpdate(BaseModel):
+    temperature: Optional[float] = None
+    top_p: Optional[float] = None
+    max_tokens: Optional[int] = None
+    num_ctx: Optional[int] = None
+
+
+def _validate_sampling(data: ModelSettingsUpdate):
+    if data.temperature is not None and not (0.0 <= data.temperature <= 2.0):
+        raise HTTPException(status_code=400, detail="temperature must be between 0.0 and 2.0")
+    if data.top_p is not None and not (0.0 <= data.top_p <= 1.0):
+        raise HTTPException(status_code=400, detail="top_p must be between 0.0 and 1.0")
+    for name, v in (("max_tokens", data.max_tokens), ("num_ctx", data.num_ctx)):
+        if v is not None and v <= 0:
+            raise HTTPException(status_code=400, detail=f"{name} must be a positive integer")
+
+
+@router.get("/model-settings", response_model=list[ModelSettingsOut])
+def list_model_settings(db: Session = Depends(get_db), _=Depends(require_admin)):
+    """Every variant with its baked-in defaults and any admin overrides."""
+    from ..services import model_router
+    from ..models.model_settings import ModelSettings
+    rows = {s.variant_id: s for s in db.query(ModelSettings).all()}
+    out = []
+    for v in model_router.public_variants():
+        sd = model_router.sampling_defaults(v["id"])
+        s = rows.get(v["id"])
+        out.append(ModelSettingsOut(
+            variant_id=v["id"],
+            label=v["label"],
+            default_temperature=sd["default_temperature"],
+            default_top_p=sd["default_top_p"],
+            default_num_ctx=sd["default_num_ctx"],
+            default_num_predict=sd["default_num_predict"],
+            temperature=s.temperature if s else None,
+            top_p=s.top_p if s else None,
+            max_tokens=s.max_tokens if s else None,
+            num_ctx=s.num_ctx if s else None,
+        ))
+    return out
+
+
+@router.put("/model-settings/{variant_id}", response_model=ModelSettingsOut)
+def update_model_settings(
+    variant_id: str,
+    data: ModelSettingsUpdate,
+    db: Session = Depends(get_db),
+    _=Depends(require_admin),
+):
+    from ..services import model_router
+    from ..models.model_settings import ModelSettings
+    if not model_router.is_variant(variant_id):
+        raise HTTPException(status_code=404, detail="Unknown variant")
+    _validate_sampling(data)
+    s = db.query(ModelSettings).filter(ModelSettings.variant_id == variant_id).first()
+    if not s:
+        s = ModelSettings(variant_id=variant_id)
+        db.add(s)
+    if data.temperature is not None:
+        s.temperature = data.temperature
+    if data.top_p is not None:
+        s.top_p = data.top_p
+    if data.max_tokens is not None:
+        s.max_tokens = data.max_tokens
+    if data.num_ctx is not None:
+        s.num_ctx = data.num_ctx
+    db.commit()
+    db.refresh(s)
+    sd = model_router.sampling_defaults(variant_id)
+    return ModelSettingsOut(
+        variant_id=variant_id,
+        label=model_router.get_variant(variant_id).label if model_router.get_variant(variant_id) else variant_id,
+        default_temperature=sd["default_temperature"],
+        default_top_p=sd["default_top_p"],
+        default_num_ctx=sd["default_num_ctx"],
+        default_num_predict=sd["default_num_predict"],
+        temperature=s.temperature,
+        top_p=s.top_p,
+        max_tokens=s.max_tokens,
+        num_ctx=s.num_ctx,
+    )
+
+
+@router.delete("/model-settings/{variant_id}", status_code=204)
+def reset_model_settings(variant_id: str, db: Session = Depends(get_db), _=Depends(require_admin)):
+    """Drop all overrides for a variant, reverting to baked-in defaults."""
+    from ..models.model_settings import ModelSettings
+    s = db.query(ModelSettings).filter(ModelSettings.variant_id == variant_id).first()
+    if s:
+        db.delete(s)
+        db.commit()

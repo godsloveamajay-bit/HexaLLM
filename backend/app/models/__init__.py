@@ -1,1 +1,1 @@
-from . import user as user, model as model, chat as chat, knowledge as knowledge, memory as memory, persona as persona, workflow as workflow, mcp_server as mcp_server, tool as tool, template as template, billing as billing, ip_whitelist as ip_whitelist
+from . import user as user, model as model, chat as chat, knowledge as knowledge, memory as memory, persona as persona, workflow as workflow, mcp_server as mcp_server, tool as tool, template as template, billing as billing, ip_whitelist as ip_whitelist, model_settings as model_settings

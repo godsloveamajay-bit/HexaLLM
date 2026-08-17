@@ -87,7 +87,7 @@ async def extract_and_store(
         from .ollama_service import ollama
         from . import model_router
         avail = [m["name"] for m in await ollama.list_models()]
-        fast_model = model_router.fast_model_for(avail) or "llama3.2:3b"
+        fast_model = model_router.fast_model_for(avail) or "qwen2.5:7b"
 
     raw = ""
     async for chunk in ollama.chat_stream(

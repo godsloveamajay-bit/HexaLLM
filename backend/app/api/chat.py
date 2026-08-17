@@ -169,11 +169,11 @@ def log_request(db: Session, user_id: int, endpoint: str, method: str, status_co
 
 async def _apply_router(req: ChatRequest):
     """If req.model is a hex-* variant, resolve it. Returns
-    (effective_model, variant_system_prompt, temperature, num_ctx, num_predict, route_meta).
+    (effective_model, variant_system_prompt, temperature, num_ctx, num_predict, top_p, route_meta).
     For non-variant models, returns the request values unchanged with route_meta=None.
     """
     if not model_router.is_variant(req.model):
-        return req.model, "", req.temperature, None, req.max_tokens, None
+        return req.model, "", req.temperature, None, req.max_tokens, None, None
 
     last_user_msg = next((m for m in reversed(req.messages) if m.role == "user"), None)
     user_text = last_user_msg.content if last_user_msg else ""
@@ -201,6 +201,7 @@ async def _apply_router(req: ChatRequest):
         req.temperature if req.temperature is not None else decision.temperature,
         decision.num_ctx,
         decision.num_predict if req.max_tokens is None else req.max_tokens,
+        decision.top_p,
         route_meta,
     )
 
@@ -325,7 +326,7 @@ async def chat_completions(
     start = time.time()
 
     # Route hex-* variants → concrete Ollama model + variant params.
-    eff_model, variant_prompt, eff_temp, eff_ctx, eff_max, route_meta = await _apply_router(req)
+    eff_model, variant_prompt, eff_temp, eff_ctx, eff_max, routed_top_p, route_meta = await _apply_router(req)
 
     # Route hex-* variants → concrete Ollama model + variant params.
 
@@ -436,7 +437,9 @@ async def chat_completions(
         memory_section = f"\n\n[User Memory — things you know about this user]\n{mem_block}"
         base_system_prompt = (base_system_prompt or "") + memory_section
 
-    eff_top_p: Optional[float] = None
+    # top_p: the request's own value wins, else the Personality Engine's,
+    # else the routed variant's default (admin-overridable via Model Settings).
+    eff_top_p: Optional[float] = req.top_p if req.top_p is not None else routed_top_p
     if not is_guest:
         eff_traits = req.personality if req.personality is not None else current_user.ai_personality
         pspec = personality_engine.compose(eff_traits)
@@ -445,7 +448,8 @@ async def chat_completions(
                 base_system_prompt = (base_system_prompt or "") + "\n\n" + pspec["system_fragment"]
             if pspec["temperature"] is not None:
                 eff_temp = pspec["temperature"]
-            eff_top_p = pspec["top_p"]
+            if req.top_p is None:
+                eff_top_p = pspec["top_p"]
             if pspec["max_tokens"] and req.max_tokens is None:
                 eff_max = pspec["max_tokens"]
 
@@ -536,7 +540,7 @@ async def chat_completions(
                     agen = ollama.chat_stream(
                         eff_model, messages, sys_for_llm, eff_temp, eff_max, eff_ctx,
                         images=images, usage=usage_info, think=eff_think, top_p=eff_top_p,
-                        extra_options=req.ollama_options,
+                        extra_options=req.ollama_options, format=req.response_format,
                     )
                     async for kind, value in _stream_with_keepalive(agen):
                         if kind == "ping":
@@ -657,7 +661,7 @@ async def chat_completions(
                         "couldn't retrieve current web sources — do not claim a knowledge cutoff.)")
                 ns_sys = f"{system_prompt}\n\n{note}" if system_prompt else note
         ns_usage: Dict = {}
-        async for chunk in ollama.chat_stream(eff_model, messages, ns_sys, eff_temp, eff_max, eff_ctx, think=eff_think, usage=ns_usage, top_p=eff_top_p, extra_options=req.ollama_options):
+        async for chunk in ollama.chat_stream(eff_model, messages, ns_sys, eff_temp, eff_max, eff_ctx, think=eff_think, usage=ns_usage, top_p=eff_top_p, extra_options=req.ollama_options, format=req.response_format):
             full_response += chunk
         if is_guest and guest_ip:
             guest_remaining = _guest_charge_tokens(
@@ -748,7 +752,7 @@ async def generate_suggestions(
     )
     from ..services.ollama_service import ollama
     avail = [m["name"] for m in await ollama.list_models()]
-    fast = model_router.fast_model_for(avail) or "llama3.2:3b"
+    fast = model_router.fast_model_for(avail) or "qwen2.5:7b"
     raw = ""
     async for chunk in ollama.chat_stream(
         fast,
@@ -1046,7 +1050,7 @@ async def generate_greeting(
 
     try:
         greeting = await ollama.generate(
-            model="llama3.2:3b",
+            model="qwen2.5:7b",
             prompt=prompt,
             temperature=0.8,
         )

@@ -44,17 +44,29 @@ class OAIChatRequest(BaseModel):
     messages: List[OAIMessage]
     stream: bool = False
     temperature: Optional[float] = None
+    top_p: Optional[float] = None
     max_tokens: Optional[int] = None
     system: Optional[str] = None
     stream_options: Optional[OAIStreamOptions] = None
     personality: Optional[Dict[str, int]] = None
+    # Structured output (OpenAI-style): {"type": "json_object"} or
+    # {"type": "json_schema", "json_schema": {...}}. vLLM additionally accepts
+    # {"type": "regex", "regex": "..."}.
+    response_format: Optional[Dict] = None
 
 
-def _resolve(key: APIKey, req: OAIChatRequest):
+def _resolve(key: APIKey, req: OAIChatRequest,
+             base_temperature: Optional[float] = None,
+             base_top_p: Optional[float] = None,
+             base_max: Optional[int] = None):
     """Work out the served model, system prompt, sampling and personality for
     this call. Personality precedence: the key's persona binding, else a
     per-request `personality` override, else the key owner's saved sliders —
-    so CLI/daemon calls with a plain key still carry the user's voice."""
+    so CLI/daemon calls with a plain key still carry the user's voice.
+
+    Sampling precedence: per-key overrides (pinned at key creation, they win
+    over everything) → the request's own values → the personality engine →
+    the persona's saved temperature → the routed variant's defaults."""
     persona = key.persona if key.persona_id else None
 
     # Served model: persona's snapshot, else the key's raw model, else caller's.
@@ -141,23 +153,44 @@ def _resolve(key: APIKey, req: OAIChatRequest):
     elif key.user:
         traits = key.user.ai_personality
     pspec = personality_engine.compose(traits)
-    top_p: Optional[float] = None
-    eff_max: Optional[int] = None
-    if pspec.get("active"):
-        if pspec["system_fragment"]:
-            system_prompt = (system_prompt + "\n\n" + pspec["system_fragment"]) if system_prompt else pspec["system_fragment"]
-        top_p = pspec["top_p"]
-        if pspec["max_tokens"] and req.max_tokens is None:
-            eff_max = pspec["max_tokens"]
+    if pspec.get("active") and pspec["system_fragment"]:
+        system_prompt = (system_prompt + "\n\n" + pspec["system_fragment"]) if system_prompt else pspec["system_fragment"]
 
-    if req.temperature is not None:
+    # Per-key sampling overrides win over everything (pinned at key creation);
+    # then the request's own values; then the personality engine; then the
+    # persona's saved temperature; then the routed variant's defaults.
+    if key.temperature is not None:
+        temperature = key.temperature
+    elif req.temperature is not None:
         temperature = req.temperature
     elif pspec.get("active") and pspec.get("temperature") is not None:
         temperature = pspec["temperature"]
     elif persona and persona.temperature is not None:
         temperature = persona.temperature
+    elif base_temperature is not None:
+        temperature = base_temperature
     else:
         temperature = 0.7
+
+    if key.top_p is not None:
+        top_p = key.top_p
+    elif req.top_p is not None:
+        top_p = req.top_p
+    elif pspec.get("active"):
+        top_p = pspec["top_p"]
+    else:
+        top_p = base_top_p
+
+    if key.max_tokens is not None:
+        eff_max = key.max_tokens
+    elif req.max_tokens is not None:
+        eff_max = req.max_tokens
+    elif pspec.get("active") and pspec.get("max_tokens"):
+        eff_max = pspec["max_tokens"]
+    elif base_max is not None:
+        eff_max = base_max
+    else:
+        eff_max = None
 
     return model, system_prompt, temperature, top_p, eff_max, convo
 
@@ -188,19 +221,27 @@ async def chat_completions(
 ):
     model, system_prompt, temperature, top_p, eff_max, messages = _resolve(key, req)
     # `model` is the advertised id (may be a HexaLLM variant); resolve it to a
-    # concrete Ollama model for the actual inference call.
+    # concrete Ollama model for the actual inference call. The route decision
+    # also carries the variant's sampling defaults (incl. admin overrides).
     concrete = model
+    decision = None
     if model_router.is_variant(model):
         try:
             avail = [m["name"] for m in await ollama.list_models()]
         except Exception:
             avail = []
         last_user = next((m["content"] for m in reversed(messages) if m["role"] == "user"), "")
-        concrete = model_router.concrete_for(model, last_user, avail)
+        decision = model_router.route(model, last_user, avail)
+        concrete = decision.chosen_model
     request_id = f"chatcmpl-{uuid.uuid4().hex[:24]}"
     created = int(time.time())
     key_id, user_id = key.id, key.user_id
     started = time.monotonic()
+
+    base_temp = decision.temperature if decision else None
+    base_top = decision.top_p if decision else None
+    base_max = decision.num_predict if decision else None
+    num_ctx = decision.num_ctx if decision else None
 
     if req.stream:
         include_usage = bool(req.stream_options and req.stream_options.include_usage)
@@ -211,6 +252,7 @@ async def chat_completions(
                 async for chunk in ollama.chat_stream(
                     concrete, messages, system_prompt=system_prompt,
                     temperature=temperature, max_tokens=eff_max if eff_max is not None else req.max_tokens, usage=usage, top_p=top_p,
+                    num_ctx=num_ctx, format=req.response_format,
                 ):
                     delta = {
                         "id": request_id, "object": "chat.completion.chunk",
@@ -251,6 +293,7 @@ async def chat_completions(
     async for chunk in ollama.chat_stream(
         concrete, messages, system_prompt=system_prompt,
         temperature=temperature, max_tokens=eff_max if eff_max is not None else req.max_tokens, usage=usage, top_p=top_p,
+        num_ctx=num_ctx, format=req.response_format,
     ):
         full += chunk
 

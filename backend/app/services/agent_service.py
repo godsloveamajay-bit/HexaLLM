@@ -21,7 +21,7 @@ TOOL_DESCRIPTIONS = {
     "delegate": 'Delegate a subtask to a sub-agent. Input: JSON {"task": "...", "tools": ["web_search", ...]}. Returns the sub-agent\'s result with nested steps.',
 }
 
-SUBAGENT_MODEL = "llama3.2:3b"
+SUBAGENT_MODEL = "qwen2.5:7b"
 MAX_SUBAGENT_DEPTH = 3
 
 AGENT_SYSTEM_PROMPT = """\

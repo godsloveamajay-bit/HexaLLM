@@ -34,15 +34,26 @@ interface WhitelistEntry {
   id: number; ip_address: string; label?: string; note?: string; created_at?: string
 }
 
+interface ModelSettingsEntry {
+  variant_id: string; label: string
+  default_temperature?: number | null; default_top_p?: number | null
+  default_num_ctx?: number | null; default_num_predict?: number | null
+  temperature?: number | null; top_p?: number | null
+  max_tokens?: number | null; num_ctx?: number | null
+}
+
+type SamplingDraft = { temperature: string; top_p: string; max_tokens: string; num_ctx: string }
+
 // ── Tabs ────────────────────────────────────────────────────────────────────
 
-type Tab = 'overview' | 'users' | 'logs' | 'whitelist'
+type Tab = 'overview' | 'users' | 'logs' | 'whitelist' | 'models'
 
 const TABS: { key: Tab; label: string; icon: any }[] = [
   { key: 'overview',  label: 'Overview',  icon: BarChart3 },
   { key: 'users',     label: 'Users',     icon: Users },
   { key: 'logs',      label: 'Logs',     icon: FileText },
   { key: 'whitelist', label: 'IP Whitelist', icon: Shield },
+  { key: 'models',    label: 'Model Settings', icon: Zap },
 ]
 
 // ── Component ───────────────────────────────────────────────────────────────
@@ -54,6 +65,9 @@ export default function AdminPage() {
   const [users, setUsers] = useState<UserEntry[]>([])
   const [logs, setLogs] = useState<LogEntry[]>([])
   const [whitelist, setWhitelist] = useState<WhitelistEntry[]>([])
+  const [settings, setSettings] = useState<ModelSettingsEntry[]>([])
+  const [drafts, setDrafts] = useState<Record<string, SamplingDraft>>({})
+  const [saving, setSaving] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [logPage, setLogPage] = useState(0)
@@ -67,9 +81,19 @@ export default function AdminPage() {
   const loadLogs = () => api.get('/admin/logs', { params: { limit: 25, offset: logPage * 25 } }).then(r => setLogs(r.data))
   const loadWhitelist = () => api.get('/admin/ip-whitelist').then(r => setWhitelist(r.data))
 
+  const loadSettings = () => api.get('/admin/model-settings').then(r => {
+    setSettings(r.data)
+    setDrafts(Object.fromEntries((r.data as ModelSettingsEntry[]).map((s: ModelSettingsEntry) => [s.variant_id, {
+      temperature: s.temperature != null ? String(s.temperature) : '',
+      top_p: s.top_p != null ? String(s.top_p) : '',
+      max_tokens: s.max_tokens != null ? String(s.max_tokens) : '',
+      num_ctx: s.num_ctx != null ? String(s.num_ctx) : '',
+    }])))
+  })
+
   useEffect(() => {
     setLoading(true)
-    Promise.all([loadStats(), loadUsers(), loadLogs(), loadWhitelist()]).finally(() => setLoading(false))
+    Promise.all([loadStats(), loadUsers(), loadLogs(), loadWhitelist(), loadSettings()]).finally(() => setLoading(false))
   }, [])
 
   useEffect(() => { if (tab === 'users') loadUsers() }, [search])
@@ -115,6 +139,43 @@ export default function AdminPage() {
     await api.delete(`/admin/ip-whitelist/${id}`)
     toast.success('IP removed')
     loadWhitelist()
+  }
+
+  async function saveSettings(s: ModelSettingsEntry) {
+    const d = drafts[s.variant_id]
+    const payload: Record<string, number> = {}
+    if (d.temperature.trim() !== '') payload.temperature = parseFloat(d.temperature)
+    if (d.top_p.trim() !== '') payload.top_p = parseFloat(d.top_p)
+    if (d.max_tokens.trim() !== '') payload.max_tokens = parseInt(d.max_tokens)
+    if (d.num_ctx.trim() !== '') payload.num_ctx = parseInt(d.num_ctx)
+    if (Object.keys(payload).length === 0) return
+    setSaving(s.variant_id)
+    try {
+      await api.put(`/admin/model-settings/${s.variant_id}`, payload)
+      toast.success(`Saved ${s.label}`)
+      await loadSettings()
+    } catch (e: any) {
+      toast.error(e.response?.data?.detail || 'Failed to save settings')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  async function resetSettings(s: ModelSettingsEntry) {
+    setSaving(s.variant_id)
+    try {
+      await api.delete(`/admin/model-settings/${s.variant_id}`)
+      toast.success(`Reset ${s.label} to defaults`)
+      await loadSettings()
+    } catch {
+      toast.error('Failed to reset settings')
+    } finally {
+      setSaving(null)
+    }
+  }
+
+  function setDraft(variant_id: string, key: keyof SamplingDraft, value: string) {
+    setDrafts(d => ({ ...d, [variant_id]: { ...(d[variant_id] ?? { temperature: '', top_p: '', max_tokens: '', num_ctx: '' }), [key]: value } }))
   }
 
   const statusColor = (code: number) => {
@@ -388,6 +449,80 @@ export default function AdminPage() {
                       </td>
                     </tr>
                   ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      )}
+    {/* ── Model Settings Tab ───────────────────────────────────────────── */}
+      {tab === 'models' && (
+        <div>
+          <div className="card mb-6 p-4">
+            <h3 className="text-sm font-semibold text-foreground mb-1">Per-model sampling defaults</h3>
+            <p className="text-xs text-secondary">
+              Override the sampling baked into each HexaLLM model without redeploying. Empty fields keep the
+              model's default (shown in grey). Overrides apply to every caller — chat, agents and the OpenAI-compatible API.
+              Callers can still pass their own temperature / top_p / max_tokens per request.
+            </p>
+          </div>
+
+          <div className="card overflow-hidden p-0">
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-neutral-700 bg-neutral-800/50">
+                    {['Model', 'Temperature', 'top_p', 'Max tokens', 'Context (num_ctx)', 'Actions'].map(h => (
+                      <th key={h} className="px-4 py-3 text-left text-xs text-secondary font-medium">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {settings.length === 0 ? (
+                    <tr><td colSpan={6} className="px-4 py-8 text-center text-secondary">No models</td></tr>
+                  ) : settings.map(s => {
+                    const d = drafts[s.variant_id] ?? { temperature: '', top_p: '', max_tokens: '', num_ctx: '' }
+                    return (
+                      <tr key={s.variant_id} className="border-b border-neutral-700/50 hover:bg-neutral-800/30">
+                        <td className="px-4 py-3">
+                          <p className="text-foreground font-medium">{s.label}</p>
+                          <p className="text-secondary text-xs font-mono">{s.variant_id}</p>
+                          <p className="text-secondary/70 text-xs mt-0.5">
+                            defaults: temp {s.default_temperature ?? '—'} · ctx {s.default_num_ctx ?? '—'} · out {s.default_num_predict ?? '—'}
+                          </p>
+                        </td>
+                        <td className="px-4 py-3">
+                          <input value={d.temperature} onChange={e => setDraft(s.variant_id, 'temperature', e.target.value)}
+                            placeholder={s.default_temperature != null ? String(s.default_temperature) : '—'}
+                            type="number" min={0} max={2} step={0.05} className="input w-24 text-sm" />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input value={d.top_p} onChange={e => setDraft(s.variant_id, 'top_p', e.target.value)}
+                            placeholder="—" type="number" min={0} max={1} step={0.05} className="input w-24 text-sm" />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input value={d.max_tokens} onChange={e => setDraft(s.variant_id, 'max_tokens', e.target.value)}
+                            placeholder={s.default_num_predict != null ? String(s.default_num_predict) : '—'}
+                            type="number" min={1} step={1} className="input w-28 text-sm" />
+                        </td>
+                        <td className="px-4 py-3">
+                          <input value={d.num_ctx} onChange={e => setDraft(s.variant_id, 'num_ctx', e.target.value)}
+                            placeholder={s.default_num_ctx != null ? String(s.default_num_ctx) : '—'}
+                            type="number" min={1} step={1} className="input w-28 text-sm" />
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => saveSettings(s)} disabled={saving === s.variant_id} className="btn-primary text-xs px-3 py-1.5">
+                              {saving === s.variant_id ? 'Saving…' : 'Save'}
+                            </button>
+                            <button onClick={() => resetSettings(s)} disabled={saving === s.variant_id} className="btn-ghost p-1.5" title="Reset to defaults">
+                              <RefreshCw className="w-4 h-4 text-secondary" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>

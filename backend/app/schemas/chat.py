@@ -14,8 +14,11 @@ class ChatRequest(BaseModel):
     system_prompt: Optional[str] = None
     session_id: Optional[int] = None
     temperature: Optional[float] = None
+    top_p: Optional[float] = None
     max_tokens: Optional[int] = None
     stream: bool = True
+    # Structured output: {"type": "json_object"} or {"type": "json_schema", "json_schema": {...}}.
+    response_format: Optional[Dict[str, Any]] = None
     attachment_base64: Optional[str] = None  # data URL or raw base64
     attachment_type: Optional[str] = None    # "image" | "pdf" | "text"
     attachment_name: Optional[str] = None

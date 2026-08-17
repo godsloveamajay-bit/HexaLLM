@@ -108,6 +108,13 @@ def _migrate_db():
         key_cols = {c["name"] for c in inspector.get_columns("api_keys")}
         if "workspace_id" not in key_cols:
             conn.execute(text("ALTER TABLE api_keys ADD COLUMN workspace_id INTEGER"))
+        # Per-key sampling overrides (OpenAI-compat)
+        if "temperature" not in key_cols:
+            conn.execute(text("ALTER TABLE api_keys ADD COLUMN temperature FLOAT"))
+        if "top_p" not in key_cols:
+            conn.execute(text("ALTER TABLE api_keys ADD COLUMN top_p FLOAT"))
+        if "max_tokens" not in key_cols:
+            conn.execute(text("ALTER TABLE api_keys ADD COLUMN max_tokens INTEGER"))
 
 
 @asynccontextmanager

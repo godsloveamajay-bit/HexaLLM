@@ -64,6 +64,11 @@ class APIKey(Base):
     # callers automatically get that model + system prompt + temperature.
     persona_id = Column(Integer, ForeignKey("saved_personas.id", ondelete="SET NULL"), nullable=True)
     model_name = Column(String, nullable=True)   # served model (snapshot of persona.base_model, or a raw model)
+    # Per-key sampling overrides: pin temperature / top_p / max_tokens for every
+    # call using this key. When set, they win over the caller's own values.
+    temperature = Column(Float, nullable=True)
+    top_p = Column(Float, nullable=True)
+    max_tokens = Column(Integer, nullable=True)
     # Usage metering for billing / dashboards.
     request_count = Column(Integer, default=0)
     prompt_tokens = Column(Integer, default=0)
