@@ -2,6 +2,7 @@ import { useEffect, useRef } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../store/auth'
+import { postLoginPath } from '../lib/devFeatures'
 import toast from 'react-hot-toast'
 
 export default function OAuthCallbackPage() {
@@ -42,7 +43,7 @@ export default function OAuthCallbackPage() {
     loginWithToken(token)
       .then(() => {
         const { user } = useAuth.getState()
-        navigate(user?.is_admin ? '/dashboard' : '/chat', { replace: true })
+        navigate(postLoginPath(!!user?.is_admin), { replace: true })
       })
       .catch(() => {
         toast.error('Sign-in failed. Please try again.')

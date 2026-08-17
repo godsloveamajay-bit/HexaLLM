@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
+import { postLoginPath } from '../lib/devFeatures'
 import { baseURL } from '../lib/api'
 import toast from 'react-hot-toast'
 import { LogoMark } from '../components/Logo'
@@ -50,7 +51,7 @@ export default function LoginPage() {
       await login(email, password)
       const { user } = useAuth.getState()
       const next = searchParams.get('next')
-      navigate(next || (user?.is_admin ? '/dashboard' : '/chat'), { replace: true })
+      navigate(next || postLoginPath(!!user?.is_admin), { replace: true })
     } catch (err: any) {
       toast.error(parseApiError(err, 'Login failed — check your email and password.'))
     } finally {

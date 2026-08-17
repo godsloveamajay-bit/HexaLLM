@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Loader2, Eye, EyeOff } from 'lucide-react'
 import { useAuth } from '../store/auth'
+import { postLoginPath } from '../lib/devFeatures'
 import { baseURL } from '../lib/api'
 import toast from 'react-hot-toast'
 import { LogoMark } from '../components/Logo'
@@ -43,7 +44,7 @@ export default function RegisterPage() {
       await register(form)
       toast.success('Welcome to HexaLLM!')
       const { user } = useAuth.getState()
-      navigate(user?.is_admin ? '/dashboard' : '/chat', { replace: true })
+      navigate(postLoginPath(!!user?.is_admin), { replace: true })
     } catch (err: any) {
       toast.error(parseApiError(err, 'Registration failed — please try again.'))
     } finally {

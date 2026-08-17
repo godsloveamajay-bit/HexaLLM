@@ -127,6 +127,9 @@ export default function App() {
                 <Route path="/logs"       element={<PrivateRoute><AdminRoute><DevPages.Logs /></AdminRoute></PrivateRoute>} />
               </>
             )}
+
+            {/* Unknown paths: never render a blank page — send to chat. */}
+            <Route path="*" element={<Navigate to="/chat" replace />} />
           </Route>
         </Routes>
       </Suspense>
