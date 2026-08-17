@@ -1,0 +1,24 @@
+[Unit]
+Description=Ollama LLM server (native, GPU)
+# Starts AFTER vLLM so vLLM claims its VRAM budget first (0.55 × GPU);
+# ollama's heavy tiers load into the leftover. Reverse order leaves vLLM
+# without KV-cache headroom on this 12GB box.
+After=network-online.target hexallm-vllm.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/ollama serve
+Environment=HOME=/root
+Environment=OLLAMA_HOST=127.0.0.1:11434
+Environment=OLLAMA_KEEP_ALIVE=-1
+Environment=OLLAMA_NUM_PARALLEL=2
+Environment=OLLAMA_MAX_LOADED_MODELS=4
+# q8 KV cache halves every model's KV footprint — the margin that lets the
+# 14B (CPU-split) co-reside with vLLM.
+Environment=OLLAMA_KV_CACHE_TYPE=q8_0
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target

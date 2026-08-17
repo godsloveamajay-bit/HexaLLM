@@ -1,0 +1,12 @@
+[Unit]
+Description=HexaLLM model warm-up (preload chat-facing models into ollama + vLLM)
+After=network-online.target hexallm-vllm.service ollama.service
+Wants=hexallm-vllm.service ollama.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/hexallm-warmup.sh
+TimeoutStartSec=600
+
+[Install]
+WantedBy=multi-user.target
