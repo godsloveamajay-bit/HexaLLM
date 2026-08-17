@@ -19,6 +19,13 @@ try:
 except (ValueError, TypeError):
     pass
 
+# Models served by vLLM (OpenAI-compatible, /v1/chat/completions) instead of
+# ollama — the fast default tier. vLLM keeps them resident with continuous
+# batching (measured ~4× better p95 under 10 concurrent users); ollama keeps
+# the heavy tiers. Keys are the ollama-side model names the router resolves.
+_VLLM_MODELS: Dict[str, str] = {"qwen2.5:7b": "hexa-vllm"}
+_VLLM_BASE_URL: str = settings.VLLM_BASE_URL
+
 
 class OllamaService:
     def __init__(self):
@@ -42,7 +49,10 @@ class OllamaService:
 
         Checks Ollama's /api/ps. Used so the chat endpoint can warn the UI when a
         request will trigger a slow cold-load (minutes on this CPU-only box).
+        vLLM-served models are always resident.
         """
+        if model in _VLLM_MODELS:
+            return True
         async with self._client(timeout=5) as client:
             try:
                 resp = await client.get(f"{self.base_url}/api/ps")
@@ -99,6 +109,17 @@ class OllamaService:
         # hasn't already included one.
         if system_prompt and not (messages and messages[0].get("role") == "system"):
             messages = [{"role": "system", "content": system_prompt}] + list(messages)
+
+        # Fast-tier models (qwen2.5:7b) are served by vLLM — delegate the
+        # whole stream there. Same chunk contract as ollama's (content
+        # strings + usage dict fill-in), so callers can't tell the engine.
+        vllm_name = _VLLM_MODELS.get(model)
+        if vllm_name and not images:
+            async for chunk in self._vllm_chat_stream(
+                vllm_name, messages, temperature, max_tokens, top_p, usage,
+            ):
+                yield chunk
+            return
 
         # Attach images to the last user message for multimodal models
         if images:
@@ -177,6 +198,11 @@ class OllamaService:
                             continue
 
     async def generate(self, model: str, prompt: str, temperature: float = 0.7) -> str:
+        vllm_name = _VLLM_MODELS.get(model)
+        if vllm_name:
+            return await self._vllm_complete(
+                vllm_name, [{"role": "user", "content": prompt}], temperature,
+            )
         async with self._client(timeout=120) as client:
             resp = await client.post(
                 f"{self.base_url}/api/generate",
@@ -192,6 +218,12 @@ class OllamaService:
             f'"{user_message[:300]}"\n'
             "Reply with ONLY the title. No quotes. No punctuation at the end."
         )
+        vllm_name = _VLLM_MODELS.get(model)
+        if vllm_name:
+            raw = await self._vllm_complete(
+                vllm_name, [{"role": "user", "content": prompt}], 0.3, max_tokens=20,
+            )
+            return raw.strip().strip('"\'')
         timeout = httpx.Timeout(connect=5.0, read=60.0, write=10.0, pool=5.0)
         async with self._client(timeout=timeout) as client:
             resp = await client.post(
@@ -236,6 +268,75 @@ class OllamaService:
         for t in texts:
             out.append(await self.embed(model, t))
         return out
+
+    async def _vllm_chat_stream(
+        self,
+        model: str,
+        messages: List[Dict],
+        temperature: float,
+        max_tokens: Optional[int],
+        top_p: Optional[float],
+        usage: Optional[Dict],
+    ) -> AsyncGenerator[str, None]:
+        """Stream a chat completion from vLLM's OpenAI-compatible API.
+
+        Yields the same content strings (and fills `usage` the same way) as the
+        ollama /api/chat stream, so every caller sees one uniform interface.
+        """
+        payload: Dict = {
+            "model": model,
+            "messages": messages,
+            "stream": True,
+            "stream_options": {"include_usage": True},
+            "temperature": temperature,
+        }
+        if max_tokens:
+            payload["max_tokens"] = max_tokens
+        if top_p is not None:
+            payload["top_p"] = top_p
+        timeout = httpx.Timeout(connect=10.0, read=600.0, write=30.0, pool=10.0)
+        async with self._client(timeout=timeout) as client:
+            async with client.stream(
+                "POST",
+                f"{_VLLM_BASE_URL}/v1/chat/completions",
+                json=payload,
+            ) as resp:
+                resp.raise_for_status()
+                async for line in resp.aiter_lines():
+                    if not line.startswith("data: "):
+                        continue
+                    data = line[len("data: "):].strip()
+                    if data == "[DONE]":
+                        break
+                    try:
+                        chunk = json.loads(data)
+                    except json.JSONDecodeError:
+                        continue
+                    delta = chunk.get("choices", [{}])[0].get("delta", {})
+                    content = delta.get("content", "")
+                    if content:
+                        yield content
+                    if usage is not None and chunk.get("usage"):
+                        u = chunk["usage"]
+                        usage["prompt_tokens"] = u.get("prompt_tokens", 0)
+                        usage["completion_tokens"] = u.get("completion_tokens", 0)
+
+    async def _vllm_complete(
+        self, model: str, messages: List[Dict], temperature: float, max_tokens: Optional[int] = None
+    ) -> str:
+        """Non-streaming chat completion from vLLM (titles, greetings, etc.)."""
+        payload: Dict = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "temperature": temperature,
+        }
+        if max_tokens:
+            payload["max_tokens"] = max_tokens
+        async with self._client(timeout=120) as client:
+            resp = await client.post(f"{_VLLM_BASE_URL}/v1/chat/completions", json=payload)
+            resp.raise_for_status()
+            return resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
 
     async def health_check(self) -> bool:
         async with self._client(timeout=5) as client:

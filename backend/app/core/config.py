@@ -15,6 +15,12 @@ class Settings(BaseSettings):
 
     OLLAMA_BASE_URL: str = "http://localhost:11434"
 
+    # vLLM — OpenAI-compatible engine serving the fast 7B tier. Co-resident
+    # with ollama: vLLM holds the default chat model (~6GB VRAM), ollama
+    # keeps the heavy models. Requests for vLLM-served models are routed
+    # there automatically; everything else goes to ollama.
+    VLLM_BASE_URL: str = "http://localhost:8001"
+
     # Stability AI — image-generation API key (https://platform.stability.ai).
     STABILITY_API_KEY: str = ""
 

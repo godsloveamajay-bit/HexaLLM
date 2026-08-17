@@ -1,0 +1,19 @@
+[Unit]
+Description=HexaLLM vLLM engine (fast 7B tier, OpenAI-compatible)
+# Must start BEFORE ollama loads any model: vLLM claims its VRAM budget at
+# boot (0.55 × GPU), and ollama's heavy tiers load into the leftover.
+# Any other ordering leaves vLLM without KV-cache headroom.
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/opt/vllm-venv/bin/vllm serve /root/models/Qwen2.5-7B-Instruct-AWQ --port 8001 --gpu-memory-utilization 0.55 --max-model-len 8192 --served-model-name hexa-vllm --enable-prefix-caching
+Restart=on-failure
+# WSL releases GPU memory slowly after a crash — give the next attempt time
+# to see a drained GPU instead of spinning in an init-fail loop.
+RestartSec=30
+Environment=HOME=/root
+
+[Install]
+WantedBy=multi-user.target
