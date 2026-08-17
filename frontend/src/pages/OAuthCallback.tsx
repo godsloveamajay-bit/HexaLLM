@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Loader2 } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { postLoginPath } from '../lib/devFeatures'
+import { isDevSite } from '../dev/isDev'
 import toast from 'react-hot-toast'
 
 export default function OAuthCallbackPage() {
@@ -43,6 +44,14 @@ export default function OAuthCallbackPage() {
     loginWithToken(token)
       .then(() => {
         const { user } = useAuth.getState()
+        if (isDevSite() && !user?.is_admin) {
+          localStorage.removeItem('token')
+          localStorage.removeItem('user')
+          useAuth.setState({ user: null, token: null })
+          toast.error('The dev site is restricted to admin accounts.')
+          navigate('/login', { replace: true })
+          return
+        }
         navigate(postLoginPath(!!user?.is_admin), { replace: true })
       })
       .catch(() => {

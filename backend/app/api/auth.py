@@ -240,16 +240,34 @@ def register(request: Request, data: UserRegister, response: Response, db: Sessi
     return TokenResponse(access_token=token, user=UserOut.model_validate(user))
 
 
-@router.post("/login", response_model=TokenResponse)
-@limiter.limit("20/minute")
-def login(request: Request, data: UserLogin, response: Response, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.email == data.email).first()
-    if not user or not user.hashed_password or not verify_password(data.password, user.hashed_password):
+def _verify_credentials(db: Session, email: str, password: str) -> User:
+    user = db.query(User).filter(User.email == email).first()
+    if not user or not user.hashed_password or not verify_password(password, user.hashed_password):
         if user and user.oauth_provider and not user.hashed_password:
             raise HTTPException(status_code=401, detail=f"This account uses {user.oauth_provider.title()} sign-in. Use the social login button.")
         raise HTTPException(status_code=401, detail="Invalid credentials")
     if not user.is_active:
         raise HTTPException(status_code=403, detail="Account disabled")
+    return user
+
+
+@router.post("/login", response_model=TokenResponse)
+@limiter.limit("20/minute")
+def login(request: Request, data: UserLogin, response: Response, db: Session = Depends(get_db)):
+    user = _verify_credentials(db, data.email, data.password)
+
+    token = create_access_token({"sub": str(user.id), "tv": user.token_version or 0})
+    _set_session_cookie(response, token)
+    return TokenResponse(access_token=token, user=UserOut.model_validate(user))
+
+
+@router.post("/dev-login", response_model=TokenResponse)
+@limiter.limit("20/minute")
+def dev_login(request: Request, data: UserLogin, response: Response, db: Session = Depends(get_db)):
+    """Same credentials as the main site, but the dev site only admits admins."""
+    user = _verify_credentials(db, data.email, data.password)
+    if not user.is_admin:
+        raise HTTPException(status_code=403, detail="The dev site is restricted to admin accounts")
 
     token = create_access_token({"sub": str(user.id), "tv": user.token_version or 0})
     _set_session_cookie(response, token)

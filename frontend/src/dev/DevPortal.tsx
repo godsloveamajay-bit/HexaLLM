@@ -14,9 +14,8 @@ const WorkspacesPage = lazy(() => import('./Workspaces'))
 const SystemPage = lazy(() => import('./System'))
 const AnalyticsPage = lazy(() => import('./Analytics'))
 const LogsPage = lazy(() => import('./Logs'))
+const DevLoginPage = lazy(() => import('./DevLogin'))
 
-const LoginPage = lazy(() => import('../pages/Login'))
-const RegisterPage = lazy(() => import('../pages/Register'))
 const OAuthCallbackPage = lazy(() => import('../pages/OAuthCallback'))
 
 const NAV = [
@@ -173,8 +172,42 @@ function MobileNav() {
   )
 }
 
+function Restricted() {
+  const { user, logout } = useAuth()
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center p-4" style={{ background: '#010409' }}>
+      <div className="w-full max-w-sm rounded-xl border p-6 text-center" style={{ borderColor: '#30363d', background: '#161b22' }}>
+        <div
+          className="w-11 h-11 rounded-lg flex items-center justify-center mx-auto mb-3 font-mono font-bold text-base"
+          style={{ background: 'rgba(248,113,113,0.1)', border: '1px solid rgba(248,113,113,0.4)', color: '#f87171' }}
+        >
+          !
+        </div>
+        <h1 className="font-mono font-bold text-sm mb-2" style={{ color: '#e6edf3' }}>admins only</h1>
+        <p className="font-mono text-[11px] leading-relaxed mb-4" style={{ color: '#8b949e' }}>
+          This environment is restricted to admin accounts. Your account{' '}
+          <span className="font-semibold" style={{ color: '#e6edf3' }}>{user?.email || '—'}</span> is not
+          an admin, so you can't access the developer tools here.
+        </p>
+        <button
+          onClick={logout}
+          className="font-mono text-xs px-3 py-2 rounded border transition-colors"
+          style={{ color: '#f87171', borderColor: 'rgba(248,113,113,0.4)', background: 'rgba(248,113,113,0.08)' }}
+        >
+          sign out
+        </button>
+      </div>
+    </div>
+  )
+}
+
 function Shell() {
   const location = useLocation()
+  const { user } = useAuth()
+
+  if (!user) return <Navigate to="/login" replace state={{ from: location }} />
+  if (!user.is_admin) return <Restricted />
+
   return (
     <div className="h-screen flex flex-col" style={{ background: '#0d1117' }}>
       <TopBar />
@@ -196,8 +229,8 @@ function Shell() {
 export default function DevPortal() {
   return (
     <Routes>
-      <Route path="/login" element={<LoginPage />} />
-      <Route path="/register" element={<RegisterPage />} />
+      <Route path="/login" element={<DevLoginPage />} />
+      <Route path="/register" element={<Navigate to="/login" replace />} />
       <Route path="/oauth/callback" element={<OAuthCallbackPage />} />
       <Route path="/" element={<Shell />}>
         <Route index element={<LandingPage />} />
