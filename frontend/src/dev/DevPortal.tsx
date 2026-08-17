@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { FlaskConical, Braces, Server, Activity, LogOut, LogIn, TerminalSquare, FolderKanban } from 'lucide-react'
+import { FlaskConical, Braces, Server, Activity, LogOut, LogIn, TerminalSquare, FolderKanban, Gauge, BarChart2, FileText } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { baseURL } from '../lib/api'
 import { isDevSite } from './isDev'
@@ -11,6 +11,9 @@ const ApiExplorerPage = lazy(() => import('./ApiExplorer'))
 const LiveModelsPage = lazy(() => import('./LiveModels'))
 const StatusPage = lazy(() => import('./Status'))
 const WorkspacesPage = lazy(() => import('./Workspaces'))
+const SystemPage = lazy(() => import('./System'))
+const AnalyticsPage = lazy(() => import('./Analytics'))
+const LogsPage = lazy(() => import('./Logs'))
 
 const LoginPage = lazy(() => import('../pages/Login'))
 const RegisterPage = lazy(() => import('../pages/Register'))
@@ -22,6 +25,9 @@ const NAV = [
   { to: '/api', label: 'API Explorer', icon: Braces },
   { to: '/models', label: 'Live Models', icon: Server },
   { to: '/status', label: 'Status', icon: Activity },
+  { to: '/system', label: 'System', icon: Gauge },
+  { to: '/analytics', label: 'Analytics', icon: BarChart2 },
+  { to: '/logs', label: 'Logs', icon: FileText },
 ]
 
 function Spinner() {
@@ -200,6 +206,9 @@ export default function DevPortal() {
         <Route path="api" element={<ApiExplorerPage />} />
         <Route path="models" element={<LiveModelsPage />} />
         <Route path="status" element={<StatusPage />} />
+        <Route path="system" element={<SystemPage />} />
+        <Route path="analytics" element={<AnalyticsPage />} />
+        <Route path="logs" element={<LogsPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/playground" replace />} />
     </Routes>
