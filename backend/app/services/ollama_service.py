@@ -221,9 +221,14 @@ class OllamaService:
     async def generate(self, model: str, prompt: str, temperature: float = 0.7) -> str:
         vllm_name = _VLLM_MODELS.get(model)
         if vllm_name:
-            return await self._vllm_complete(
-                vllm_name, [{"role": "user", "content": prompt}], temperature,
-            )
+            try:
+                return await self._vllm_complete(
+                    vllm_name, [{"role": "user", "content": prompt}], temperature,
+                )
+            except Exception:
+                # Transient vLLM failure (queue/overload) — fall back to the
+                # ollama daemon copy rather than surfacing a placeholder.
+                pass
         async with self._client(timeout=120) as client:
             resp = await client.post(
                 f"{self.base_url}/api/generate",

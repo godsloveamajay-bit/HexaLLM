@@ -730,12 +730,12 @@ async def generate_suggestions(
         .all()
         if s.title and s.title != "New Chat"
     ]
-    if not mems and not titles:
-        return {"suggestions": DEFAULT_SUGGESTIONS, "personalized": False}
 
     bits: List[str] = []
     if user_name:
-        bits.append(f"the user is named {user_name}")
+        hour = datetime.now().astimezone().hour
+        phase = "morning" if hour < 12 else "afternoon" if hour < 18 else "evening"
+        bits.append(f"the user is named {user_name}, it is {phase} for them")
     if mems:
         bits.append("things you know about them: " + "; ".join(m.content for m in mems)[:400])
     if titles:
