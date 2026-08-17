@@ -6,7 +6,7 @@ import { api, baseURL } from '../lib/api'
 import { isDevSite } from './isDev'
 
 function oauthRedirect(provider: string) {
-  const state = Math.random().toString(36).slice(2)
+  const state = "dev_" + Math.random().toString(36).slice(2)
   sessionStorage.setItem('oauth_state', state)
   window.location.href = `${baseURL}/auth/oauth/${provider}?state=${encodeURIComponent(state)}`
 }

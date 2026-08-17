@@ -25,7 +25,7 @@ const PROVIDERS = [
 ]
 
 function oauthRedirect(provider: string) {
-  const state = crypto.randomUUID()
+  const state = "main_" + crypto.randomUUID()
   sessionStorage.setItem('oauth_state', state)
   window.location.href = `${baseURL}/auth/oauth/${provider}?state=${encodeURIComponent(state)}`
 }

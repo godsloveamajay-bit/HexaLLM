@@ -485,9 +485,18 @@ def _handle_oauth_callback(provider: str, code: str, state: str, db: Session, us
             if 1024 <= port <= 65535:
                 return RedirectResponse(url=f"http://localhost:{port}/callback?{qs}", status_code=302)
 
+    # Detect which site initiated the OAuth flow
+    dev_origin = "https://dev.hexallm.co.uk"
+    main_origin = settings.APP_URL
+    target_url = main_origin
+    if state.startswith("dev_"):
+        target_url = dev_origin
+    elif state.startswith("main_"):
+        target_url = main_origin
+
     if state:
         qs += f"&state={urllib.parse.quote(state)}"
-    resp = RedirectResponse(url=f"{settings.APP_URL}/oauth/callback?{qs}", status_code=302)
+    resp = RedirectResponse(url=f"{target_url}/oauth/callback?{qs}", status_code=302)
     _set_session_cookie(resp, jwt)
     return resp
 
