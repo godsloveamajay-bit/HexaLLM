@@ -70,7 +70,7 @@ export default defineConfig({
     allowedHosts: ['dev.hexallm.co.uk', 'localhost', '127.0.0.1', '0.0.0.0'],
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://localhost:8080',
         changeOrigin: true,
       },
     },
