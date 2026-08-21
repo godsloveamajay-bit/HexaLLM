@@ -18,7 +18,7 @@ from .api import (
     workflows as workflows_api, knowledge as knowledge_api,
     tools as tools_api, personas as personas_api,
     analytics as analytics_api, downloads as downloads_api, workspaces as workspaces_api,
-    dev as dev_api,
+    tasks as tasks_api, dev as dev_api,
     openai_compat as openai_compat_api, cli_tunnel as cli_tunnel_api,
     voice as voice_api,
 )
@@ -186,6 +186,7 @@ app.include_router(templates_api.router,  prefix="/api/v1")
 app.include_router(memory_api.router,     prefix="/api/v1")
 app.include_router(transcribe_api.router, prefix="/api/v1")
 app.include_router(voice_api.router,        prefix="/api/v1")
+app.include_router(tasks_api.router,          prefix="/api/v1")
 app.include_router(dev_api.router,          prefix="/api/v1")
 app.include_router(billing_api.router,    prefix="/api/v1")
 app.include_router(admin_api.router,      prefix="/api/v1")

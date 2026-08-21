@@ -9,16 +9,89 @@ import os
 import subprocess
 import time
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Set
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy import func, text
 
-from ..core.database import SessionLocal
-from ..core.security import require_admin
+from ..core.database import SessionLocal, get_db
+from ..core.security import require_admin, get_current_user
 from ..models.chat import RequestLog
+from ..models.user import User
+from ..core.config import settings
+from jose import jwt
 
 router = APIRouter(tags=["dev"])
+
+# ──────────────────────────────────────────────────────────────────────────────
+# WebSocket: system monitor push
+# ──────────────────────────────────────────────────────────────────────────────
+
+class _SystemBroadcaster:
+    def __init__(self):
+        self._clients: Set[WebSocket] = set()
+        self._task: Optional[asyncio.Task] = None
+
+    async def connect(self, ws: WebSocket):
+        await ws.accept()
+        self._clients.add(ws)
+        if self._task is None or self._task.done():
+            self._task = asyncio.create_task(self._broadcast_loop())
+
+    def disconnect(self, ws: WebSocket):
+        self._clients.discard(ws)
+
+    async def _broadcast_loop(self):
+        while self._clients:
+            data = await _gather_system_snapshot()
+            dead = []
+            for ws in self._clients:
+                try:
+                    await ws.send_json(data)
+                except Exception:
+                    dead.append(ws)
+            for ws in dead:
+                self._clients.discard(ws)
+            await asyncio.sleep(3)
+
+_system_broadcaster = _SystemBroadcaster()
+
+
+def _user_from_token(token: str, db: Session) -> Optional[User]:
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = int(payload["sub"])
+        return db.query(User).filter(User.id == user_id, User.is_active).first()
+    except Exception:
+        return None
+
+
+@router.websocket("/ws/system")
+async def system_websocket(ws: WebSocket, token: str = Query(...)):
+    """Push system stats every ~3s. Auth via token query param."""
+    db_gen = get_db()
+    db: Session = next(db_gen)
+    try:
+        user = _user_from_token(token, db)
+    except Exception:
+        await ws.close(code=4001, reason="Unauthorized")
+        return
+    if not user or not user.is_admin:
+        await ws.close(code=4003, reason="Admin required")
+        return
+    try:
+        await _system_broadcaster.connect(ws)
+        try:
+            while True:
+                await ws.receive_text()
+        except WebSocketDisconnect:
+            pass
+    finally:
+        _system_broadcaster.disconnect(ws)
+        try:
+            next(db_gen)
+        except StopIteration:
+            pass
 
 SERVICES = ["hexallm-backend", "hexallm-vllm", "ollama", "hexallm-tunnel", "hexallm-dev"]
 
@@ -156,8 +229,8 @@ async def _vllm_health() -> Optional[Dict[str, Any]]:
         return {"ok": False, "detail": str(exc)}
 
 
-@router.get("/dev/system")
-async def dev_system(_admin=Depends(require_admin)) -> Dict[str, Any]:
+async def _gather_system_snapshot() -> Dict[str, Any]:
+    """Shared by HTTP and WebSocket endpoints."""
     results = await asyncio.gather(
         *([_service_state(u) for u in SERVICES]),
         _ollama_health(),
@@ -174,6 +247,11 @@ async def dev_system(_admin=Depends(require_admin)) -> Dict[str, Any]:
         "ollama": ollama if isinstance(ollama, dict) else {"ok": False, "detail": "unreachable"},
         "vllm": vllm if isinstance(vllm, dict) else {"ok": False, "detail": "unreachable"},
     }
+
+
+@router.get("/dev/system")
+async def dev_system(_admin=Depends(require_admin)) -> Dict[str, Any]:
+    return await _gather_system_snapshot()
 
 
 @router.get("/dev/analytics")
