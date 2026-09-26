@@ -37,7 +37,7 @@ from ..models.workflows import (
 )
 from ..models.chat import RequestLog
 from ..services.ollama_service import ollama
-from ..services.agent_service import run_agent
+from ..services.agent_service import run_agent, _TOOL_FUNCS
 from ..services.sandbox_service import Sandbox
 from ..services import model_router
 
@@ -576,18 +576,30 @@ async def _run_llm_node(node: WorkflowNode, scope: Dict[str, Any]) -> Dict[str, 
 
 
 async def _run_tool_node(node: WorkflowNode, scope: Dict[str, Any]) -> Dict[str, Any]:
+    """Run one of the agent tools (web_search, code_exec, read_file, ...)."""
     config = resolve_inputs(node, scope)
     tool_name = config.get("tool")
     if not tool_name:
         raise ValueError("Tool node requires a `tool` in its config")
-    # Tool invocation lands here; until the tool registry is wired up the node
-    # records the request instead of silently pretending to have run.
-    return {
-        "output": None,
-        "tool": tool_name,
-        "status": "not_implemented",
-        "args": {k: v for k, v in config.items() if k != "tool"},
-    }
+
+    runner = _TOOL_FUNCS.get(tool_name)
+    if runner is None:
+        raise ValueError(
+            f"Unknown tool '{tool_name}'. Available: {', '.join(sorted(_TOOL_FUNCS))}"
+        )
+
+    # An explicit `input` wins; otherwise every other config key becomes the
+    # tool's argument, so simple tools need no extra ceremony.
+    if "input" in config:
+        arg: Any = config["input"]
+    else:
+        arg = {k: v for k, v in config.items() if k != "tool"}
+
+    if isinstance(arg, str):
+        arg = render_template(arg, scope)
+
+    result = await runner(arg)
+    return {"output": result, "tool": tool_name}
 
 
 async def _run_condition_node(node: WorkflowNode, scope: Dict[str, Any]) -> Dict[str, Any]:
