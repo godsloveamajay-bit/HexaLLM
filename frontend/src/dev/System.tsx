@@ -71,7 +71,6 @@ export default function System() {
   const [error, setError] = useState<string | null>(null)
   const [wsConnected, setWsConnected] = useState(false)
   const [polling, setPolling] = useState(false)
-  const [intervalRef, setIntervalRef] = useState<ReturnType<typeof setInterval> | null>(null)
   const wsRef = useRef<WebSocket | null>(null)
 
   const load = useCallback(async () => {
@@ -85,19 +84,20 @@ export default function System() {
   }, [])
 
   const startPolling = useCallback(() => {
-    if (intervalRef) clearInterval(intervalRef)
-    const t = setInterval(load, 5000)
-    setIntervalRef(t)
     setPolling(true)
-  }, [load])
+  }, [])
 
   const stopPolling = useCallback(() => {
-    if (intervalRef) {
-      clearInterval(intervalRef)
-      setIntervalRef(null)
-    }
     setPolling(false)
   }, [])
+
+  // The polling interval is derived from `polling`, so it can't get out of
+  // sync with the flag the way a separately-tracked interval ref could.
+  useEffect(() => {
+    if (!polling) return
+    const t = setInterval(load, 5000)
+    return () => clearInterval(t)
+  }, [polling, load])
 
   useEffect(() => {
     load()
@@ -107,56 +107,80 @@ export default function System() {
   useEffect(() => {
     if (!token) return
 
-    try {
-      // Derive the WS origin from the page so local dev, the dev domain and the
-      // main domain all work without a rebuild.
-      const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
-      const wsUrl = `${scheme}://${window.location.host}/api/v1/dev/ws/system?token=${encodeURIComponent(token)}`
-      wsRef.current = new WebSocket(wsUrl)
-    } catch (e) {
+    let disposed = false
+    let retryTimer: ReturnType<typeof setTimeout> | null = null
+    let socket: WebSocket | null = null
+
+    // Derive the WS origin from the page so local dev, the dev domain and the
+    // main domain all work without a rebuild.
+    const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const wsUrl = `${scheme}://${window.location.host}/api/v1/dev/ws/system?token=${encodeURIComponent(token)}`
+
+    const giveUpAndPoll = () => {
+      if (disposed) return
+      if (retryTimer) clearTimeout(retryTimer)
+      // Only flip to polling if we aren't already live on another socket.
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) return
       setPolling(true)
-      return
     }
 
-    wsRef.current.onopen = () => {
-      setWsConnected(true)
-      stopPolling()
-    }
-
-    wsRef.current.onmessage = (event: MessageEvent) => {
+    const connect = () => {
+      if (disposed) return
       try {
-        const msg = JSON.parse(event.data as string)
-        if (msg.fetched_at) {
-          setData(msg)
-          setError(null)
-        }
+        socket = new WebSocket(wsUrl)
       } catch (e) {
-        // ignore malformed messages
+        giveUpAndPoll()
+        return
       }
+      wsRef.current = socket
+
+      socket.onopen = () => {
+        if (disposed || socket !== wsRef.current) return
+        if (retryTimer) clearTimeout(retryTimer)
+        setWsConnected(true)
+        stopPolling()
+      }
+
+      socket.onmessage = (event: MessageEvent) => {
+        if (disposed || socket !== wsRef.current) return
+        try {
+          const msg = JSON.parse(event.data as string)
+          if (msg.fetched_at) {
+            setData(msg)
+            setError(null)
+          }
+        } catch (e) {
+          // ignore malformed messages
+        }
+      }
+
+      // A close or error on a socket we've already replaced (React StrictMode
+      // double-mount, token change) must not disturb the live connection.
+      const onDropped = () => {
+        if (disposed || socket !== wsRef.current) return
+        setWsConnected(false)
+        retryTimer = setTimeout(giveUpAndPoll, 3000)
+      }
+      socket.onclose = onDropped
+      socket.onerror = onDropped
     }
 
-    wsRef.current.onclose = () => {
-      setWsConnected(false)
-      const ft = setTimeout(() => setPolling(true), 3000)
-      return () => clearTimeout(ft)
-    }
-
-    wsRef.current.onerror = () => {
-      setWsConnected(false)
-      const ft = setTimeout(() => setPolling(true), 3000)
-      return () => clearTimeout(ft)
-    }
+    connect()
 
     return () => {
-      wsRef.current?.close()
+      disposed = true
+      if (retryTimer) clearTimeout(retryTimer)
+      // Detach handlers first so the close we cause doesn't schedule a retry.
+      if (socket) {
+        socket.onopen = null
+        socket.onmessage = null
+        socket.onclose = null
+        socket.onerror = null
+        socket.close()
+      }
+      if (wsRef.current === socket) wsRef.current = null
     }
-  }, [token])
-
-  // Keep polling state in sync
-  useEffect(() => {
-    if (polling && !intervalRef) startPolling()
-    if (!polling && intervalRef) stopPolling()
-  }, [polling])
+  }, [token, stopPolling])
 
   const h = data?.host
 
