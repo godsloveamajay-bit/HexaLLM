@@ -2,9 +2,27 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Any, Dict, Optional
 
+from ...core.config import settings
+
 logger = logging.getLogger(__name__)
+
+# Read-only binaries the MCP shell tool may run. Anything that can write to
+# the host or reach the network is deliberately absent.
+ALLOWED_SHELL_COMMANDS = frozenset({
+    "ls", "cat", "head", "tail", "wc", "grep", "find", "stat", "du", "df", "echo", "pwd",
+})
+
+
+def _resolve_sandbox_path(path: Optional[str]) -> str:
+    """Resolve `path` inside MCP_SANDBOX_ROOT, rejecting escapes."""
+    root = os.path.abspath(settings.MCP_SANDBOX_ROOT)
+    candidate = os.path.abspath(os.path.join(root, path or "."))
+    if candidate != root and not candidate.startswith(root + os.sep):
+        raise ValueError(f"path escapes the sandbox root: {path}")
+    return candidate
 
 
 def register_hexallm_tools(mcp_server):
@@ -73,40 +91,49 @@ def register_hexallm_tools(mcp_server):
         handler=search_web_handler
     )
 
-    # Tool: file_operations
-    mcp_server.register_tool(
-        name="file_operations",
-        description="Read, write, or list files in the workspace",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "operation": {"type": "string", "enum": ["read", "write", "list", "delete"]},
-                "path": {"type": "string"},
-                "content": {"type": "string"},
-                "recursive": {"type": "boolean", "default": False}
+    # Tool: file_operations — host filesystem access, opt-in only.
+    if settings.MCP_ENABLE_DANGEROUS_TOOLS:
+        mcp_server.register_tool(
+            name="file_operations",
+            description="Read, write, or list files inside the MCP sandbox root",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "operation": {"type": "string", "enum": ["read", "write", "list", "delete"]},
+                    "path": {"type": "string", "description": "Path relative to the sandbox root"},
+                    "content": {"type": "string"},
+                    "recursive": {"type": "boolean", "default": False}
+                },
+                "required": ["operation", "path"]
             },
-            "required": ["operation", "path"]
-        },
-        handler=file_operations_handler
-    )
+            handler=file_operations_handler
+        )
 
-    # Tool: shell_command
-    mcp_server.register_tool(
-        name="shell_command",
-        description="Execute shell commands",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "command": {"type": "string"},
-                "args": {"type": "array", "items": {"type": "string"}},
-                "cwd": {"type": "string"}
+        # Tool: shell_command — opt-in only, and only for allow-listed binaries.
+        mcp_server.register_tool(
+            name="shell_command",
+            description="Run an allow-listed read-only command inside the sandbox root",
+            input_schema={
+                "type": "object",
+                "properties": {
+                    "command": {"type": "string", "enum": sorted(ALLOWED_SHELL_COMMANDS)},
+                    "args": {"type": "array", "items": {"type": "string"}},
+                    "cwd": {"type": "string", "description": "Relative to the sandbox root"}
+                },
+                "required": ["command"]
             },
-            "required": ["command"]
-        },
-        handler=shell_command_handler
-    )
+            handler=shell_command_handler
+        )
+    else:
+        logger.warning(
+            "MCP host tools (file_operations, shell_command) are DISABLED. "
+            "Set MCP_ENABLE_DANGEROUS_TOOLS=true to expose them."
+        )
 
-    logger.info("Registered all HexaLLM tools with MCP server")
+    logger.info(
+        "Registered HexaLLM MCP tools (dangerous tools: %s)",
+        settings.MCP_ENABLE_DANGEROUS_TOOLS,
+    )
 
 
 async def chat_completion_handler(args: Dict[str, Any]) -> str:
@@ -158,57 +185,84 @@ async def search_web_handler(args: Dict[str, Any]) -> str:
 
 
 async def file_operations_handler(args: Dict[str, Any]) -> str:
-    """Handle file operations."""
+    """Handle file operations, confined to MCP_SANDBOX_ROOT."""
     import os
     import shutil
-    
+
     operation = args.get("operation")
     path = args.get("path")
     content = args.get("content", "")
-    recursive = args.get("recursive", False)
-    
+
+    try:
+        target = _resolve_sandbox_path(path)
+    except ValueError as e:
+        return f"Error: {e}"
+
     try:
         if operation == "read":
-            with open(path, "r") as f:
+            with open(target, "r") as f:
                 return f.read()
         elif operation == "write":
-            os.makedirs(os.path.dirname(path), exist_ok=True)
-            with open(path, "w") as f:
+            parent = os.path.dirname(target)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            with open(target, "w") as f:
                 f.write(content)
-            return f"Written to {path}"
+            return f"Written to {target}"
         elif operation == "list":
-            items = os.listdir(path)
-            return "\n".join(items)
+            return "\n".join(os.listdir(target))
         elif operation == "delete":
-            if os.path.isdir(path):
-                shutil.rmtree(path)
+            if os.path.abspath(target) == os.path.abspath(settings.MCP_SANDBOX_ROOT):
+                return "Error: refusing to delete the sandbox root"
+            if os.path.isdir(target):
+                shutil.rmtree(target)
             else:
-                os.remove(path)
-            return f"Deleted {path}"
+                os.remove(target)
+            return f"Deleted {target}"
         else:
             return f"Unknown operation: {operation}"
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e}"
 
 
 async def shell_command_handler(args: Dict[str, Any]) -> str:
-    """Handle shell command execution."""
+    """Run an allow-listed command, confined to MCP_SANDBOX_ROOT."""
     import subprocess
-    
+
     command = args.get("command")
-    args_list = args.get("args", [])
+    args_list = args.get("args") or []
     cwd = args.get("cwd")
-    
+
+    if command not in ALLOWED_SHELL_COMMANDS:
+        return (
+            f"Error: '{command}' is not allowed. "
+            f"Allowed: {', '.join(sorted(ALLOWED_SHELL_COMMANDS))}"
+        )
+    # No shell metacharacters — these run without a shell, but a stray
+    # ";" or "$(" in an argument would still be a footgun for anything that
+    # later re-runs them through one.
+    for arg in [command, *args_list]:
+        if any(ch in str(arg) for ch in ";|&`$<>\n"):
+            return "Error: shell metacharacters are not allowed in command arguments"
+
+    try:
+        workdir = _resolve_sandbox_path(cwd) if cwd else settings.MCP_SANDBOX_ROOT
+    except ValueError as e:
+        return f"Error: {e}"
+
     try:
         result = subprocess.run(
-            [command] + args_list,
+            [command] + [str(a) for a in args_list],
             capture_output=True,
             text=True,
-            cwd=cwd,
-            timeout=60
+            cwd=workdir,
+            timeout=60,
         )
-        return f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}\nexit_code: {result.returncode}"
+        return (
+            f"stdout:\n{result.stdout}\nstderr:\n{result.stderr}\n"
+            f"exit_code: {result.returncode}"
+        )
     except subprocess.TimeoutExpired:
         return "Error: Command timed out"
     except Exception as e:
-        return f"Error: {str(e)}"
+        return f"Error: {e}"

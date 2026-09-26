@@ -9,7 +9,7 @@ from datetime import datetime
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, Form
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from pydantic import BaseModel, Field
 from sqlalchemy import Column, Integer, String, Text, DateTime, ForeignKey, Text, JSON, Boolean
 from sqlalchemy.orm import Session, relationship
@@ -29,6 +29,8 @@ class ExportRequest(BaseModel):
     include_metadata: bool = True
     date_from: Optional[str] = None
     date_to: Optional[str] = None
+    # Admin-only: export another user's chats. Ignored for non-admins.
+    user_id: Optional[int] = None
 
 
 class ImportRequest(BaseModel):
@@ -161,11 +163,17 @@ def import_from_jsonl(content: str, db: Session, user_id: int, overwrite: bool =
             continue
         try:
             data = json.loads(line)
-            # Check if session exists
+            # Check if session exists — scoped to the importing user. A global
+            # lookup would let a crafted `id` overwrite (and delete) somebody
+            # else's session.
             existing = None
             if 'id' in data:
                 from ..models.chat import ChatSession
-                existing = db.query(ChatSession).filter(ChatSession.id == data['id']).first()
+                existing = (
+                    db.query(ChatSession)
+                    .filter(ChatSession.id == data['id'], ChatSession.user_id == user_id)
+                    .first()
+                )
             
             if existing and not overwrite:
                 continue  # Skip
@@ -174,11 +182,13 @@ def import_from_jsonl(content: str, db: Session, user_id: int, overwrite: bool =
                 db.delete(existing)
                 db.commit()
             
-            # Create session
+            # Create session. The owner always comes from the authenticated
+            # caller — never from the file, which would let an import plant
+            # sessions in another user's account.
             session = ChatSession(
                 title=data.get('title', 'Imported Chat'),
-                 model_name=data.get('model'),
-                user_id=data.get('user_id', 1),  # TODO: map user
+                model_name=data.get('model'),
+                user_id=user_id,
             )
             if 'created_at' in data and data['created_at']:
                 try:
@@ -227,13 +237,20 @@ router = APIRouter(prefix="/export-import", tags=["export-import"])
 async def export_chats(
     request: ExportRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(lambda: None),  # TODO: fix auth
+    current_user: User = Depends(get_current_user),
 ):
-    """Export chat sessions to JSONL, Markdown, or ZIP."""
-    query = db.query(ChatSession)
-    
-    # Filter by user (for now, user 1)
-    query = query.filter(ChatSession.user_id == 1)  # TODO: use current_user.id
+    """Export chat sessions to JSONL, Markdown, or ZIP.
+
+    Always scoped to the caller's own sessions. Admins can pass user_id to
+    export someone else's.
+    """
+    if request.user_id is not None and request.user_id != current_user.id:
+        if not current_user.is_admin:
+            raise HTTPException(403, "Cannot export another user's chats")
+
+    target_user_id = request.user_id if current_user.is_admin and request.user_id else current_user.id
+
+    query = db.query(ChatSession).filter(ChatSession.user_id == target_user_id)
     
     if request.session_ids:
         query = query.filter(ChatSession.id.in_(request.session_ids))
@@ -295,17 +312,18 @@ async def import_chats(
     overwrite: bool = Form(False),
     skip_duplicates: bool = Form(True),
     db: Session = Depends(get_db),
-    current_user: User = Depends(lambda: None),
+    current_user: User = Depends(get_current_user),
 ):
-    """Import chats from JSONL or ZIP file."""
+    """Import chats from JSONL or ZIP file into the caller's own account."""
     content = await file.read()
-    
+
     if file.filename.endswith('.jsonl'):
         content_str = content.decode('utf-8')
         imported_sessions, imported_messages, errors = import_from_jsonl(
             content_str,
-            db, 1,  # TODO: use current_user.id
-            overwrite=overwrite
+            db,
+            current_user.id,
+            overwrite=overwrite,
         )
         return ImportResult(
             imported_sessions=imported_sessions,
@@ -313,7 +331,7 @@ async def import_chats(
             skipped_sessions=0,
             errors=errors,
         )
-    
+
     elif file.filename.endswith('.zip'):
         # TODO: implement zip import
         return ImportResult(
@@ -322,7 +340,7 @@ async def import_chats(
             skipped_sessions=0,
             errors=["ZIP import not yet implemented"],
         )
-    
+
     else:
         raise HTTPException(400, "Unsupported file format. Use .jsonl or .zip")
 
@@ -332,13 +350,16 @@ async def preview_export(
     session_id: int,
     format: str = Query("jsonl", pattern="^(jsonl|markdown)$"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(lambda: None),
+    current_user: User = Depends(get_current_user),
 ):
-    """Preview export for a single session."""
+    """Preview export for a single session (own sessions only)."""
     session = db.query(ChatSession).filter(ChatSession.id == session_id).first()
     if not session:
         raise HTTPException(404, "Session not found")
-    
+
+    if session.user_id != current_user.id and not current_user.is_admin:
+        raise HTTPException(403, "Not authorized to preview this session")
+
     if format == "jsonl":
         content = export_to_jsonl([session], include_messages=True)
         return Response(content=content, media_type="application/jsonl")

@@ -184,21 +184,21 @@ async def get_cost_dashboard(
     days: int = Query(30, ge=1, le=365),
     user_id: Optional[int] = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(lambda: None),  # TODO: fix auth
+    current_user: User = Depends(get_current_user),
 ):
     """Get cost dashboard for a user or all users (admin)."""
-    # For now, allow admin to see all, users see their own
-    # TODO: fix auth properly
-    
     since = datetime.utcnow() - timedelta(days=days)
-    
+
     query = db.query(CostRecord).filter(CostRecord.created_at >= since)
-    
-    # If not admin, filter to own costs
-    # TODO: fix admin check
-    # if not current_user.is_admin:
-    #     query = query.filter(CostRecord.user_id == current_user.id)
-    
+
+    # Non-admins only ever see their own spend, and can't ask for someone
+    # else's by passing user_id.
+    if current_user.is_admin:
+        if user_id is not None:
+            query = query.filter(CostRecord.user_id == user_id)
+    else:
+        query = query.filter(CostRecord.user_id == current_user.id)
+
     records = query.all()
     
     if not records:
@@ -282,17 +282,22 @@ async def get_cost_records(
     model_name: Optional[str] = None,
     limit: int = Query(100, ge=1, le=1000),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """Get raw cost records."""
+    """Get raw cost records (own records; admins may pass user_id)."""
     since = datetime.utcnow() - timedelta(days=days)
-    
+
     query = db.query(CostRecord).filter(CostRecord.created_at >= since)
-    
-    if user_id:
-        query = query.filter(CostRecord.user_id == user_id)
+
+    if current_user.is_admin:
+        if user_id is not None:
+            query = query.filter(CostRecord.user_id == user_id)
+    else:
+        query = query.filter(CostRecord.user_id == current_user.id)
+
     if model_name:
         query = query.filter(CostRecord.model_name == model_name)
-    
+
     records = query.order_by(CostRecord.created_at.desc()).limit(limit).all()
     return records
 
@@ -301,13 +306,13 @@ async def get_cost_records(
 async def record_cost_endpoint(
     record: CostRecordCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(lambda: None),  # TODO: fix auth
+    current_user: User = Depends(get_current_user),
 ):
-    """Record a cost entry (called by other endpoints)."""
-    record_obj = CostRecord(
-        user_id=current_user.id if current_user else 1,  # TODO: fix
-        **record.model_dump(),
-    )
+    """Record a cost entry. Always attributed to the caller."""
+    payload = record.model_dump()
+    # The owner is never taken from the request body.
+    payload.pop("user_id", None)
+    record_obj = CostRecord(user_id=current_user.id, **payload)
     db.add(record_obj)
     db.commit()
     db.refresh(record_obj)

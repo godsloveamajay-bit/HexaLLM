@@ -64,6 +64,14 @@ class Settings(BaseSettings):
     PAYPAL_WEBHOOK_ID: str = ""
     PAYPAL_SANDBOX: bool = True
 
+    # MCP server (HexaLLM exposed to external MCP clients at /api/v1/mcp-server).
+    # The endpoint is unauthenticated, so the tools that touch the host —
+    # file_operations and shell_command — are opt-in and stay unregistered
+    # unless this is explicitly enabled.
+    MCP_ENABLE_DANGEROUS_TOOLS: bool = False
+    # Root that file_operations is confined to when those tools are enabled.
+    MCP_SANDBOX_ROOT: str = "/root/HexaLLM/workspace"
+
     class Config:
         env_file = ".env"
         case_sensitive = True
