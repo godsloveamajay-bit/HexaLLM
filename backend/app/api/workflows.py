@@ -139,6 +139,9 @@ class NodeExecutionResponse(BaseModel):
     id: int
     execution_id: int
     node_id: int
+    # The node_id string from the definition (e.g. "llm_1") so a UI can label
+    # the run without a second lookup.
+    node_key: Optional[str] = None
     status: str
     input_data: Optional[Dict[str, Any]] = None
     output_data: Optional[Dict[str, Any]] = None
@@ -614,8 +617,12 @@ async def _run_transform_node(node: WorkflowNode, scope: Dict[str, Any]) -> Dict
     transform = (config.get("transform") or "passthrough").lower()
     value = config.get("value", config.get("input"))
 
-    if value is None:
+    # An unset (or blank) value means "use the workflow input", so a node
+    # dropped on the canvas with its default config still does something
+    # sensible instead of emitting an empty string.
+    if value is None or (isinstance(value, str) and not value.strip()):
         value = scope.get("input", {})
+
     if isinstance(value, str):
         value = render_template(value, scope)
 
@@ -722,9 +729,12 @@ def run_workflow_dag(execution_id: int) -> None:
                 return
 
             # Scope available to {{var}} templates: workflow inputs, then each
-            # finished node's output.
+            # finished node's output. `input` holds the whole input object so a
+            # transform with no configured value can pass it through, and so
+            # {{input}} works the same way in a prompt.
             scope: Dict[str, Any] = dict(execution.variables or {})
             scope.update(execution.input_data or {})
+            scope["input"] = execution.input_data or {}
 
             for node_id in order:
                 node = node_map.get(node_id)
@@ -895,13 +905,19 @@ def get_execution(
 
     runs = (
         db.query(NodeExecution)
+        .options(joinedload(NodeExecution.node))
         .filter(NodeExecution.execution_id == execution.id)
         .order_by(NodeExecution.id)
         .all()
     )
     return ExecutionDetailResponse(
         execution=ExecutionResponse.model_validate(execution),
-        node_executions=[NodeExecutionResponse.model_validate(r) for r in runs],
+        node_executions=[
+            NodeExecutionResponse.model_validate(
+                {**r.__dict__, "node_key": r.node.node_id if r.node else None}
+            )
+            for r in runs
+        ],
     )
 
 

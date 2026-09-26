@@ -1,6 +1,6 @@
 import { lazy, Suspense, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, NavLink, Outlet, useLocation } from 'react-router-dom'
-import { FlaskConical, Braces, Server, Activity, LogOut, LogIn, TerminalSquare, FolderKanban, Gauge, BarChart2, FileText, Workflow } from 'lucide-react'
+import { FlaskConical, Braces, Server, Activity, LogOut, LogIn, TerminalSquare, FolderKanban, Gauge, BarChart2, FileText, Workflow, GitBranch } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { baseURL } from '../lib/api'
 import { isDevSite } from './isDev'
@@ -14,6 +14,7 @@ const WorkspacesPage = lazy(() => import('./Workspaces'))
 const SystemPage = lazy(() => import('./System'))
 const AnalyticsPage = lazy(() => import('./Analytics'))
 const LogsPage = lazy(() => import('./Logs'))
+const WorkflowBuilderPage = lazy(() => import('./WorkflowBuilder'))
 const DevLoginPage = lazy(() => import('./DevLogin'))
 
 // Lives in ../pages because it's shared with the main-site route. That route is
@@ -27,6 +28,7 @@ const NAV = [
   { to: '/playground', label: 'Playground', icon: FlaskConical },
   { to: '/workspaces', label: 'Workspaces', icon: FolderKanban },
   { to: '/workflows', label: 'Workflows', icon: Workflow },
+  { to: '/builder', label: 'Builder', icon: GitBranch },
   { to: '/api', label: 'API Explorer', icon: Braces },
   { to: '/models', label: 'Live Models', icon: Server },
   { to: '/status', label: 'Status', icon: Activity },
@@ -243,6 +245,7 @@ export default function DevPortal() {
         <Route path="playground" element={<PlaygroundPage />} />
         <Route path="workspaces" element={<WorkspacesPage />} />
         <Route path="workflows" element={<WorkflowsPage />} />
+        <Route path="builder" element={<WorkflowBuilderPage />} />
         <Route path="api" element={<ApiExplorerPage />} />
         <Route path="models" element={<LiveModelsPage />} />
         <Route path="status" element={<StatusPage />} />
