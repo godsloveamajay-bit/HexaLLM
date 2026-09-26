@@ -20,12 +20,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..core.config import settings
-from ..core.database import get_db
+from ..core.database import SessionLocal, get_db
 from ..core.security import require_admin
 from ..models.plugin import PluginCallLog, PluginInstall
 from ..services import plugin_service
@@ -182,6 +183,29 @@ class AuditEntry(BaseModel):
 
     class Config:
         from_attributes = True
+
+    @classmethod
+    def from_row(cls, row: "PluginCallLog") -> "AuditEntry":
+        # SQLite drops tzinfo, so a stored UTC timestamp comes back naive. Tag
+        # it as UTC on the way out — otherwise the browser parses it as local
+        # time and renders the audit trail shifted by the client's offset.
+        created = row.created_at
+        if created is not None and created.tzinfo is None:
+            created = created.replace(tzinfo=timezone.utc)
+        return cls(
+            id=row.id,
+            plugin_name=row.plugin_name,
+            tool_name=row.tool_name,
+            user_id=row.user_id,
+            isolation=row.isolation,
+            status=row.status,
+            latency_ms=row.latency_ms or 0,
+            args_preview=row.args_preview,
+            output_preview=row.output_preview,
+            error=row.error,
+            args_redacted=bool(row.args_redacted),
+            created_at=created,
+        )
 
 
 class AuditOut(BaseModel):
@@ -505,7 +529,7 @@ def plugin_audit(
     avg_latency = base.with_entities(func.avg(PluginCallLog.latency_ms)).scalar() or 0.0
 
     return AuditOut(
-        entries=[AuditEntry.model_validate(e) for e in entries],
+        entries=[AuditEntry.from_row(e) for e in entries],
         total=total,
         page=page,
         page_size=page_size,
@@ -519,39 +543,58 @@ def plugin_audit(
             "error_rate": round(
                 (by_status.get("error", 0) + by_status.get("blocked", 0)) / total_calls, 4
             ),
+            # Surfaced so the UI can say when rows expire, and so an operator
+            # can confirm the setting took effect.
+            "retention_days": settings.PLUGIN_AUDIT_RETENTION_DAYS,
+            "prune_interval_minutes": settings.PLUGIN_AUDIT_PRUNE_INTERVAL_MINUTES,
         },
     )
 
 
 @router.delete("/audit", status_code=204)
 def clear_plugin_audit(
-    hours: int = Query(0, ge=0, le=720),
+    hours: int = Query(0, ge=0, le=8760),
     plugin_name: Optional[str] = None,
-    db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
     """Prune the audit trail. hours=0 clears everything.
 
     Irreversible — the audit trail is the only record of past plugin calls.
     """
-    query = db.query(PluginCallLog)
-    if hours:
-        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
-        query = query.filter(PluginCallLog.created_at < cutoff)
-    if plugin_name:
-        query = query.filter(PluginCallLog.plugin_name == plugin_name)
-    deleted = query.delete(synchronize_session=False)
-    db.commit()
+    from ..models.plugin import PluginCallLog
+
+    db = SessionLocal()
+    try:
+        if hours:
+            # Age-based prune, scoped to one plugin when asked.
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+            query = db.query(PluginCallLog).filter(PluginCallLog.created_at < cutoff)
+            if plugin_name:
+                query = query.filter(PluginCallLog.plugin_name == plugin_name)
+            deleted = query.delete(synchronize_session=False)
+        else:
+            # Clear everything. plugin_name is not honoured here: "delete all"
+            # that silently keeps one plugin's rows would be surprising.
+            deleted = db.query(PluginCallLog).delete(synchronize_session=False)
+        db.commit()
+    finally:
+        db.close()
+
     logger.info("Pruned %d plugin audit rows", deleted)
 
 
-@router.get("/audit/export", response_model=str)
+@router.get("/audit/export")
 def export_plugin_audit(
-    hours: int = Query(24, ge=1, le=720),
+    hours: int = Query(24, ge=1, le=8760),
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
-    """CSV dump of the audit trail, for offline review."""
+    """CSV dump of the audit trail, for offline review.
+
+    Returned as a real Response with text/csv rather than a `str` response
+    model — that would be JSON-encoded, so a browser download would save a
+    quoted string instead of a spreadsheet.
+    """
     since = datetime.now(timezone.utc) - timedelta(hours=hours)
     rows = (
         db.query(PluginCallLog)
@@ -569,7 +612,11 @@ def export_plugin_audit(
     for r in rows:
         writer.writerow([
             r.id,
-            r.created_at.isoformat() if r.created_at else "",
+            (
+                r.created_at.replace(tzinfo=timezone.utc).isoformat()
+                if r.created_at and r.created_at.tzinfo is None
+                else (r.created_at.isoformat() if r.created_at else "")
+            ),
             r.plugin_name,
             r.tool_name,
             r.user_id if r.user_id is not None else "",
@@ -581,7 +628,12 @@ def export_plugin_audit(
             (r.output_preview or "").replace("\n", " "),
             (r.error or "").replace("\n", " "),
         ])
-    return buf.getvalue()
+    stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
+    return Response(
+        content=buf.getvalue(),
+        media_type="text/csv",
+        headers={"Content-Disposition": f'attachment; filename="plugin-audit-{hours}h-{stamp}.csv"'},
+    )
 
 
 # ── Archive safety ──────────────────────────────────────────────────────────

@@ -81,6 +81,11 @@ class Settings(BaseSettings):
     PLUGIN_MAX_TIMEOUT: int = 60
     # Cap on a plugin's stdout, to stop a runaway loop filling the DB.
     PLUGIN_MAX_OUTPUT: int = 100_000
+    # Audit trail retention. Rows older than this are pruned by a background
+    # task. Set to 0 to keep the trail forever (and stop the task).
+    PLUGIN_AUDIT_RETENTION_DAYS: int = 30
+    # How often the prune runs.
+    PLUGIN_AUDIT_PRUNE_INTERVAL_MINUTES: int = 360
 
     class Config:
         env_file = ".env"

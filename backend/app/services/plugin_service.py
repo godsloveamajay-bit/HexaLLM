@@ -929,5 +929,110 @@ def record_call(
         db.close()
 
 
+def prune_audit(retention_days: Optional[int] = None, batch_size: int = 2000) -> int:
+    """Delete audit rows older than the retention window. Returns the count.
+
+    Batched with a commit between batches: a single unbounded DELETE on SQLite
+    takes a write lock for the whole table scan, which would stall live plugin
+    calls on a busy install. Ordering by id keeps it to an indexed range scan.
+    """
+    days = settings.PLUGIN_AUDIT_RETENTION_DAYS if retention_days is None else retention_days
+    if days <= 0:
+        return 0
+
+    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    from ..models.plugin import PluginCallLog
+
+    deleted = 0
+    while True:
+        db = SessionLocal()
+        try:
+            # Grab a page of ids first, then delete just those. Selecting the
+            # batch inside the same transaction as the delete would keep the
+            # lock held for the duration of both.
+            ids = [
+                row_id
+                for (row_id,) in db.query(PluginCallLog.id)
+                .filter(PluginCallLog.created_at < cutoff)
+                .order_by(PluginCallLog.id)
+                .limit(batch_size)
+                .all()
+            ]
+            if not ids:
+                break
+            db.query(PluginCallLog).filter(PluginCallLog.id.in_(ids)).delete(
+                synchronize_session=False
+            )
+            db.commit()
+            deleted += len(ids)
+            if len(ids) < batch_size:
+                break
+        except Exception:
+            logger.exception("Plugin audit prune failed; will retry next cycle")
+            try:
+                db.rollback()
+            except Exception:
+                pass
+            break
+        finally:
+            db.close()
+
+    if deleted:
+        logger.info(
+            "Plugin audit prune: removed %d rows older than %d days", deleted, days
+        )
+    return deleted
+
+
+async def audit_prune_loop(stop_event: asyncio.Event) -> None:
+    """Background task: prune on a fixed interval until asked to stop.
+
+    Sleeps first so a fresh process doesn't immediately contend with live
+    traffic, and prunes at most once per interval even if the loop is delayed.
+    """
+    interval = max(5, settings.PLUGIN_AUDIT_PRUNE_INTERVAL_MINUTES) * 60
+    while not stop_event.is_set():
+        try:
+            await asyncio.wait_for(stop_event.wait(), timeout=interval)
+            return  # stop_event was set
+        except asyncio.TimeoutError:
+            pass
+        try:
+            await asyncio.to_thread(prune_audit)
+        except Exception:
+            logger.exception("Plugin audit prune cycle failed")
+
+
+def start_audit_pruner() -> Optional[asyncio.Task]:
+    """Start the prune task if retention is enabled. Returns the task, if any."""
+    if settings.PLUGIN_AUDIT_RETENTION_DAYS <= 0:
+        logger.info("Plugin audit retention disabled — trail is kept forever")
+        return None
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return None
+    stop = asyncio.Event()
+    task = loop.create_task(audit_prune_loop(stop))
+    # Keep a reference so the task isn't garbage collected mid-run.
+    _PRUNE_STATE["stop"] = stop
+    logger.info(
+        "Plugin audit pruner started: every %d min, retention %d days",
+        settings.PLUGIN_AUDIT_PRUNE_INTERVAL_MINUTES,
+        settings.PLUGIN_AUDIT_RETENTION_DAYS,
+    )
+    return task
+
+
+def stop_audit_pruner() -> None:
+    stop = _PRUNE_STATE.get("stop")
+    if stop is not None:
+        stop.set()
+        _PRUNE_STATE["stop"] = None
+
+
 # Process-wide registry. The API layer and the agent both import this.
 registry = PluginRegistry()
+
+# Holds the pruner's stop event between start and stop.
+_PRUNE_STATE: Dict[str, Any] = {}

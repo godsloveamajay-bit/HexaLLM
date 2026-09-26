@@ -270,10 +270,33 @@ than a stub, so nothing depends on a remote source that doesn't exist.
 
 ### Retention
 
-`plugin_call_logs` is not pruned automatically — rows are kept until an admin
-calls `DELETE /api/v1/plugins/audit?hours=N`. On a quiet install that is a few
-rows per minute at worst; on a busy one, schedule the prune or the table grows
-without bound. CSV export is capped at 10 000 rows per request.
+Automatic. A background task in the app lifespan deletes rows older than
+`PLUGIN_AUDIT_RETENTION_DAYS` (default **30**) every
+`PLUGIN_AUDIT_PRUNE_INTERVAL_MINUTES` (default **360**, i.e. 6h). Set the
+retention to `0` to keep the trail forever — the task is then not started and
+the audit UI says so.
+
+Both settings are overridable by environment variable, e.g.
+`PLUGIN_AUDIT_RETENTION_DAYS=7` in the systemd unit. The effective values are
+returned in the audit summary, and the audit tab states the policy in plain
+text so nobody assumes the trail is permanent.
+
+The prune is **batched** (2000 ids per transaction, commit between batches).
+One unbounded `DELETE` on SQLite holds a write lock for the whole table scan,
+which would stall live plugin calls on a busy install; ordering by id keeps it
+to an indexed range scan. The loop sleeps before its first cycle so a fresh
+process doesn't contend with live traffic immediately, and the interval has a
+5-minute floor.
+
+Manual pruning stays available via `DELETE /api/v1/plugins/audit?hours=N`, with
+`hours=0` clearing everything. It deliberately ignores `plugin_name` when
+clearing all — a "delete all" that quietly kept one plugin's rows would be
+surprising. CSV export is capped at 10 000 rows per request.
+
+`backend/plugins/_retention_selftest.py` covers age-based deletion, rows inside
+the window surviving, `retention_days=0` being a no-op, batched pruning
+draining the table, the loop starting, and a stop being observed promptly
+rather than after a full interval.
 
 ## Writing a plugin
 
@@ -299,7 +322,8 @@ Deliberately out of scope, and **not** present in the codebase:
 - WASM, gVisor, or Firecracker isolation; `inprocess` is the only non-subprocess
   mode.
 - Per-plugin token/cost budgets — quotas are call counts, not spend.
-- Automatic audit retention. Pruning is manual (see [Retention](#retention)).
+- Size-based (rather than age-based) retention, and per-plugin retention
+  windows; see [Retention](#retention).
 - Secret storage beyond environment variables — declared secrets are read from
   the backend's environment, not from a vault.
 

@@ -61,6 +61,8 @@ type AuditData = {
     top_tools: Record<string, number>
     avg_latency_ms: number
     error_rate: number
+    retention_days: number
+    prune_interval_minutes: number
   }
 }
 
@@ -267,6 +269,21 @@ function AuditPanel({ plugins }: { plugins: Plugin[] }) {
           </span>
         )}
       </div>
+
+      {s && (
+        <div className="font-mono text-[10px] mb-2 flex items-center gap-1.5" style={{ color: '#484f58' }}>
+          {s.retention_days > 0 ? (
+            <>
+              rows older than {s.retention_days} days are pruned automatically, every{' '}
+              {s.prune_interval_minutes >= 60
+                ? `${Math.round(s.prune_interval_minutes / 60)}h`
+                : `${s.prune_interval_minutes}m`}
+            </>
+          ) : (
+            <>retention is disabled — the trail is kept indefinitely</>
+          )}
+        </div>
+      )}
 
       <div className="rounded border overflow-hidden" style={{ borderColor: '#21262d' }}>
         <div className="font-mono text-[9px] uppercase px-2.5 py-1.5 flex gap-3"

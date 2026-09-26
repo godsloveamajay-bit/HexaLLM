@@ -155,7 +155,13 @@ async def lifespan(app: FastAPI):
     _migrate_db()
     for d in [settings.MODELS_DIR, settings.DATASETS_DIR, settings.UPLOADS_DIR]:
         os.makedirs(d, exist_ok=True)
-    yield
+    # Trim the plugin audit trail on a timer so it doesn't grow without bound.
+    from .services.plugin_service import start_audit_pruner, stop_audit_pruner
+    start_audit_pruner()
+    try:
+        yield
+    finally:
+        stop_audit_pruner()
 
 
 # Rate limiter — shared across the app, keyed by remote IP
