@@ -46,7 +46,14 @@ class User(Base):
     prompt_templates = relationship("PromptTemplate", back_populates="user", cascade="all, delete-orphan")
     memories = relationship("UserMemory", back_populates="user", cascade="all, delete-orphan")
     personas = relationship("SavedPersona", back_populates="user", cascade="all, delete-orphan")
-    workflows = relationship("Workflow", back_populates="user", cascade="all, delete-orphan")
+    # `workflows` has two FKs to users (owner_id + a legacy user_id column), so
+    # the join is ambiguous unless we name the column explicitly.
+    workflows = relationship(
+        "Workflow",
+        back_populates="user",
+        foreign_keys="Workflow.owner_id",
+        cascade="all, delete-orphan",
+    )
     mcp_servers = relationship("MCPServer", back_populates="user", cascade="all, delete-orphan")
     subscription = relationship("Subscription", back_populates="user", uselist=False, cascade="all, delete-orphan")
 

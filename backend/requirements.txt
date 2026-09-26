@@ -1,5 +1,9 @@
 fastapi==0.115.5
 uvicorn[standard]==0.32.1
+# uvicorn 0.32.x drives WebSockets through websockets.legacy, which was removed
+# in websockets 14. Unpinned, a fresh install pulls 14+ and every WebSocket
+# upgrade completes but never delivers a message.
+websockets>=12,<14
 sqlalchemy==2.0.36
 alembic==1.14.0
 python-jose[cryptography]==3.3.0

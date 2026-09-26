@@ -11,7 +11,6 @@ from ..services.mcp_service import MCPClient
 
 router = APIRouter(prefix="/mcp", tags=["mcp"])
 
-
 class MCPServerCreate(BaseModel):
     name: str
     description: Optional[str] = None

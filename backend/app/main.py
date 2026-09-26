@@ -14,14 +14,17 @@ from .api import (
     auth, models, chat as chat_api, image as image_api,
     templates as templates_api, memory as memory_api,
     transcribe as transcribe_api, billing as billing_api,
-    admin as admin_api, agents as agents_api, mcp as mcp_api,
+    admin as admin_api, agents as agents_api, mcp_clients as mcp_api,
     workflows as workflows_api, knowledge as knowledge_api,
     tools as tools_api, personas as personas_api,
     analytics as analytics_api, downloads as downloads_api, workspaces as workspaces_api,
     tasks as tasks_api, dev as dev_api,
     openai_compat as openai_compat_api, cli_tunnel as cli_tunnel_api,
     voice as voice_api,
+    prompts as prompts_api, costs as costs_api,
+    export_import as export_import_api,
 )
+from .api.mcp import mcp_router as mcp_server_api
 
 
 def _migrate_db():
@@ -117,6 +120,33 @@ def _migrate_db():
         if "max_tokens" not in key_cols:
             conn.execute(text("ALTER TABLE api_keys ADD COLUMN max_tokens INTEGER"))
 
+        # Workflows — the visual-DAG engine reuses the `workflows` table and
+        # adds node/edge/execution tables plus the legacy task-runner columns
+        # so the existing Workflows page keeps working.
+        if inspector.has_table("workflows"):
+            wf_cols = {c["name"] for c in inspector.get_columns("workflows")}
+            for col, ddl in (
+                ("user_id", "INTEGER"),
+                ("definition", "JSON"),
+                ("version", "INTEGER DEFAULT 1"),
+                ("is_public", "BOOLEAN DEFAULT 0"),
+                ("is_template", "BOOLEAN DEFAULT 0"),
+                ("tags", "JSON"),
+                ("task", "TEXT"),
+                ("model", "VARCHAR(255)"),
+                ("tools", "JSON"),
+                ("system_prompt", "TEXT"),
+                ("max_steps", "INTEGER DEFAULT 10"),
+                ("schedule", "VARCHAR(255)"),
+                ("next_run_at", "DATETIME"),
+                ("run_count", "INTEGER DEFAULT 0"),
+                ("last_run_at", "DATETIME"),
+                ("last_result", "TEXT"),
+                ("last_error", "TEXT"),
+            ):
+                if col not in wf_cols:
+                    conn.execute(text(f"ALTER TABLE workflows ADD COLUMN {col} {ddl}"))
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -192,7 +222,11 @@ app.include_router(billing_api.router,    prefix="/api/v1")
 app.include_router(admin_api.router,      prefix="/api/v1")
 app.include_router(agents_api.router,     prefix="/api/v1")
 app.include_router(mcp_api.router,        prefix="/api/v1")
+app.include_router(mcp_server_api, prefix="/api/v1")
 app.include_router(workflows_api.router,  prefix="/api/v1")
+app.include_router(prompts_api.router,    prefix="/api/v1")
+app.include_router(costs_api.router,      prefix="/api/v1")
+app.include_router(export_import_api.router, prefix="/api/v1")
 app.include_router(knowledge_api.router,  prefix="/api/v1")
 app.include_router(tools_api.router,      prefix="/api/v1")
 app.include_router(personas_api.router,   prefix="/api/v1")

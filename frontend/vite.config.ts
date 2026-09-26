@@ -72,6 +72,9 @@ export default defineConfig({
       '/api': {
         target: 'http://localhost:8080',
         changeOrigin: true,
+        // Required for the system monitor WebSocket (/api/v1/dev/ws/system)
+        // to upgrade through the dev server instead of falling back to polling.
+        ws: true,
       },
     },
   },

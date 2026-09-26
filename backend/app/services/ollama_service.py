@@ -383,6 +383,42 @@ class OllamaService:
             resp.raise_for_status()
             return resp.json().get("choices", [{}])[0].get("message", {}).get("content", "")
 
+    async def chat_complete(
+        self,
+        model: str,
+        messages: List[Dict],
+        system_prompt: Optional[str] = None,
+        temperature: float = 0.7,
+        max_tokens: Optional[int] = None,
+    ) -> str:
+        """Non-streaming chat completion, routed to vLLM or Ollama.
+
+        Public counterpart to chat_stream for callers that want the whole
+        answer at once (workflow nodes, titles, greetings). Keeps the same
+        engine routing so callers can't accidentally bypass vLLM.
+        """
+        if "moondream" in model.lower() and temperature in (0.6, 0.7):
+            temperature = 0.8
+        if system_prompt and not (messages and messages[0].get("role") == "system"):
+            messages = [{"role": "system", "content": system_prompt}] + list(messages)
+
+        vllm_name = _VLLM_MODELS.get(model)
+        if vllm_name:
+            return await self._vllm_complete(vllm_name, messages, temperature, max_tokens)
+
+        payload: Dict = {
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "options": {"temperature": temperature},
+        }
+        if max_tokens:
+            payload["options"]["num_predict"] = max_tokens
+        async with self._client(timeout=180) as client:
+            resp = await client.post(f"{self.base_url}/api/chat", json=payload)
+            resp.raise_for_status()
+            return resp.json().get("message", {}).get("content", "")
+
     async def health_check(self) -> bool:
         async with self._client(timeout=5) as client:
             try:

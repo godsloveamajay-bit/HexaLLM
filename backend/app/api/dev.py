@@ -12,6 +12,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Set
 
 from fastapi import APIRouter, Depends, Query, WebSocket, WebSocketDisconnect
+from fastapi.encoders import jsonable_encoder
 from sqlalchemy import func, text
 
 from ..core.database import SessionLocal, get_db
@@ -43,9 +44,11 @@ class _SystemBroadcaster:
 
     async def _broadcast_loop(self):
         while self._clients:
-            data = await _gather_system_snapshot()
+            # jsonable_encoder (not raw json.dumps) so a datetime or other
+            # non-JSON value in the snapshot can't kill the push loop.
+            data = jsonable_encoder(await _gather_system_snapshot())
             dead = []
-            for ws in self._clients:
+            for ws in list(self._clients):
                 try:
                     await ws.send_json(data)
                 except Exception:
@@ -66,7 +69,7 @@ def _user_from_token(token: str, db: Session) -> Optional[User]:
         return None
 
 
-@router.websocket("/ws/system")
+@router.websocket("/dev/ws/system")
 async def system_websocket(ws: WebSocket, token: str = Query(...)):
     """Push system stats every ~3s. Auth via token query param."""
     db_gen = get_db()
@@ -188,7 +191,12 @@ async def _service_state(unit: str) -> Dict[str, Any]:
                     key, _, val = line.partition("=")
                     if key == "ActiveEnterTimestamp" and val:
                         try:
-                            state["since"] = datetime.strptime(val, "%a %Y-%m-%d %H:%M:%S %Z")
+                            # Keep it JSON-native: this same dict is pushed over
+                            # the WebSocket, where raw json.dumps would choke on
+                            # a datetime object.
+                            state["since"] = datetime.strptime(
+                                val, "%a %Y-%m-%d %H:%M:%S %Z"
+                            ).isoformat()
                         except ValueError:
                             pass
                     elif key == "MainPID":

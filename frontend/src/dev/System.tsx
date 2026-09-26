@@ -108,7 +108,11 @@ export default function System() {
     if (!token) return
 
     try {
-      wsRef.current = new WebSocket(`wss://dev.hexallm.co.uk/api/v1/dev/ws/system?token=${token}`)
+      // Derive the WS origin from the page so local dev, the dev domain and the
+      // main domain all work without a rebuild.
+      const scheme = window.location.protocol === 'https:' ? 'wss' : 'ws'
+      const wsUrl = `${scheme}://${window.location.host}/api/v1/dev/ws/system?token=${encodeURIComponent(token)}`
+      wsRef.current = new WebSocket(wsUrl)
     } catch (e) {
       setPolling(true)
       return
