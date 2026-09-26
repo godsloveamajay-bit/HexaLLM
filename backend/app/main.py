@@ -9,7 +9,7 @@ from slowapi.errors import RateLimitExceeded
 from sqlalchemy import inspect, text
 from .core.config import settings
 from .core.database import Base, engine
-from .models import user, chat, template, memory, billing, workspace  # noqa: F401
+from .models import user, chat, template, memory, billing, workspace, plugin  # noqa: F401
 from .api import (
     auth, models, chat as chat_api, image as image_api,
     templates as templates_api, memory as memory_api,
@@ -23,6 +23,7 @@ from .api import (
     voice as voice_api,
     prompts as prompts_api, costs as costs_api,
     export_import as export_import_api,
+    plugins as plugins_api,
 )
 from .api.mcp import mcp_router as mcp_server_api
 
@@ -227,6 +228,7 @@ app.include_router(workflows_api.router,  prefix="/api/v1")
 app.include_router(prompts_api.router,    prefix="/api/v1")
 app.include_router(costs_api.router,      prefix="/api/v1")
 app.include_router(export_import_api.router, prefix="/api/v1")
+app.include_router(plugins_api.router,      prefix="/api/v1")
 app.include_router(knowledge_api.router,  prefix="/api/v1")
 app.include_router(tools_api.router,      prefix="/api/v1")
 app.include_router(personas_api.router,   prefix="/api/v1")

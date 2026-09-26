@@ -68,3 +68,6 @@ deploy/current.sha
 backups/
 deploy/cloudflared/credentials/
 
+
+# Plugin runtime data — per-plugin storage, not source
+backend/plugins/_data/

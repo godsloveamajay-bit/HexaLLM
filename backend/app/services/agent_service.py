@@ -252,6 +252,40 @@ _TOOL_FUNCS = {
 }
 
 
+# ── Plugin tools ──────────────────────────────────────────────────────────
+
+def _plugin_tool_subset(requested: List[str]) -> Dict[str, str]:
+    """Descriptions for enabled plugin tools the caller asked for."""
+    try:
+        from .plugin_service import registry
+        return {k: v for k, v in registry.tool_descriptions().items() if k in requested}
+    except Exception:
+        return {}
+
+
+def _make_plugin_caller(tool_name: str):
+    """Adapter so a plugin tool matches the agent's `tool(input) -> str` shape."""
+    from .plugin_service import PluginError, registry
+
+    async def _call(input_str: str) -> str:
+        raw = (input_str or "").strip()
+        if not raw:
+            args: Dict[str, Any] = {}
+        else:
+            try:
+                parsed = json.loads(raw)
+                args = parsed if isinstance(parsed, dict) else {"input": parsed}
+            except (TypeError, ValueError):
+                # A bare string, not JSON: bind it to the schema's argument.
+                args = registry.coerce_string_args(tool_name, raw)
+        try:
+            return await registry.call(tool_name, args)
+        except PluginError as e:
+            return f"Plugin error: {e}"
+
+    return _call
+
+
 # ── Agent loop ─────────────────────────────────────────────────────────────
 
 async def _llm_call(model: str, messages: list, system: str, usage: Optional[Dict] = None, images: Optional[List[str]] = None) -> str:
@@ -345,6 +379,14 @@ async def _run_agent_inner(
         for name, spec in dynamic_tools.items():
             available[name] = spec.get("description", name)
             tool_funcs[name] = spec["func"]
+
+    # Inject tools contributed by enabled plugins. Only names the caller asked
+    # for are exposed, so a plugin can't widen its own reach inside a run.
+    plugin_tools = _plugin_tool_subset(tools)
+    for name, desc in plugin_tools.items():
+        if name not in available:
+            available[name] = desc
+            tool_funcs[name] = _make_plugin_caller(name)
 
     # Inject MCP tools
     mcp_tool_map: Dict[str, Any] = {}  # "mcp__<server>__<tool>" -> callable

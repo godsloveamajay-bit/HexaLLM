@@ -1,0 +1,42 @@
+{
+  "name": "scratch-notes",
+  "version": "1.0.0",
+  "description": "Read and write short notes in a sandbox-scoped scratch directory. Demonstrates filesystem permissions.",
+  "author": "HexaLLM",
+  "license": "MIT",
+  "entry_point": "plugin.py",
+  "isolation": "sandbox",
+  "permissions": {
+    "filesystem": ["scratch"],
+    "network": [],
+    "secrets": [],
+    "subprocess": false
+  },
+  "tools": [
+    {
+      "name": "note_write",
+      "description": "Save a note. Input: JSON {\"name\": \"my-note\", \"text\": \"...\"}. Only the sandbox scratch directory is writable.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "name": { "type": "string", "description": "Note name (letters, digits, - and _)" },
+          "text": { "type": "string" }
+        },
+        "required": ["name", "text"]
+      }
+    },
+    {
+      "name": "note_read",
+      "description": "Read a saved note by name.",
+      "input_schema": {
+        "type": "object",
+        "properties": { "name": { "type": "string" } },
+        "required": ["name"]
+      }
+    },
+    {
+      "name": "note_list",
+      "description": "List saved notes."
+    }
+  ]
+}

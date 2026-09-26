@@ -579,11 +579,27 @@ async def _run_llm_node(node: WorkflowNode, scope: Dict[str, Any]) -> Dict[str, 
 
 
 async def _run_tool_node(node: WorkflowNode, scope: Dict[str, Any]) -> Dict[str, Any]:
-    """Run one of the agent tools (web_search, code_exec, read_file, ...)."""
+    """Run a built-in agent tool or a tool contributed by an enabled plugin."""
     config = resolve_inputs(node, scope)
     tool_name = config.get("tool")
     if not tool_name:
         raise ValueError("Tool node requires a `tool` in its config")
+
+    # Plugin tools are resolved first so a plugin can add to (never silently
+    # shadow) the built-in set.
+    from ..services.plugin_service import PluginError, registry
+    if registry.tool_owner(tool_name) is not None:
+        if "input" in config:
+            arg: Any = config["input"]
+        else:
+            arg = {k: v for k, v in config.items() if k != "tool"}
+        if isinstance(arg, str):
+            arg = render_template(arg, scope)
+        try:
+            result = await registry.call(tool_name, arg if isinstance(arg, dict) else {"input": arg})
+        except PluginError as exc:
+            raise ValueError(f"plugin {tool_name}: {exc}") from exc
+        return {"output": result, "tool": tool_name, "source": "plugin"}
 
     runner = _TOOL_FUNCS.get(tool_name)
     if runner is None:
@@ -591,10 +607,10 @@ async def _run_tool_node(node: WorkflowNode, scope: Dict[str, Any]) -> Dict[str,
             f"Unknown tool '{tool_name}'. Available: {', '.join(sorted(_TOOL_FUNCS))}"
         )
 
-    # An explicit `input` wins; otherwise every other config key becomes the
-    # tool's argument, so simple tools need no extra ceremony.
+    # An explicit `input` config key is the tool argument; otherwise the
+    # remaining config keys are passed as a dict.
     if "input" in config:
-        arg: Any = config["input"]
+        arg = config["input"]
     else:
         arg = {k: v for k, v in config.items() if k != "tool"}
 

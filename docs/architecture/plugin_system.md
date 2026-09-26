@@ -1,287 +1,215 @@
-# Plugin System Architecture
+# Plugin System
 
-## Overview
-A secure, extensible plugin system that allows developers to extend HexaLLM with custom tools, models, UI components, and workflows without modifying core code.
+A plugin adds **tools** — functions an agent or a workflow can call — without
+touching HexaLLM's source.
 
-## Plugin Types
+Implemented in this document's scope: tool plugins, admin management, a
+subprocess sandbox with enforced permissions, agent + workflow integration, and
+a dev-site UI.
 
-| Type | Description | Use Cases |
-|------|-------------|-----------|
-| **Tool Plugins** | Custom functions callable by LLM | Custom APIs, DB queries, file ops, integrations |
-| **Model Adapters** | Custom model providers | Local models, fine-tuned models, proprietary APIs |
-| **UI Extensions** | Custom React components | Custom chat views, dashboards, widgets |
-| **Workflow Plugins** | Pre-built workflow templates | Domain-specific pipelines |
-| **Auth Providers** | Custom authentication | SSO, LDAP, OAuth, WebAuthn |
-| **Storage Backends** | Custom storage | S3, GCS, IPFS, encrypted local |
-| **Event Hooks** | Lifecycle callbacks | Logging, audit, notifications |
+> **Scope note.** An earlier draft of this document also described model
+> adapters, UI extensions, workflow templates, auth providers, storage
+> backends, a signed remote marketplace, WASM isolation, and a `hexallm`
+> CLI. **None of those are implemented.** They are listed under
+> [Not built](#not-built) so nobody assumes they exist.
 
-## Architecture
+---
+
+## Layout
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      HexaLLM Core                            │
-├─────────────────────────────────────────────────────────────┤
-│  ┌─────────────┐  ┌─────────────┐  ┌─────────────────────┐  │
-│  │ Plugin      │  │ Plugin      │  │ Plugin Marketplace  │  │
-│  │ Registry    │──►│ Loader      │──►│ (GitHub/npm/Registry)│  │
-│  └─────────────┘  └─────────────┘  └─────────────────────┘  │
-│         ▲                │                    ▲              │
-│         │                ▼                    │              │
-│  ┌──────┴────────────────────────────────────┴──────┐      │
-│  │              Plugin Sandbox Runtime              │      │
-│  │  ┌──────────┐ ┌──────────┐ ┌────────────────┐   │      │
-│  │  │ Tool     │ │ Model    │ │ UI Component   │   │      │
-│  │  │ Plugins  │ │ Adapters │ │ Registry       │   │      │
-│  │  └──────────┘ └──────────┘ └────────────────┘   │      │
-│  └──────────────────────────────────────────────────┘      │
-└─────────────────────────────────────────────────────────────┘
+backend/plugins/
+├── text-stats/            # example: pure computation, no permissions
+│   ├── manifest.json
+│   └── plugin.py
+├── scratch-notes/         # example: declares filesystem access
+│   ├── manifest.json
+│   └── plugin.py
+└── _data/<name>/          # per-plugin storage, created on first call
 ```
 
-## Plugin Manifest
+A plugin is a directory under `PLUGINS_DIR` (default `backend/plugins`).
+`PLUGINS_DIR` is configurable via the `PLUGINS_DIR` setting; set
+`PLUGINS_ENABLED=false` to switch discovery off entirely.
+
+## Plugin contract
+
+`plugin.py` must expose two module-level names. Keeping the contract this
+small means a plugin needs no SDK, no inheritance, and no imports from
+HexaLLM — so it runs unchanged in the sandbox or in-process.
+
+```python
+TOOLS = [
+    {
+        "name": "text_stats",
+        "description": "Word/character counts for a block of text.",
+        "input_schema": {
+            "type": "object",
+            "properties": {"text": {"type": "string"}},
+            "required": ["text"],
+        },
+    },
+]
+
+def run(tool: str, args: dict) -> str:
+    """Dispatch a tool call. May be sync or async."""
+    if tool == "text_stats":
+        return json.dumps(analyse(args["text"]))
+    raise ValueError(f"unknown tool: {tool}")
+```
+
+`TOOLS` in the code is documentation for the author; the **manifest** is the
+authority the registry indexes, and a tool the manifest doesn't list cannot be
+called.
+
+## Manifest
 
 ```json
 {
-  "name": "hexallm-github",
+  "name": "scratch-notes",
   "version": "1.0.0",
-  "description": "GitHub integration tools",
-  "author": "HexaLLM Team",
+  "description": "Read and write short notes in a private scratch directory.",
+  "author": "HexaLLM",
   "license": "MIT",
-  "hexallm_version": ">=14.0.0",
-  "entry_point": "index.py",
+  "entry_point": "plugin.py",
+  "isolation": "sandbox",
   "permissions": {
-    "tools": ["github_search", "github_create_issue", "github_create_pr"],
-    "network": ["api.github.com"],
-    "filesystem": ["/workspace/github"],
-    "secrets": ["GITHUB_TOKEN"]
+    "filesystem": ["scratch"],
+    "network": [],
+    "secrets": [],
+    "subprocess": false
   },
   "tools": [
     {
-      "name": "github_search",
-      "description": "Search GitHub repositories",
-      "input_schema": { ... },
-      "handler": "github_search"
+      "name": "note_write",
+      "description": "Save a note. Input: JSON {\"name\": \"my-note\", \"text\": \"...\"}",
+      "input_schema": { "...": "..." }
     }
-  ],
-  "ui_components": [
-    {
-      "name": "GitHubRepoPicker",
-      "entry": "components/GitHubRepoPicker.tsx",
-      "slots": ["sidebar", "modal"]
-    }
-  ],
-  "workflows": [
-    {
-      "id": "github_pr_review",
-      "name": "PR Code Review",
-      "file": "workflows/pr_review.yaml"
-    }
-  ],
-  "hooks": {
-    "on_chat_start": "on_chat_start",
-    "on_message_send": "on_message_send"
-  }
+  ]
 }
 ```
 
-## Plugin Sandbox
+Validated on load; a plugin that fails validation is marked `invalid` in the UI
+and contributes **no** tools. Rejections include a bad `name`, a missing or
+duplicate tool, a tool with no description, an `entry_point` outside the plugin
+directory, and an unknown `isolation`.
 
-### Isolation Levels
-| Level | Isolation | Use Case |
-|--------|-----------|----------|
-| **Process** | Separate process (gVisor/Firecracker) | Untrusted code, user plugins |
-| **Container** | Docker with seccomp | Trusted plugins, network access |
-| **WASM** | WebAssembly (wasmtime) | Portable, fast, safe |
-| **Native** | Direct execution (trusted only) | Core plugins, max performance |
+An optional top-level `timeout` (seconds) may lower the per-call ceiling; it
+can never raise it above `PLUGIN_MAX_TIMEOUT`.
 
-### Security Model
+## Isolation
+
+**Loading a plugin executes its code.** Every management route requires admin,
+and a newly discovered plugin is inserted **disabled** — it starts
+contributing nothing until an admin enables it.
+
+| Mode | Behaviour | Use for |
+|------|-----------|---------|
+| `sandbox` *(default)* | Fresh Python subprocess, locked-down stdlib, jailed filesystem, host-filtered sockets, hard timeout, capped output | Everything, including third-party plugins |
+| `inprocess` | Module imported into the backend and `run` awaited directly | First-party plugins only |
+
+`inprocess` gives a plugin the full authority of the backend process. Enabling
+it is equivalent to trusting the author as much as you trust yourself.
+
+### What `sandbox` actually enforces
+
+The harness is generated per call and applied **before** the plugin module is
+imported, so a plugin cannot capture the real `socket` at import time:
+
+| Permission | Enforcement |
+|------------|-------------|
+| `filesystem` | `open()` is wrapped. Only the plugin's data dir and its declared sub-paths resolve; every other read or write raises. Path traversal and absolute paths outside those roots are denied. |
+| `network` | With no hosts declared, `socket`, `ssl`, `urllib`, `requests`, `httpx`, `asyncio` and friends are removed from `sys.modules`. With hosts declared, `socket.connect` is wrapped to allow only those hosts (or `*`). |
+| `subprocess` | With `subprocess: false`, `subprocess` and `commands` are removed from `sys.modules`. |
+| `secrets` | Only declared names are resolved and injected — as environment variables, passed on **stdin** so they never appear in a process listing. Undeclared secrets are not passed. |
+| output | Truncated at `PLUGIN_MAX_OUTPUT` (100 kB). |
+| time | Hard kill at `PLUGIN_MAX_TIMEOUT` (60 s) or the manifest's `timeout`. |
+
+The filesystem jail is *real*: a plugin that calls `open("/etc/passwd")` with
+no declared `filesystem` is blocked by the harness, not by the plugin being
+well-behaved. See `backend/plugins/_sandbox_selftest.py`, which asserts each
+of these.
+
+The data dir is passed as `$HEXALLM_PLUGIN_DATA`. Declared relative
+`filesystem` entries resolve inside it, so a plugin can persist state without
+being able to reach the rest of the host:
+
 ```python
-# Plugin capability declaration
-class PluginCapabilities:
-    network: List[str] = []        # Allowed domains
-    filesystem: List[str] = []     # Allowed paths
-    secrets: List[str] = []        # Secret names
-    subprocess: bool = False       # Allow subprocess
-    network_raw: bool = False      # Raw sockets
-    
-# Runtime enforcement
-class PluginSandbox:
-    def __init__(self, manifest: PluginManifest):
-        self.capabilities = manifest.permissions
-        self.allowed_domains = manifest.permissions.network
-        self.allowed_paths = manifest.permissions.filesystem
-    
-    def check_network(self, url: str) -> bool:
-        return any(url.startswith(d) for d in self.allowed_domains)
-    
-    def check_filesystem(self, path: str) -> bool:
-        return any(path.startswith(p) for p in self.allowed_paths)
+path = os.path.join(os.environ["HEXALLM_PLUGIN_DATA"], "scratch")
 ```
 
-## Plugin SDK (Python)
+> **Docker note.** `sandbox` mode reuses the existing `Sandbox` service, so it
+> gains a container boundary when Docker is available and degrades to a
+> subprocess with an enforced timeout when it is not. It currently runs
+> **subprocess** on this host: no container, so the stdlib/permission gating
+> above is the only boundary. That gating is meaningful but is not a kernel
+> boundary — treat `sandbox` plugins as semi-trusted code.
 
-```python
-# plugins/my_plugin/__init__.py
-from hexallm.plugins import Plugin, Tool, tool
+## How plugin tools are used
 
-class MyPlugin(Plugin):
-    name = "my_plugin"
-    version = "1.0.0"
-    
-    @tool(
-        name="my_tool",
-        description="Does something useful",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "input": {"type": "string"}
-            },
-            required: ["input"]
-        }
-    )
-    async def my_tool(self, input: str) -> str:
-        return f"Processed: {input}"
+Enabled plugin tools appear in three places, with no extra wiring:
 
-    async def on_startup(self):
-        """Called when plugin loads"""
-        pass
-    
-    async def on_shutdown(self):
-        """Called when plugin unloads"""
-        pass
+- **Agents.** Pass a plugin tool name in `tools`; the agent prompt and dispatch
+  table pick it up. A plugin can't widen its own reach — only tools the caller
+  asked for are exposed. Models often call a structured tool with a bare
+  string, so a single required schema property is filled in automatically.
+- **Workflow `tool` nodes.** Set `tool` to the plugin's tool name. The result
+  is tagged `"source": "plugin"` in the node run so it's distinguishable from a
+  built-in. Output flows downstream via `{{node.output}}` like any other node.
+- **The dev-site Plugins page** (`/plugins`), which can invoke a tool directly
+  for testing.
 
-# Entry point
-PLUGIN = MyPlugin()
-```
+## API
 
-## Plugin Marketplace
+All routes require **admin**.
 
-### Distribution Channels
-| Channel | Protocol | Verification |
-|--------|----------|--------------|
-| **Official Registry** | HTTPS + Sigstore | Signed by HexaLLM |
-| **GitHub** | git + Sigstore | Signed by author |
-| **npm/pypi** | Package manager | Package signatures |
-| **Local** | File system | Manual review |
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/v1/plugins` | List discovered plugins, permissions, tools, validation state |
+| `GET` | `/api/v1/plugins/tools` | Flat list of tools from enabled plugins |
+| `GET` | `/api/v1/plugins/marketplace` | Remote sources (none configured) |
+| `GET` | `/api/v1/plugins/{name}/manifest` | Parsed manifest |
+| `POST` | `/api/v1/plugins/{name}/enable` | Enable (starts contributing tools) |
+| `POST` | `/api/v1/plugins/{name}/disable` | Disable |
+| `POST` | `/api/v1/plugins/{name}/call` | Invoke a tool (testing) |
+| `POST` | `/api/v1/plugins/install_archive` | Install from a server-side `.tar.gz` / `.zip` path |
+| `DELETE` | `/api/v1/plugins/{name}?purge_data=` | Uninstall |
 
-### Installation Flow
-```bash
-# CLI commands
-hexallm plugin install hexallm-github@1.0.0
-hexallm plugin list
-hexallm plugin update hexallm-github
-hexallm plugin remove hexallm-github
+Install takes a **path on the server**, not a file upload, so a plugin can come
+from CI or a synced directory. The archive is extracted to a temp dir,
+validated, and only then moved into `PLUGINS_DIR`. Rejected: entries that
+escape the target directory, and symlinks/hardlinks.
 
-# With verification
-hexallm plugin install github:user/repo@v1.0.0 --verify
-```
+`GET /api/v1/plugins/marketplace` deliberately returns an empty list rather
+than a stub, so nothing depends on a remote source that doesn't exist.
 
-## API Endpoints
+## Writing a plugin
 
-| Method | Endpoint | Description |
-|--------|----------|-------------|
-| GET | `/api/v1/plugins` | List installed plugins |
-| POST | `/api/v1/plugins/install` | Install plugin |
-| DELETE | `/api/v1/plugins/{name}` | Uninstall plugin |
-| PATCH | `/api/v1/plugins/{name}` | Update plugin |
-| GET | `/api/v1/plugins/{name}/manifest` | Get manifest |
-| GET | `/api/v1/plugins/marketplace` | Browse marketplace |
-| POST | `/api/v1/plugins/{name}/enable` | Enable plugin |
-| POST | `/api/v1/plugins/{name}/disable` | Disable plugin |
+1. Create `plugins/my-plugin/manifest.json` and `plugin.py` per the contract
+   above. Start from `backend/plugins/text-stats`.
+2. Restart the backend, or hit `GET /api/v1/plugins` to pick it up — discovery
+   runs per request, so no restart is needed after the first one.
+3. It appears **disabled**. Enable it on `/plugins`.
+4. Use a tool in an agent, or drop a `tool` node on the canvas in `/builder`.
+5. Test a call from the Plugins page before trusting it with real inputs.
 
-## Frontend Integration
+Two plugins claiming the same tool name is allowed; the first wins and the
+second is logged, so don't rely on shadowing.
 
-### Plugin UI Registry
-```typescript
-// Frontend plugin registry
-interface PluginUIComponent {
-  name: string;
-  slots: ('sidebar' | 'header' | 'chat' | 'settings' | 'modal')[];
-  component: React.ComponentType<{plugin: PluginAPI}>;
-}
+## Not built
 
-// Registration
-PluginRegistry.registerUI('GitHubRepoPicker', {
-  slots: ['sidebar', 'modal'],
-  component: GitHubRepoPicker
-});
+Deliberately out of scope, and **not** present in the codebase:
 
-// Usage in HexaLLM UI
-<PluginSlot name="sidebar">
-  {plugins.map(p => <p.component key={p.name} plugin={p} />)}
-</PluginSlot>
-```
+- Model adapters, UI extension slots, auth providers, storage backends,
+  event hooks, and workflow templates.
+- Remote marketplace, signature verification, and `git`/`npm` install.
+- A `hexallm plugin` CLI (scaffold/dev/test/build/publish).
+- WASM, gVisor, or Firecracker isolation; `inprocess` is the only non-subprocess
+  mode.
+- Per-plugin rate limiting and structured audit logs. Tool calls are visible in
+  request logs; there is no per-plugin quota or audit view.
+- Secret storage beyond environment variables — declared secrets are read from
+  the backend's environment, not from a vault.
 
-### Plugin Settings UI
-- Manifest editor (JSON + form)
-- Permission manager (toggle permissions)
-- Secret manager (Vault integration)
-- Logs viewer (structured logs)
-- Health checks
-
-## Development Workflow
-
-### 1. Scaffold
-```bash
-hexallm plugin create my-plugin
-# Creates:
-# my_plugin/
-#   ├── manifest.json
-#   ├── src/
-#   │   ├── __init__.py
-#   │   ├── tools.py
-#   │   └── hooks.py
-#   ├── tests/
-#   │   └── test_tools.py
-#   ├── pyproject.toml
-#   └── README.md
-```
-
-### 2. Develop
-```bash
-# Hot reload during development
-hexallm plugin dev my-plugin
-
-# Run tests
-hexallm plugin test my-plugin
-
-# Package for distribution
-hexallm plugin build my-plugin
-```
-
-### 3. Publish
-```bash
-# To official registry (requires approval)
-hexallm plugin publish my-plugin
-
-# Or self-host
-hexallm plugin package my-plugin --output my-plugin-1.0.0.tar.gz
-```
-
-## Security Best Practices
-
-1. **Least Privilege** - Declare minimal permissions in manifest
-2. **Input Validation** - Validate all inputs with schemas
-3. **Output Sanitization** - Sanitize outputs before returning to LLM
-4. **Rate Limiting** - Built-in per-plugin rate limits
-5. **Audit Logging** - All tool calls logged with plugin ID
-6. **Signature Verification** - Verify plugin signatures on install
-7. **Sandbox Escape Prevention** - No eval, no dynamic imports, restricted builtins
-
-## Migration Path
-
-| From | To | Effort |
-|------|-----|--------|
-| Custom Python scripts | Tool plugins | Low |
-| Custom API endpoints | Tool plugins | Low |
-| Custom frontend | UI plugins | Medium |
-| External services | MCP tools | Low |
-| Legacy plugins | New manifest | Medium |
-
-## Roadmap
-
-| Quarter | Milestone |
-|---------|-----------|
-| Q1 | Core plugin system, tool plugins, marketplace MVP |
-| Q2 | Model adapters, UI plugins, sandbox hardening |
-| Q3 | Workflow plugins, marketplace v2, revenue sharing |
-| Q4 | Enterprise features (SSO, RBAC, audit), plugin analytics |
+Each of these is a real piece of work, not a follow-up tag. Treat this document
+as the description of the system that exists.

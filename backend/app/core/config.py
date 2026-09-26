@@ -72,6 +72,16 @@ class Settings(BaseSettings):
     # Root that file_operations is confined to when those tools are enabled.
     MCP_SANDBOX_ROOT: str = "/root/HexaLLM/workspace"
 
+    # Plugin system. PLUGINS_DIR holds one subdirectory per plugin, each with a
+    # manifest.json and a plugin.py. Loading a plugin executes its code, so
+    # discovery is off unless explicitly turned on.
+    PLUGINS_ENABLED: bool = True
+    PLUGINS_DIR: str = "./plugins"
+    # Hard ceiling on a single plugin tool call, regardless of manifest.
+    PLUGIN_MAX_TIMEOUT: int = 60
+    # Cap on a plugin's stdout, to stop a runaway loop filling the DB.
+    PLUGIN_MAX_OUTPUT: int = 100_000
+
     class Config:
         env_file = ".env"
         case_sensitive = True

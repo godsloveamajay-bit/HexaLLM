@@ -1,0 +1,40 @@
+{
+  "name": "text-stats",
+  "version": "1.0.0",
+  "description": "Text analysis helpers: word/character counts, readability and hashing.",
+  "author": "HexaLLM",
+  "license": "MIT",
+  "entry_point": "plugin.py",
+  "isolation": "sandbox",
+  "permissions": {
+    "filesystem": [],
+    "network": [],
+    "secrets": [],
+    "subprocess": false
+  },
+  "tools": [
+    {
+      "name": "text_stats",
+      "description": "Compute word, character, sentence and line counts plus average word length for a block of text.",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string", "description": "The text to analyse" }
+        },
+        "required": ["text"]
+      }
+    },
+    {
+      "name": "reading_time",
+      "description": "Estimate how long a block of text takes to read. Input: JSON {\"text\": \"...\", \"wpm\": 200}",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "text": { "type": "string" },
+          "wpm": { "type": "integer", "description": "Words per minute (default 200)" }
+        },
+        "required": ["text"]
+      }
+    }
+  ]
+}
