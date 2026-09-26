@@ -29,6 +29,13 @@ type Plugin = {
   tools: Tool[]
   permissions: Permissions
   rate_limit?: { per_user: number; per_plugin: number; period_seconds: number }
+  budget?: {
+    per_day_calls: number
+    max_daily_cost_usd: number
+    max_output_bytes: number
+    max_latency_ms: number
+  }
+  retention_days?: number | null
   valid: boolean
   validation_error: string | null
 }
@@ -63,6 +70,10 @@ type AuditData = {
     error_rate: number
     retention_days: number
     prune_interval_minutes: number
+    max_rows: number
+    max_mb: number
+    reported_cost_usd: number
+    output_bytes: number
   }
 }
 
@@ -272,12 +283,16 @@ function AuditPanel({ plugins }: { plugins: Plugin[] }) {
 
       {s && (
         <div className="font-mono text-[10px] mb-2 flex items-center gap-1.5" style={{ color: '#484f58' }}>
-          {s.retention_days > 0 ? (
+          {s.retention_days > 0 || s.max_rows > 0 || s.max_mb > 0 ? (
             <>
-              rows older than {s.retention_days} days are pruned automatically, every{' '}
+              pruned automatically every{' '}
               {s.prune_interval_minutes >= 60
                 ? `${Math.round(s.prune_interval_minutes / 60)}h`
                 : `${s.prune_interval_minutes}m`}
+              {s.retention_days > 0 && ` · older than ${s.retention_days}d`}
+              {s.max_rows > 0 && ` · newest ${s.max_rows.toLocaleString()} rows`}
+              {s.max_mb > 0 && ` · newest ${s.max_mb} MB`}
+              {` · $${s.reported_cost_usd.toFixed(4)} cost reported by plugins`}
             </>
           ) : (
             <>retention is disabled — the trail is kept indefinitely</>
@@ -591,6 +606,43 @@ export default function Plugins() {
                       </span>
                     </div>
                   )}
+
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-wide" style={{ color: '#6e7681' }}>
+                      daily budget
+                    </span>
+                    {p.budget && (p.budget.per_day_calls || p.budget.max_daily_cost_usd) ? (
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded"
+                        style={{ background: 'rgba(79,243,255,.1)', color: '#4FF3FF' }}>
+                        {p.budget.per_day_calls > 0 && `${p.budget.per_day_calls} calls`}
+                        {p.budget.per_day_calls > 0 && p.budget.max_daily_cost_usd > 0 && ' · '}
+                        {p.budget.max_daily_cost_usd > 0 && `$${p.budget.max_daily_cost_usd}/24h (self-reported)`}
+                        {' per 24h'}
+                      </span>
+                    ) : (
+                      <span className="font-mono text-[10px] px-1.5 py-0.5 rounded"
+                        style={{ background: '#12161d', color: '#6e7681' }}>
+                        no daily budget
+                      </span>
+                    )}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[10px] uppercase tracking-wide" style={{ color: '#6e7681' }}>
+                      audit retention
+                    </span>
+                    <span className="font-mono text-[10px] px-1.5 py-0.5 rounded"
+                      style={{
+                        background: p.retention_days === -1 ? 'rgba(192,132,252,.12)' : '#12161d',
+                        color: p.retention_days === -1 ? '#c084fc' : '#6e7681',
+                      }}>
+                      {p.retention_days === -1
+                        ? 'never expires (this plugin opts out)'
+                        : p.retention_days != null
+                          ? `${p.retention_days}d for this plugin`
+                          : 'uses the global window'}
+                    </span>
+                  </div>
 
                   <div className="font-mono text-[10px] uppercase tracking-wide mt-3 mb-1.5" style={{ color: '#6e7681' }}>
                     tools ({p.tools.length})

@@ -68,8 +68,95 @@ class PluginRateLimited(PluginError):
 
     def __init__(self, message: str, scope: str, retry_after: int):
         super().__init__(message)
-        self.scope = scope        # "user" or "plugin"
+        self.scope = scope        # "user" | "plugin"
         self.retry_after = retry_after
+
+
+class PluginBudgetExceeded(PluginError):
+    """Raised when a plugin exceeds a declared daily budget.
+
+    ``kind`` is "calls" or "cost".
+    """
+
+    def __init__(self, message: str, kind: str, retry_after: int):
+        super().__init__(message)
+        self.kind = kind
+        self.retry_after = retry_after
+
+
+class PluginResult:
+    """Optional richer return value for ``run()``.
+
+    A plugin may return a plain string (the original contract) or one of these
+    to also declare what the call cost::
+
+        from app.services.plugin_service import PluginResult   # in-process only
+        return PluginResult("done", cost_usd=0.002)
+
+    ``cost_usd`` is **self-reported**. The host cannot verify it: a plugin
+    calling a third-party API spends money the backend never sees. It exists so
+    an operator can budget against declared spend, not to account for it.
+    A sandboxed plugin with no ``network`` permission should report 0.
+    """
+
+    __slots__ = ("output", "cost_usd")
+
+    def __init__(self, output: str, cost_usd: float = 0.0):
+        self.output = output
+        try:
+            self.cost_usd = max(0.0, float(cost_usd or 0.0))
+        except (TypeError, ValueError):
+            self.cost_usd = 0.0
+
+    def __str__(self):
+        return self.output
+
+
+@dataclass
+class PluginBudget:
+    """Daily spend/usage ceilings, plus per-call limits. 0 = unlimited."""
+
+    per_day_calls: int = 0
+    max_daily_cost_usd: float = 0.0
+    max_output_bytes: int = 0
+    max_latency_ms: int = 0
+
+    @classmethod
+    def from_dict(cls, raw: Optional[Dict[str, Any]]) -> "PluginBudget":
+        raw = raw or {}
+
+        def _int(key: str) -> int:
+            val = raw.get(key, 0)
+            try:
+                val = int(val)
+            except (TypeError, ValueError):
+                raise PluginError(f"budget.{key} must be an integer")
+            return max(0, val)
+
+        cost = raw.get("max_daily_cost_usd", 0) or 0
+        try:
+            cost = max(0.0, float(cost))
+        except (TypeError, ValueError):
+            raise PluginError("budget.max_daily_cost_usd must be a number")
+
+        return cls(
+            per_day_calls=_int("per_day_calls"),
+            max_daily_cost_usd=cost,
+            max_output_bytes=_int("max_output_bytes"),
+            max_latency_ms=_int("max_latency_ms"),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "per_day_calls": self.per_day_calls,
+            "max_daily_cost_usd": self.max_daily_cost_usd,
+            "max_output_bytes": self.max_output_bytes,
+            "max_latency_ms": self.max_latency_ms,
+        }
+
+    def is_empty(self) -> bool:
+        return not (self.per_day_calls or self.max_daily_cost_usd
+                    or self.max_output_bytes or self.max_latency_ms)
 
 
 @dataclass
@@ -155,6 +242,11 @@ class PluginManifest:
     isolation: str = "sandbox"
     permissions: PluginPermissions = field(default_factory=PluginPermissions)
     rate_limit: PluginRateLimit = field(default_factory=PluginRateLimit)
+    budget: PluginBudget = field(default_factory=PluginBudget)
+    # Days of audit history to keep for *this* plugin. Overrides the global
+    # PLUGIN_AUDIT_RETENTION_DAYS when set. 0 means "use the global setting";
+    # a negative value pins the plugin's rows indefinitely.
+    retention_days: Optional[int] = None
     tools: List[Dict[str, Any]] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)
 
@@ -210,6 +302,8 @@ class PluginManifest:
             isolation=isolation,
             permissions=PluginPermissions.from_dict(data.get("permissions")),
             rate_limit=PluginRateLimit.from_dict(data.get("rate_limit")),
+            budget=PluginBudget.from_dict(data.get("budget")),
+            retention_days=_opt_int(data.get("retention_days"), "retention_days"),
             tools=tools,
             raw=data,
         )
@@ -225,6 +319,8 @@ class PluginManifest:
             "isolation": self.isolation,
             "permissions": self.permissions.to_dict(),
             "rate_limit": self.rate_limit.to_dict(),
+            "budget": self.budget.to_dict(),
+            "retention_days": self.retention_days,
             "tools": self.tools,
         }
 
@@ -244,6 +340,16 @@ def _plugins_root() -> str:
     if not os.path.isabs(root):
         root = os.path.abspath(os.path.join(os.getcwd(), root))
     return root
+
+
+def _opt_int(value: Any, field_name: str) -> Optional[int]:
+    """Parse an optional integer, allowing -1 to mean "never expire"."""
+    if value is None:
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        raise PluginError(f"{field_name} must be an integer")
 
 
 def plugin_data_dir(name: str) -> str:
@@ -453,10 +559,18 @@ try:
         import asyncio as _aio
         _out = _aio.run(_out)
 
+    # A plugin may return a plain string, or a PluginResult carrying a
+    # self-reported cost. Duck-typed so a sandboxed plugin doesn't need to
+    # import anything from HexaLLM.
+    _cost = 0.0
+    if hasattr(_out, "output") and hasattr(_out, "cost_usd"):
+        _cost = float(getattr(_out, "cost_usd", 0.0) or 0.0)
+        _out = _out.output
+
     _text = "" if _out is None else str(_out)
     if len(_text) > _MAX_OUT:
         _text = _text[:_MAX_OUT] + f"\\n... [truncated at {{_MAX_OUT}} chars]"
-    _emit({{"ok": True, "output": _text}})
+    _emit({{"ok": True, "output": _text, "cost_usd": _cost}})
 
 except Exception as _exc:
     _emit({{"ok": False,
@@ -468,7 +582,7 @@ except Exception as _exc:
 # ── Invocation ──────────────────────────────────────────────────────────────
 
 async def _result_from_sandbox(plugin: LoadedPlugin, tool: str, args: Dict[str, Any],
-                               secrets: Dict[str, str], timeout: int) -> str:
+                               secrets: Dict[str, str], timeout: int) -> Tuple[str, float]:
     data_dir = plugin_data_dir(plugin.manifest.name)
     harness = build_harness(plugin.path, plugin.manifest.entry_point, plugin.manifest, data_dir)
     sb = Sandbox()
@@ -509,7 +623,7 @@ async def _result_from_sandbox(plugin: LoadedPlugin, tool: str, args: Dict[str, 
                 data = json.load(f)
             os.remove(result_path)
             if data.get("ok"):
-                return str(data.get("output") or "")
+                return str(data.get("output") or ""), float(data.get("cost_usd") or 0.0)
             msg = data.get("error") or "plugin failed"
             if data.get("blocked"):
                 raise PluginError(f"{msg} (denied by plugin permissions)")
@@ -526,7 +640,7 @@ async def _result_from_sandbox(plugin: LoadedPlugin, tool: str, args: Dict[str, 
 
 
 async def _result_inprocess(plugin: LoadedPlugin, tool: str,
-                            args: Dict[str, Any], secrets: Dict[str, str]) -> str:
+                            args: Dict[str, Any], secrets: Dict[str, str]) -> Tuple[str, float]:
     import importlib.util
 
     entry = os.path.join(plugin.path, plugin.manifest.entry_point)
@@ -544,10 +658,18 @@ async def _result_inprocess(plugin: LoadedPlugin, tool: str,
     result = run(tool, args)
     if hasattr(result, "__await__"):
         result = await result
+
+    # Accept a PluginResult (or anything with .output/.cost_usd) as well as a
+    # plain string.
+    cost = 0.0
+    if hasattr(result, "output") and hasattr(result, "cost_usd"):
+        cost = max(0.0, float(getattr(result, "cost_usd", 0.0) or 0.0))
+        result = result.output
+
     text = "" if result is None else str(result)
     if len(text) > settings.PLUGIN_MAX_OUTPUT:
         text = text[: settings.PLUGIN_MAX_OUTPUT] + "\n... [truncated]"
-    return text
+    return text, cost
 
 
 class PluginRegistry:
@@ -687,7 +809,7 @@ class PluginRegistry:
     async def call(self, tool_name: str, args: Dict[str, Any],
                    secret_store: Optional[Callable[[List[str]], Dict[str, str]]] = None,
                    user_id: Optional[int] = None) -> str:
-        """Invoke a plugin tool, enforcing quota and writing an audit row.
+        """Invoke a plugin tool, enforcing quotas and writing an audit row.
 
         ``user_id`` attributes the call for rate limiting and the audit trail.
         It is optional: an unattributed call still consumes the plugin-wide
@@ -704,17 +826,26 @@ class PluginRegistry:
             user_id = current_actor()
 
         manifest = plugin.manifest
+        budget = manifest.budget
         safe_args, was_redacted = redact_args(args or {}, manifest.permissions.secrets)
 
-        # Quota first: a throttled call is recorded, but it must not consume a
-        # slot in the window it was throttled for.
+        # Quotas first: a refused call is recorded, but it must not consume a
+        # slot in the window it was refused for.
         try:
             check_rate_limit(plugin, user_id)
+            check_daily_budget(plugin)
         except PluginRateLimited as limited:
             record_call(
                 manifest.name, tool_name, user_id, "rate_limited", 0,
                 isolation=manifest.isolation, args=safe_args,
                 error=str(limited), args_redacted=was_redacted,
+            )
+            raise
+        except PluginBudgetExceeded as over:
+            record_call(
+                manifest.name, tool_name, user_id, "budget_exceeded", 0,
+                isolation=manifest.isolation, args=safe_args,
+                error=str(over), args_redacted=was_redacted,
             )
             raise
 
@@ -724,17 +855,20 @@ class PluginRegistry:
             resolver = secret_store or _env_secret_store
             secrets = {k: v for k, v in (resolver(wanted) or {}).items() if k in wanted}
 
+        # The manifest may tighten the ceiling but never raise it.
         timeout = min(
             settings.PLUGIN_MAX_TIMEOUT,
             int(manifest.raw.get("timeout") or settings.PLUGIN_MAX_TIMEOUT),
         )
+        if budget.max_latency_ms:
+            timeout = min(timeout, max(1, budget.max_latency_ms // 1000) or 1)
 
         started = time.time()
         try:
             if manifest.isolation == "inprocess":
-                out = await _result_inprocess(plugin, tool_name, args, secrets)
+                out, cost = await _result_inprocess(plugin, tool_name, args, secrets)
             else:
-                out = await _result_from_sandbox(plugin, tool_name, args, secrets, timeout)
+                out, cost = await _result_from_sandbox(plugin, tool_name, args, secrets, timeout)
         except PluginError as exc:
             latency = int((time.time() - started) * 1000)
             # A permission denial is the sandbox doing its job — a distinct
@@ -748,10 +882,42 @@ class PluginRegistry:
             raise
 
         latency = int((time.time() - started) * 1000)
+        out_bytes = len(out.encode("utf-8", errors="replace"))
+
+        # A plugin that overruns its declared per-call latency is reported as
+        # an error rather than silently accepted: the work happened, but the
+        # budget is blown and the operator should see it.
+        if budget.max_latency_ms and latency > budget.max_latency_ms:
+            msg = (
+                f"{manifest.name}: call took {latency}ms, over the declared "
+                f"budget of {budget.max_latency_ms}ms"
+            )
+            record_call(
+                manifest.name, tool_name, user_id, "error", latency,
+                isolation=manifest.isolation, args=safe_args,
+                output=out, cost_usd=cost, output_bytes=out_bytes,
+                error=msg, args_redacted=was_redacted,
+            )
+            raise PluginBudgetExceeded(msg, kind="latency", retry_after=60)
+
+        if budget.max_output_bytes and out_bytes > budget.max_output_bytes:
+            msg = (
+                f"{manifest.name}: returned {out_bytes} bytes, over the declared "
+                f"budget of {budget.max_output_bytes} bytes"
+            )
+            record_call(
+                manifest.name, tool_name, user_id, "error", latency,
+                isolation=manifest.isolation, args=safe_args,
+                output=out, cost_usd=cost, output_bytes=out_bytes,
+                error=msg, args_redacted=was_redacted,
+            )
+            raise PluginBudgetExceeded(msg, kind="output", retry_after=60)
+
         record_call(
             manifest.name, tool_name, user_id, "ok", latency,
             isolation=manifest.isolation, args=safe_args,
             output=out, args_redacted=was_redacted,
+            cost_usd=cost, output_bytes=out_bytes,
         )
         return out
 
@@ -889,6 +1055,63 @@ def check_rate_limit(plugin: LoadedPlugin, user_id: Optional[int]) -> None:
         db.close()
 
 
+def _seconds_until_rolling_day(since: datetime) -> int:
+    """Seconds until the oldest in-window row ages out of the 24h window."""
+    elapsed = (datetime.now(timezone.utc) - since).total_seconds()
+    return max(1, int(86400 - elapsed))
+
+
+def check_daily_budget(plugin: LoadedPlugin) -> None:
+    """Raise PluginBudgetExceeded if the plugin is over a declared daily cap.
+
+    Daily windows are what stop a runaway loop from spending all night; the
+    per-second ``rate_limit`` only bounds burst rate.
+    """
+    budget = plugin.manifest.budget
+    if not (budget.per_day_calls or budget.max_daily_cost_usd):
+        return
+
+    since = datetime.now(timezone.utc) - timedelta(days=1)
+    from sqlalchemy import func
+
+    from ..models.plugin import PluginCallLog
+
+    db = SessionLocal()
+    try:
+        base = db.query(PluginCallLog).filter(
+            PluginCallLog.plugin_name == plugin.manifest.name,
+            PluginCallLog.created_at >= since,
+            PluginCallLog.status.in_(_QUOTA_STATUSES),
+        )
+
+        if budget.per_day_calls:
+            used = base.count()
+            if used >= budget.per_day_calls:
+                raise PluginBudgetExceeded(
+                    f"{plugin.manifest.name}: daily call budget spent "
+                    f"({used}/{budget.per_day_calls} per 24h).",
+                    kind="calls",
+                    retry_after=_seconds_until_rolling_day(since),
+                )
+
+        if budget.max_daily_cost_usd:
+            spent = float(
+                base.with_entities(
+                    func.coalesce(func.sum(PluginCallLog.cost_usd), 0.0)
+                ).scalar() or 0.0
+            )
+            if spent >= budget.max_daily_cost_usd:
+                raise PluginBudgetExceeded(
+                    f"{plugin.manifest.name}: daily cost budget spent "
+                    f"(${spent:.4f} of ${budget.max_daily_cost_usd:.2f} per 24h, "
+                    f"as reported by the plugin).",
+                    kind="cost",
+                    retry_after=_seconds_until_rolling_day(since),
+                )
+    finally:
+        db.close()
+
+
 def record_call(
     plugin_name: str,
     tool_name: str,
@@ -900,6 +1123,8 @@ def record_call(
     output: Optional[str] = None,
     error: Optional[str] = None,
     args_redacted: bool = False,
+    cost_usd: float = 0.0,
+    output_bytes: int = 0,
 ) -> None:
     """Append one audit row. Never raises — logging must not break a call."""
     from ..models.plugin import PluginCallLog
@@ -912,6 +1137,8 @@ def record_call(
             user_id=user_id,
             status=status,
             latency_ms=latency_ms,
+            cost_usd=float(cost_usd or 0.0),
+            output_bytes=int(output_bytes or 0),
             isolation=isolation,
             args_preview=_preview(args) if args is not None else None,
             output_preview=_preview(output) if output is not None else None,
@@ -929,44 +1156,128 @@ def record_call(
         db.close()
 
 
+def effective_retention_days(plugin_name: Optional[str]) -> Optional[int]:
+    """Days to keep rows for this plugin.
+
+    A plugin's own ``retention_days`` wins over the global setting, in either
+    direction. A negative value means "never expire for this plugin"; 0 or
+    absent means fall back to the global value.
+    """
+    global_days = settings.PLUGIN_AUDIT_RETENTION_DAYS
+    if not plugin_name:
+        return global_days
+    plugin = registry.plugins.get(plugin_name)
+    declared = plugin.manifest.retention_days if plugin and not plugin.error else None
+    if declared is None:
+        return global_days
+    return declared
+
+
 def prune_audit(retention_days: Optional[int] = None, batch_size: int = 2000) -> int:
-    """Delete audit rows older than the retention window. Returns the count.
+    """Trim the audit trail. Returns the number of rows removed.
+
+    Three independent rules, all optional:
+
+    * **age** — drop rows older than the effective window for their plugin
+      (that plugin's ``retention_days``, else ``PLUGIN_AUDIT_RETENTION_DAYS``).
+    * **row count** — keep the newest ``PLUGIN_AUDIT_MAX_ROWS`` overall.
+    * **size** — keep the newest rows that fit ``PLUGIN_AUDIT_MAX_MB``.
 
     Batched with a commit between batches: a single unbounded DELETE on SQLite
-    takes a write lock for the whole table scan, which would stall live plugin
+    holds a write lock for the whole table scan, which would stall live plugin
     calls on a busy install. Ordering by id keeps it to an indexed range scan.
     """
-    days = settings.PLUGIN_AUDIT_RETENTION_DAYS if retention_days is None else retention_days
-    if days <= 0:
-        return 0
+    registry.ensure_loaded()
+    override = retention_days
+    global_days = settings.PLUGIN_AUDIT_RETENTION_DAYS if override is None else override
+    max_rows = max(0, int(settings.PLUGIN_AUDIT_MAX_ROWS or 0))
+    max_mb = float(settings.PLUGIN_AUDIT_MAX_MB or 0)
 
-    cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+    from sqlalchemy import func
+
     from ..models.plugin import PluginCallLog
 
-    deleted = 0
-    while True:
+    # Collect candidate ids oldest-first, then delete from that end.
+    candidates: List[int] = []
+
+    if global_days != 0:
+        # Per-plugin age windows: group by plugin and compare each row's age
+        # against that plugin's own window.
+        windows: Dict[str, Optional[int]] = {}
         db = SessionLocal()
         try:
-            # Grab a page of ids first, then delete just those. Selecting the
-            # batch inside the same transaction as the delete would keep the
-            # lock held for the duration of both.
-            ids = [
-                row_id
-                for (row_id,) in db.query(PluginCallLog.id)
-                .filter(PluginCallLog.created_at < cutoff)
-                .order_by(PluginCallLog.id)
-                .limit(batch_size)
-                .all()
-            ]
-            if not ids:
-                break
-            db.query(PluginCallLog).filter(PluginCallLog.id.in_(ids)).delete(
+            names = [n for (n,) in db.query(PluginCallLog.plugin_name).distinct().all()]
+            for name in names:
+                windows[name] = effective_retention_days(name)
+            if override is not None:
+                for name in windows:
+                    windows[name] = override
+
+            for name, days in windows.items():
+                if days is None or days < 0:
+                    continue          # never expires
+                if days == 0:
+                    continue          # 0 = use global, which is 0 here = keep
+                cutoff = datetime.now(timezone.utc) - timedelta(days=days)
+                candidates.extend(
+                    row_id for (row_id,) in db.query(PluginCallLog.id)
+                    .filter(PluginCallLog.plugin_name == name,
+                            PluginCallLog.created_at < cutoff)
+                    .all()
+                )
+        finally:
+            db.close()
+
+    # Row-count cap: everything beyond the newest max_rows is expendable.
+    if max_rows:
+        db = SessionLocal()
+        try:
+            total = db.query(PluginCallLog.id).count()
+            if total > max_rows:
+                surplus = total - max_rows
+                oldest = [
+                    row_id for (row_id,) in db.query(PluginCallLog.id)
+                    .order_by(PluginCallLog.id).limit(surplus).all()
+                ]
+                candidates.extend(oldest)
+        finally:
+            db.close()
+
+    # Size cap: walk from newest backwards, accumulating estimated row size
+    # until the budget is spent, then everything older than that goes.
+    if max_mb:
+        budget_bytes = int(max_mb * 1024 * 1024)
+        db = SessionLocal()
+        try:
+            rows = db.query(
+                PluginCallLog.id,
+                func.coalesce(func.length(PluginCallLog.args_preview), 0)
+                + func.coalesce(func.length(PluginCallLog.output_preview), 0)
+                + func.coalesce(func.length(PluginCallLog.error), 0),
+            ).order_by(PluginCallLog.id.desc()).all()
+            used = 0
+            for row_id, size in rows:
+                used += int(size or 0)
+                if used > budget_bytes:
+                    candidates.append(row_id)
+        finally:
+            db.close()
+
+    if not candidates:
+        return 0
+
+    # Unique, and delete oldest first so batches stay contiguous.
+    targets = sorted(set(candidates))
+    deleted = 0
+    for i in range(0, len(targets), batch_size):
+        chunk = targets[i: i + batch_size]
+        db = SessionLocal()
+        try:
+            db.query(PluginCallLog).filter(PluginCallLog.id.in_(chunk)).delete(
                 synchronize_session=False
             )
             db.commit()
-            deleted += len(ids)
-            if len(ids) < batch_size:
-                break
+            deleted += len(chunk)
         except Exception:
             logger.exception("Plugin audit prune failed; will retry next cycle")
             try:
@@ -978,9 +1289,7 @@ def prune_audit(retention_days: Optional[int] = None, batch_size: int = 2000) ->
             db.close()
 
     if deleted:
-        logger.info(
-            "Plugin audit prune: removed %d rows older than %d days", deleted, days
-        )
+        logger.info("Plugin audit prune: removed %d rows", deleted)
     return deleted
 
 

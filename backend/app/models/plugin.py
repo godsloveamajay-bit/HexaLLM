@@ -8,7 +8,7 @@ list even if the directory is edited underneath it.
 from datetime import datetime, timezone
 
 from sqlalchemy import (
-    Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, JSON,
+    Boolean, Column, DateTime, Float, ForeignKey, Index, Integer, String, Text, JSON,
 )
 
 from ..core.database import Base
@@ -64,6 +64,13 @@ class PluginCallLog(Base):
     # ok | error | blocked | rate_limited
     status = Column(String, nullable=False, index=True, default="ok")
     latency_ms = Column(Integer, default=0)
+    # Cost in USD **as declared by the plugin**. The host cannot verify this:
+    # a plugin calling a third-party API spends money the backend never sees.
+    # Treat it as a budgeting aid for plugins you trust, not an accounting
+    # record. A sandboxed plugin with no `network` permission should report 0.
+    cost_usd = Column(Float, default=0.0, nullable=False)
+    # Bytes the plugin returned, for the per-call output cap.
+    output_bytes = Column(Integer, default=0, nullable=False)
     args_preview = Column(Text, nullable=True)
     output_preview = Column(Text, nullable=True)
     error = Column(Text, nullable=True)

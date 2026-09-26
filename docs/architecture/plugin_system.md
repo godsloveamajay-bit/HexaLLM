@@ -84,6 +84,13 @@ called.
     "per_plugin": 60,
     "period_seconds": 60
   },
+  "budget": {
+    "per_day_calls": 5000,
+    "max_daily_cost_usd": 2.5,
+    "max_output_bytes": 65536,
+    "max_latency_ms": 30000
+  },
+  "retention_days": 90,
   "tools": [
     {
       "name": "note_write",
@@ -208,6 +215,46 @@ admission, throttle auditing, no self-extending lockout, plugin-wide cap
 across distinct users, unattributed calls being capped, window expiry,
 redaction, and errors consuming quota.
 
+## Budgets
+
+`rate_limit` bounds burst rate over seconds. A runaway loop still gets through,
+so `budget` adds daily ceilings plus per-call limits. `0`/absent means
+unlimited.
+
+| Field | Effect |
+|-------|--------|
+| `per_day_calls` | Calls per rolling 24h across all users. Stops an overnight runaway. |
+| `max_daily_cost_usd` | Daily ceiling on **self-reported** spend (see below). |
+| `max_output_bytes` | Per-call returned size. Exceeding it fails the call. |
+| `max_latency_ms` | Per-call wall clock. It also tightens the subprocess timeout, so an over-budget call is killed rather than merely flagged; if a call still overruns, it is recorded as an error. |
+
+Refusals are audited with status `budget_exceeded` and, like
+`rate_limited`, do not consume a slot in the window they were refused for.
+
+### Cost is self-reported, and cannot be verified
+
+`max_daily_cost_usd` is measured from what the plugin *tells us*, via
+`PluginResult`:
+
+```python
+from app.services.plugin_service import PluginResult   # in-process plugins
+return PluginResult("done", cost_usd=0.002)
+```
+
+A sandboxed plugin can return any object with `.output` and `.cost_usd`
+attributes, so it needs no imports. The original contract — returning a plain
+string — still works and reports zero.
+
+**The host cannot verify this.** A plugin calling a third-party API spends money
+the backend never sees; the plugin could simply report `0`. Treat the number as
+a budgeting aid for plugins you trust, not as an accounting record. A sandboxed
+plugin with no `network` permission genuinely cannot spend anything and should
+report `0` — if one declares `max_daily_cost_usd`, that is a signal it expects
+to reach the network.
+
+The budget check runs **before** the call, so the final spend can exceed the cap
+by at most one call's reported cost.
+
 ## Audit trail
 
 Every plugin tool call writes one row to `plugin_call_logs`: plugin, tool,
@@ -270,33 +317,44 @@ than a stub, so nothing depends on a remote source that doesn't exist.
 
 ### Retention
 
-Automatic. A background task in the app lifespan deletes rows older than
-`PLUGIN_AUDIT_RETENTION_DAYS` (default **30**) every
-`PLUGIN_AUDIT_PRUNE_INTERVAL_MINUTES` (default **360**, i.e. 6h). Set the
-retention to `0` to keep the trail forever — the task is then not started and
-the audit UI says so.
+Three independent rules, applied together by the background task. `0`/absent
+disables each.
 
-Both settings are overridable by environment variable, e.g.
-`PLUGIN_AUDIT_RETENTION_DAYS=7` in the systemd unit. The effective values are
-returned in the audit summary, and the audit tab states the policy in plain
-text so nobody assumes the trail is permanent.
+| Rule | Setting | Effect |
+|------|---------|--------|
+| Age | `PLUGIN_AUDIT_RETENTION_DAYS` (30) | Drop rows older than the window. |
+| Row count | `PLUGIN_AUDIT_MAX_ROWS` (50 000) | Keep only the newest N. |
+| Size | `PLUGIN_AUDIT_MAX_MB` (256) | Keep the newest rows that fit the budget, measured by the length of the stored args/output/error previews. |
+
+Age is evaluated **per plugin**. A manifest may set its own `retention_days`,
+which overrides the global value in either direction:
+
+* a longer window keeps more history for that plugin
+* a shorter window discards it sooner
+* `-1` pins the plugin's rows indefinitely — a deliberate opt-out
+* absent or `0` means "use the global setting"
+
+The row-count and size caps are global, and keep the newest rows when exceeded.
 
 The prune is **batched** (2000 ids per transaction, commit between batches).
 One unbounded `DELETE` on SQLite holds a write lock for the whole table scan,
 which would stall live plugin calls on a busy install; ordering by id keeps it
 to an indexed range scan. The loop sleeps before its first cycle so a fresh
-process doesn't contend with live traffic immediately, and the interval has a
-5-minute floor.
+process doesn't contend with live traffic, and the interval has a 5-minute
+floor.
 
 Manual pruning stays available via `DELETE /api/v1/plugins/audit?hours=N`, with
 `hours=0` clearing everything. It deliberately ignores `plugin_name` when
 clearing all — a "delete all" that quietly kept one plugin's rows would be
 surprising. CSV export is capped at 10 000 rows per request.
 
-`backend/plugins/_retention_selftest.py` covers age-based deletion, rows inside
-the window surviving, `retention_days=0` being a no-op, batched pruning
-draining the table, the loop starting, and a stop being observed promptly
-rather than after a full interval.
+The audit tab states the effective policy in plain text, so nobody assumes the
+trail is permanent.
+
+`backend/plugins/_retention_selftest.py` and
+`backend/plugins/_budget_selftest.py` cover age deletion, the size cap,
+per-plugin windows in both directions, the never-expire opt-out, and that the
+newest rows are the ones kept.
 
 ## Writing a plugin
 
@@ -321,9 +379,12 @@ Deliberately out of scope, and **not** present in the codebase:
 - A `hexallm plugin` CLI (scaffold/dev/test/build/publish).
 - WASM, gVisor, or Firecracker isolation; `inprocess` is the only non-subprocess
   mode.
-- Per-plugin token/cost budgets — quotas are call counts, not spend.
-- Size-based (rather than age-based) retention, and per-plugin retention
-  windows; see [Retention](#retention).
+- **Verified** cost accounting. Budgets are enforced against self-reported
+  spend, which the host cannot check; see
+  [Cost is self-reported](#cost-is-self-reported-and-cannot-be-verified).
+- Per-user daily budgets — `budget` is per plugin, not per user.
+- Retention by row age only for plugins whose window is not overridden;
+  row-count and size caps are global, not per plugin.
 - Secret storage beyond environment variables — declared secrets are read from
   the backend's environment, not from a vault.
 

@@ -24,9 +24,14 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "text": { "type": "string", "description": "The text to analyse" }
+          "text": {
+            "type": "string",
+            "description": "The text to analyse"
+          }
         },
-        "required": ["text"]
+        "required": [
+          "text"
+        ]
       }
     },
     {
@@ -35,11 +40,25 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "text": { "type": "string" },
-          "wpm": { "type": "integer", "description": "Words per minute (default 200)" }
+          "text": {
+            "type": "string"
+          },
+          "wpm": {
+            "type": "integer",
+            "description": "Words per minute (default 200)"
+          }
         },
-        "required": ["text"]
+        "required": [
+          "text"
+        ]
       }
     }
-  ]
+  ],
+  "budget": {
+    "per_day_calls": 2000,
+    "max_daily_cost_usd": 0.0,
+    "max_output_bytes": 65536,
+    "max_latency_ms": 10000
+  },
+  "retention_days": 7
 }

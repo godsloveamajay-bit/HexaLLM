@@ -82,10 +82,15 @@ class Settings(BaseSettings):
     # Cap on a plugin's stdout, to stop a runaway loop filling the DB.
     PLUGIN_MAX_OUTPUT: int = 100_000
     # Audit trail retention. Rows older than this are pruned by a background
-    # task. Set to 0 to keep the trail forever (and stop the task).
+    # task. Set to 0 to keep the trail forever (and stop the task). A plugin may
+    # override the window for itself via its manifest's retention_days.
     PLUGIN_AUDIT_RETENTION_DAYS: int = 30
     # How often the prune runs.
     PLUGIN_AUDIT_PRUNE_INTERVAL_MINUTES: int = 360
+    # Size-based caps, applied alongside the age rule. 0 disables each.
+    # Keeps the newest rows once either cap is exceeded.
+    PLUGIN_AUDIT_MAX_ROWS: int = 50000
+    PLUGIN_AUDIT_MAX_MB: int = 256
 
     class Config:
         env_file = ".env"

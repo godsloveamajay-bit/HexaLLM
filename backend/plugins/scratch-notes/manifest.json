@@ -7,7 +7,9 @@
   "entry_point": "plugin.py",
   "isolation": "sandbox",
   "permissions": {
-    "filesystem": ["scratch"],
+    "filesystem": [
+      "scratch"
+    ],
     "network": [],
     "secrets": [],
     "subprocess": false
@@ -24,10 +26,18 @@
       "input_schema": {
         "type": "object",
         "properties": {
-          "name": { "type": "string", "description": "Note name (letters, digits, - and _)" },
-          "text": { "type": "string" }
+          "name": {
+            "type": "string",
+            "description": "Note name (letters, digits, - and _)"
+          },
+          "text": {
+            "type": "string"
+          }
         },
-        "required": ["name", "text"]
+        "required": [
+          "name",
+          "text"
+        ]
       }
     },
     {
@@ -35,13 +45,26 @@
       "description": "Read a saved note by name.",
       "input_schema": {
         "type": "object",
-        "properties": { "name": { "type": "string" } },
-        "required": ["name"]
+        "properties": {
+          "name": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "name"
+        ]
       }
     },
     {
       "name": "note_list",
       "description": "List saved notes."
     }
-  ]
+  ],
+  "budget": {
+    "per_day_calls": 500,
+    "max_daily_cost_usd": 0.0,
+    "max_output_bytes": 16384,
+    "max_latency_ms": 15000
+  },
+  "retention_days": 30
 }

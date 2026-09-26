@@ -117,6 +117,8 @@ def _serialize(row: PluginInstall, plugin: Optional[plugin_service.LoadedPlugin]
         ],
         "permissions": (m.permissions.to_dict() if m else {}),
         "rate_limit": (m.rate_limit.to_dict() if m else {}),
+        "budget": (m.budget.to_dict() if m else {}),
+        "retention_days": (m.retention_days if m else None),
         "valid": plugin is not None and not plugin.error,
         "validation_error": plugin.error if plugin else "plugin files are missing",
     }
@@ -142,6 +144,8 @@ class PluginOut(BaseModel):
     tools: List[Dict[str, Any]] = []
     permissions: Dict[str, Any] = {}
     rate_limit: Dict[str, Any] = {}
+    budget: Dict[str, Any] = {}
+    retention_days: Optional[int] = None
     valid: bool
     validation_error: Optional[str] = None
 
@@ -547,6 +551,18 @@ def plugin_audit(
             # can confirm the setting took effect.
             "retention_days": settings.PLUGIN_AUDIT_RETENTION_DAYS,
             "prune_interval_minutes": settings.PLUGIN_AUDIT_PRUNE_INTERVAL_MINUTES,
+            "max_rows": settings.PLUGIN_AUDIT_MAX_ROWS,
+            "max_mb": settings.PLUGIN_AUDIT_MAX_MB,
+            # Self-reported by plugins; see PluginResult.
+            "reported_cost_usd": round(
+                float(base.with_entities(
+                    func.coalesce(func.sum(PluginCallLog.cost_usd), 0.0)
+                ).scalar() or 0.0),
+                6,
+            ),
+            "output_bytes": int(base.with_entities(
+                func.coalesce(func.sum(PluginCallLog.output_bytes), 0)
+            ).scalar() or 0),
         },
     )
 

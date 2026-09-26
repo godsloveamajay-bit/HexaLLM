@@ -148,6 +148,18 @@ def _migrate_db():
                 if col not in wf_cols:
                     conn.execute(text(f"ALTER TABLE workflows ADD COLUMN {col} {ddl}"))
 
+        # Plugin audit — budget columns added after the table shipped.
+        if inspector.has_table("plugin_call_logs"):
+            log_cols = {c["name"] for c in inspector.get_columns("plugin_call_logs")}
+            for col, ddl in (
+                ("cost_usd", "FLOAT DEFAULT 0.0 NOT NULL"),
+                ("output_bytes", "INTEGER DEFAULT 0 NOT NULL"),
+            ):
+                if col not in log_cols:
+                    conn.execute(
+                        text(f"ALTER TABLE plugin_call_logs ADD COLUMN {col} {ddl}")
+                    )
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
