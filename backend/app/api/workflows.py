@@ -578,7 +578,8 @@ async def _run_llm_node(node: WorkflowNode, scope: Dict[str, Any]) -> Dict[str, 
     return {"output": text, "model": model, "prompt": prompt}
 
 
-async def _run_tool_node(node: WorkflowNode, scope: Dict[str, Any]) -> Dict[str, Any]:
+async def _run_tool_node(node: WorkflowNode, scope: Dict[str, Any],
+                         actor_user_id: Optional[int] = None) -> Dict[str, Any]:
     """Run a built-in agent tool or a tool contributed by an enabled plugin."""
     config = resolve_inputs(node, scope)
     tool_name = config.get("tool")
@@ -596,7 +597,11 @@ async def _run_tool_node(node: WorkflowNode, scope: Dict[str, Any]) -> Dict[str,
         if isinstance(arg, str):
             arg = render_template(arg, scope)
         try:
-            result = await registry.call(tool_name, arg if isinstance(arg, dict) else {"input": arg})
+            result = await registry.call(
+                tool_name,
+                arg if isinstance(arg, dict) else {"input": arg},
+                user_id=actor_user_id,
+            )
         except PluginError as exc:
             raise ValueError(f"plugin {tool_name}: {exc}") from exc
         return {"output": result, "tool": tool_name, "source": "plugin"}
@@ -702,7 +707,12 @@ def execute_workflow(
 
 
 def run_workflow_dag(execution_id: int) -> None:
-    """Background DAG runner. Owns its own session."""
+    """Background DAG runner.
+
+    Owns its own session, and binds the workflow owner as the acting user for
+    the duration so plugin tool calls are attributed in the audit trail and
+    charged to that user's quota.
+    """
     import asyncio
 
     async def _run() -> None:
@@ -731,126 +741,10 @@ def run_workflow_dag(execution_id: int) -> None:
             execution.started_at = datetime.now(timezone.utc)
             db.commit()
 
-            nodes = [n for n in wf.nodes if n.is_active]
-            node_map = {n.node_id: n for n in nodes}
-            definition = wf.definition or {}
-            edge_specs = definition.get("edges") or []
+            from ..services.plugin_service import actor_scope
+            with actor_scope(wf.owner_id):
+                await _execute_graph(db, execution, wf)
 
-            order = topological_sort([n.node_id for n in nodes], edge_specs)
-            if not order:
-                execution.status = ExecutionStatus.FAILED
-                execution.error_message = "Workflow graph is cyclic or empty"
-                execution.completed_at = datetime.now(timezone.utc)
-                db.commit()
-                return
-
-            # Scope available to {{var}} templates: workflow inputs, then each
-            # finished node's output. `input` holds the whole input object so a
-            # transform with no configured value can pass it through, and so
-            # {{input}} works the same way in a prompt.
-            scope: Dict[str, Any] = dict(execution.variables or {})
-            scope.update(execution.input_data or {})
-            scope["input"] = execution.input_data or {}
-
-            for node_id in order:
-                node = node_map.get(node_id)
-                if node is None:
-                    continue
-
-                # Branch filtering: a condition node's true/false ports gate the
-                # nodes downstream of them. An edge only fires when its
-                # `from_output` matches the branch the condition actually took;
-                # edges with no true/false port are unconditional.
-                upstream = [
-                    e for e in edge_specs if e.get("to_node_id") == node_id
-                ]
-                skipped = False
-                for edge in upstream:
-                    parent = node_map.get(edge.get("from_node_id", ""))
-                    if parent is None or parent.node_type.lower() != "condition":
-                        continue
-                    port = str(edge.get("from_output") or "").lower()
-                    if port not in ("true", "false"):
-                        continue
-                    parent_output = scope.get(parent.node_id)
-                    branch = (
-                        parent_output.get("branch")
-                        if isinstance(parent_output, dict)
-                        else None
-                    )
-                    if branch is not None and port != str(branch).lower():
-                        skipped = True
-                        break
-                if skipped:
-                    db.add(NodeExecution(
-                        execution_id=execution.id,
-                        node_id=node.id,
-                        status=NodeExecutionStatus.SKIPPED,
-                        started_at=datetime.now(timezone.utc),
-                        completed_at=datetime.now(timezone.utc),
-                    ))
-                    db.commit()
-                    continue
-
-                started = datetime.now(timezone.utc)
-                node_exec = NodeExecution(
-                    execution_id=execution.id,
-                    node_id=node.id,
-                    status=NodeExecutionStatus.RUNNING,
-                    started_at=started,
-                    input_data=node.config,
-                )
-                db.add(node_exec)
-                execution.current_node_id = node.id
-                db.commit()
-
-                try:
-                    runner = _NODE_RUNNERS.get(node.node_type.lower())
-                    if runner is None:
-                        raise ValueError(
-                            f"Unsupported node type '{node.node_type}'"
-                        )
-                    result = await runner(node, scope)
-                except Exception as exc:
-                    node_exec.status = NodeExecutionStatus.FAILED
-                    node_exec.error_message = f"{type(exc).__name__}: {exc}"
-                    node_exec.completed_at = datetime.now(timezone.utc)
-                    execution.status = ExecutionStatus.FAILED
-                    execution.error_message = f"Node {node.node_id} failed: {exc}"
-                    execution.error_node_id = node.id
-                    execution.completed_at = datetime.now(timezone.utc)
-                    db.commit()
-                    return
-
-                latency_ms = int(
-                    (datetime.now(timezone.utc) - started).total_seconds() * 1000
-                )
-                node_exec.status = NodeExecutionStatus.COMPLETED
-                node_exec.output_data = result
-                node_exec.latency_ms = latency_ms
-                node_exec.completed_at = datetime.now(timezone.utc)
-                scope[node.node_id] = result
-                execution.total_latency_ms = (execution.total_latency_ms or 0) + latency_ms
-                db.commit()
-
-            # The workflow's result is the output of the last terminal node
-            # that actually ran (a skipped branch must not win).
-            terminals = [
-                n for n in order
-                if not [e for e in edge_specs if e.get("from_node_id") == n]
-            ]
-            ran = [n for n in terminals if n in scope]
-            final_node = (ran or terminals or [None])[-1]
-            final_output = scope.get(final_node) if final_node else None
-
-            execution.status = ExecutionStatus.COMPLETED
-            execution.output_data = final_output if final_output is not None else scope
-            execution.current_node_id = None
-            execution.completed_at = datetime.now(timezone.utc)
-
-            wf.run_count = (wf.run_count or 0) + 1
-            wf.last_run_at = execution.completed_at
-            db.commit()
         except Exception as exc:  # pragma: no cover - safety net
             db.rollback()
             execution = db.query(WorkflowExecution).filter(
@@ -865,6 +759,133 @@ def run_workflow_dag(execution_id: int) -> None:
             db.close()
 
     asyncio.run(_run())
+
+
+async def _execute_graph(db: Session, execution: WorkflowExecution, wf: Workflow) -> None:
+    """Walk the graph in topological order, recording a run per node.
+
+    Assumes the execution row is already marked RUNNING.
+    """
+    nodes = [n for n in wf.nodes if n.is_active]
+    node_map = {n.node_id: n for n in nodes}
+    definition = wf.definition or {}
+    edge_specs = definition.get("edges") or []
+
+    order = topological_sort([n.node_id for n in nodes], edge_specs)
+    if not order:
+        execution.status = ExecutionStatus.FAILED
+        execution.error_message = "Workflow graph is cyclic or empty"
+        execution.completed_at = datetime.now(timezone.utc)
+        db.commit()
+        return
+
+    # Scope available to {{var}} templates: workflow inputs, then each
+    # finished node's output. `input` holds the whole input object so a
+    # transform with no configured value can pass it through, and so
+    # {{input}} works the same way in a prompt.
+    scope: Dict[str, Any] = dict(execution.variables or {})
+    scope.update(execution.input_data or {})
+    scope["input"] = execution.input_data or {}
+
+    for node_id in order:
+        node = node_map.get(node_id)
+        if node is None:
+            continue
+
+        # Branch filtering: a condition node's true/false ports gate the
+        # nodes downstream of them. An edge only fires when its
+        # `from_output` matches the branch the condition actually took;
+        # edges with no true/false port are unconditional.
+        upstream = [
+            e for e in edge_specs if e.get("to_node_id") == node_id
+        ]
+        skipped = False
+        for edge in upstream:
+            parent = node_map.get(edge.get("from_node_id", ""))
+            if parent is None or parent.node_type.lower() != "condition":
+                continue
+            port = str(edge.get("from_output") or "").lower()
+            if port not in ("true", "false"):
+                continue
+            parent_output = scope.get(parent.node_id)
+            branch = (
+                parent_output.get("branch")
+                if isinstance(parent_output, dict)
+                else None
+            )
+            if branch is not None and port != str(branch).lower():
+                skipped = True
+                break
+        if skipped:
+            db.add(NodeExecution(
+                execution_id=execution.id,
+                node_id=node.id,
+                status=NodeExecutionStatus.SKIPPED,
+                started_at=datetime.now(timezone.utc),
+                completed_at=datetime.now(timezone.utc),
+            ))
+            db.commit()
+            continue
+
+        started = datetime.now(timezone.utc)
+        node_exec = NodeExecution(
+            execution_id=execution.id,
+            node_id=node.id,
+            status=NodeExecutionStatus.RUNNING,
+            started_at=started,
+            input_data=node.config,
+        )
+        db.add(node_exec)
+        execution.current_node_id = node.id
+        db.commit()
+
+        try:
+            runner = _NODE_RUNNERS.get(node.node_type.lower())
+            if runner is None:
+                raise ValueError(
+                    f"Unsupported node type '{node.node_type}'"
+                )
+            result = await runner(node, scope)
+        except Exception as exc:
+            node_exec.status = NodeExecutionStatus.FAILED
+            node_exec.error_message = f"{type(exc).__name__}: {exc}"
+            node_exec.completed_at = datetime.now(timezone.utc)
+            execution.status = ExecutionStatus.FAILED
+            execution.error_message = f"Node {node.node_id} failed: {exc}"
+            execution.error_node_id = node.id
+            execution.completed_at = datetime.now(timezone.utc)
+            db.commit()
+            return
+
+        latency_ms = int(
+            (datetime.now(timezone.utc) - started).total_seconds() * 1000
+        )
+        node_exec.status = NodeExecutionStatus.COMPLETED
+        node_exec.output_data = result
+        node_exec.latency_ms = latency_ms
+        node_exec.completed_at = datetime.now(timezone.utc)
+        scope[node.node_id] = result
+        execution.total_latency_ms = (execution.total_latency_ms or 0) + latency_ms
+        db.commit()
+
+    # The workflow's result is the output of the last terminal node
+    # that actually ran (a skipped branch must not win).
+    terminals = [
+        n for n in order
+        if not [e for e in edge_specs if e.get("from_node_id") == n]
+    ]
+    ran = [n for n in terminals if n in scope]
+    final_node = (ran or terminals or [None])[-1]
+    final_output = scope.get(final_node) if final_node else None
+
+    execution.status = ExecutionStatus.COMPLETED
+    execution.output_data = final_output if final_output is not None else scope
+    execution.current_node_id = None
+    execution.completed_at = datetime.now(timezone.utc)
+
+    wf.run_count = (wf.run_count or 0) + 1
+    wf.last_run_at = execution.completed_at
+    db.commit()
 
 
 # ─── Execution history ──────────────────────────────────────────────────────

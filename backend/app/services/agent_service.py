@@ -214,6 +214,7 @@ async def _delegate_subagent(input_str: str) -> str:
 
     ctx = _agent_ctx.get()
     depth = ctx.get("subagent_depth", 0) if ctx else 0
+    actor = ctx.get("actor_user_id") if ctx else None
     max_depth = ctx.get("subagent_max_depth", MAX_SUBAGENT_DEPTH) if ctx else MAX_SUBAGENT_DEPTH
     model = ctx.get("subagent_model", SUBAGENT_MODEL) if ctx else SUBAGENT_MODEL
 
@@ -227,6 +228,7 @@ async def _delegate_subagent(input_str: str) -> str:
             model=model,
             tools=tools,
             max_steps=max_sub_steps,
+            actor_user_id=actor,
             persona_prompt="You are a focused sub-agent. Complete the assigned subtask efficiently. Use tools as needed. Output only the final result without extra commentary.",
         )
     finally:
@@ -263,7 +265,7 @@ def _plugin_tool_subset(requested: List[str]) -> Dict[str, str]:
         return {}
 
 
-def _make_plugin_caller(tool_name: str):
+def _make_plugin_caller(tool_name: str, user_id: Optional[int] = None):
     """Adapter so a plugin tool matches the agent's `tool(input) -> str` shape."""
     from .plugin_service import PluginError, registry
 
@@ -279,7 +281,10 @@ def _make_plugin_caller(tool_name: str):
                 # A bare string, not JSON: bind it to the schema's argument.
                 args = registry.coerce_string_args(tool_name, raw)
         try:
-            return await registry.call(tool_name, args)
+            return await registry.call(tool_name, args, user_id=user_id)
+        except PluginRateLimited as e:
+            # Surface the retry hint; the model can back off or give up.
+            return f"Plugin rate limited ({e.scope}). Try again in {e.retry_after}s."
         except PluginError as e:
             return f"Plugin error: {e}"
 
@@ -320,6 +325,7 @@ async def run_agent(
     subagent_model: Optional[str] = None,  # model used by sub-agents (default: SUBAGENT_MODEL)
     subagent_max_depth: Optional[int] = None,  # max delegation depth (default: MAX_SUBAGENT_DEPTH)
     images: Optional[List[str]] = None,    # base64 images for the initial task message
+    actor_user_id: Optional[int] = None,   # attributed on plugin tool calls (audit + quota)
 ) -> Dict[str, Any]:
     """Run an agent to completion. Wraps _run_agent_inner so the sub-agent
     delegation context (_agent_ctx) is always restored after the run, even on
@@ -330,7 +336,7 @@ async def run_agent(
         return await _run_agent_inner(
             task, model, tools, max_steps, on_step, persona_prompt,
             mcp_clients, sandbox, dynamic_tools, subagent_model, subagent_max_depth,
-            images,
+            images, actor_user_id,
         )
     finally:
         if not had_ctx:
@@ -350,6 +356,7 @@ async def _run_agent_inner(
     subagent_model: Optional[str] = None,  # model used by sub-agents (default: SUBAGENT_MODEL)
     subagent_max_depth: Optional[int] = None,  # max delegation depth (default: MAX_SUBAGENT_DEPTH)
     images: Optional[List[str]] = None,    # base64 images for the initial task message
+    actor_user_id: Optional[int] = None,   # attributed on plugin tool calls (audit + quota)
 ) -> Dict[str, Any]:
     # Initialize per-run agent context for sub-agent delegation tracking.
     # Only set when no context is active (a sub-agent call inherits the depth
@@ -359,6 +366,9 @@ async def _run_agent_inner(
             "subagent_model": subagent_model or SUBAGENT_MODEL,
             "subagent_max_depth": subagent_max_depth or MAX_SUBAGENT_DEPTH,
             "subagent_depth": 0,
+            # Carried so a delegated sub-agent's plugin calls stay attributed
+            # to the user who started the run, not left anonymous.
+            "actor_user_id": actor_user_id,
         })
 
     available = {k: TOOL_DESCRIPTIONS[k] for k in tools if k in TOOL_DESCRIPTIONS}
@@ -386,7 +396,7 @@ async def _run_agent_inner(
     for name, desc in plugin_tools.items():
         if name not in available:
             available[name] = desc
-            tool_funcs[name] = _make_plugin_caller(name)
+            tool_funcs[name] = _make_plugin_caller(name, user_id=actor_user_id)
 
     # Inject MCP tools
     mcp_tool_map: Dict[str, Any] = {}  # "mcp__<server>__<tool>" -> callable

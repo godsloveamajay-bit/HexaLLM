@@ -170,6 +170,7 @@ async def run_agent_task(
             subagent_model=data.subagent_model,
             subagent_max_depth=data.subagent_max_depth,
             images=images,
+            actor_user_id=current_user.id,
         )
         agent_run.status = "completed"
         agent_run.result = result.get("result")
@@ -250,6 +251,7 @@ async def run_agent_stream(
                     subagent_model=data.subagent_model,
                     subagent_max_depth=data.subagent_max_depth,
                     images=images,
+                    actor_user_id=current_user.id,
                 )
                 await queue.put({"__done__": True, **result})
             except Exception as e:

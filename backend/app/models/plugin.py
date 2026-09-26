@@ -7,7 +7,9 @@ list even if the directory is edited underneath it.
 """
 from datetime import datetime, timezone
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text, JSON
+from sqlalchemy import (
+    Boolean, Column, DateTime, ForeignKey, Index, Integer, String, Text, JSON,
+)
 
 from ..core.database import Base
 
@@ -39,3 +41,42 @@ class PluginInstall(Base):
 
     def __repr__(self):  # pragma: no cover - debug aid
         return f"<PluginInstall {self.name} enabled={self.is_enabled}>"
+
+
+class PluginCallLog(Base):
+    """One row per plugin tool invocation.
+
+    Doubles as the audit trail and as the source of truth for rate limiting —
+    counting recent rows is what enforces a quota, so a limit survives a
+    restart and can't be bypassed by failing calls. Args and output are stored
+    truncated, and args are redacted for tools that declare secrets.
+    """
+
+    __tablename__ = "plugin_call_logs"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plugin_name = Column(String, nullable=False, index=True)
+    tool_name = Column(String, nullable=False, index=True)
+    # NULL for calls with no authenticated actor (e.g. a background workflow
+    # whose owner is unknown), which still count toward the per-plugin limit.
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    isolation = Column(String, nullable=True)
+    # ok | error | blocked | rate_limited
+    status = Column(String, nullable=False, index=True, default="ok")
+    latency_ms = Column(Integer, default=0)
+    args_preview = Column(Text, nullable=True)
+    output_preview = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    # True when args contained a declared secret name and were masked.
+    args_redacted = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True)
+
+    __table_args__ = (
+        # The hot query is "calls for this plugin since T" and "for this user
+        # since T", so index both.
+        Index("ix_plugin_log_plugin_created", "plugin_name", "created_at"),
+        Index("ix_plugin_log_user_created", "user_id", "created_at"),
+    )
+
+    def __repr__(self):  # pragma: no cover - debug aid
+        return f"<PluginCallLog {self.plugin_name}.{self.tool_name} {self.status}>"

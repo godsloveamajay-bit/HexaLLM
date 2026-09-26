@@ -41,10 +41,14 @@ import re
 import sys
 import time
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from contextvars import ContextVar
 from pathlib import PurePosixPath
+from typing import Tuple
 from typing import Any, Callable, Dict, List, Optional
 
 from ..core.config import settings
+from ..core.database import SessionLocal
 from ..services.sandbox_service import Sandbox
 
 logger = logging.getLogger(__name__)
@@ -57,6 +61,52 @@ VALID_ISOLATION = {"sandbox", "inprocess"}
 
 class PluginError(Exception):
     """Raised for anything wrong with a plugin's definition or invocation."""
+
+
+class PluginRateLimited(PluginError):
+    """Raised when a plugin or user exceeds its declared call quota."""
+
+    def __init__(self, message: str, scope: str, retry_after: int):
+        super().__init__(message)
+        self.scope = scope        # "user" or "plugin"
+        self.retry_after = retry_after
+
+
+@dataclass
+class PluginRateLimit:
+    """Quotas over a rolling window. 0 (or absent) means unlimited."""
+
+    per_user: int = 0
+    per_plugin: int = 0
+    period_seconds: int = 60
+
+    @classmethod
+    def from_dict(cls, raw: Optional[Dict[str, Any]]) -> "PluginRateLimit":
+        raw = raw or {}
+
+        def _int(key: str, default: int = 0) -> int:
+            val = raw.get(key, default)
+            try:
+                val = int(val)
+            except (TypeError, ValueError):
+                raise PluginError(f"rate_limit.{key} must be an integer")
+            return max(0, val)
+
+        period = _int("period_seconds", 60)
+        if period == 0:
+            period = 60  # a zero-length window would divide by zero
+        return cls(
+            per_user=_int("per_user"),
+            per_plugin=_int("per_plugin"),
+            period_seconds=min(period, 86400),
+        )
+
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            "per_user": self.per_user,
+            "per_plugin": self.per_plugin,
+            "period_seconds": self.period_seconds,
+        }
 
 
 @dataclass
@@ -104,6 +154,7 @@ class PluginManifest:
     entry_point: str = "plugin.py"
     isolation: str = "sandbox"
     permissions: PluginPermissions = field(default_factory=PluginPermissions)
+    rate_limit: PluginRateLimit = field(default_factory=PluginRateLimit)
     tools: List[Dict[str, Any]] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)
 
@@ -158,6 +209,7 @@ class PluginManifest:
             entry_point=entry_point,
             isolation=isolation,
             permissions=PluginPermissions.from_dict(data.get("permissions")),
+            rate_limit=PluginRateLimit.from_dict(data.get("rate_limit")),
             tools=tools,
             raw=data,
         )
@@ -172,6 +224,7 @@ class PluginManifest:
             "entry_point": self.entry_point,
             "isolation": self.isolation,
             "permissions": self.permissions.to_dict(),
+            "rate_limit": self.rate_limit.to_dict(),
             "tools": self.tools,
         }
 
@@ -632,34 +685,248 @@ class PluginRegistry:
 
     # ── invocation ───────────────────────────────────────────────────────────
     async def call(self, tool_name: str, args: Dict[str, Any],
-                   secret_store: Optional[Callable[[List[str]], Dict[str, str]]] = None) -> str:
+                   secret_store: Optional[Callable[[List[str]], Dict[str, str]]] = None,
+                   user_id: Optional[int] = None) -> str:
+        """Invoke a plugin tool, enforcing quota and writing an audit row.
+
+        ``user_id`` attributes the call for rate limiting and the audit trail.
+        It is optional: an unattributed call still consumes the plugin-wide
+        quota, it just isn't charged to a user.
+        """
         self.ensure_loaded()
         plugin = self.tool_owner(tool_name)
         if plugin is None:
             raise PluginError(f"no enabled plugin provides tool {tool_name!r}")
-        if not plugin.manifest.tools or tool_name not in {
-            s["name"] for s in plugin.manifest.tools
-        }:
+        if tool_name not in {s["name"] for s in plugin.manifest.tools}:
             raise PluginError(f"plugin {plugin.manifest.name} does not declare {tool_name!r}")
 
+        if user_id is None:
+            user_id = current_actor()
+
+        manifest = plugin.manifest
+        safe_args, was_redacted = redact_args(args or {}, manifest.permissions.secrets)
+
+        # Quota first: a throttled call is recorded, but it must not consume a
+        # slot in the window it was throttled for.
+        try:
+            check_rate_limit(plugin, user_id)
+        except PluginRateLimited as limited:
+            record_call(
+                manifest.name, tool_name, user_id, "rate_limited", 0,
+                isolation=manifest.isolation, args=safe_args,
+                error=str(limited), args_redacted=was_redacted,
+            )
+            raise
+
         secrets: Dict[str, str] = {}
-        if plugin.manifest.permissions.secrets:
-            wanted = set(plugin.manifest.permissions.secrets)
+        if manifest.permissions.secrets:
+            wanted = set(manifest.permissions.secrets)
             resolver = secret_store or _env_secret_store
             secrets = {k: v for k, v in (resolver(wanted) or {}).items() if k in wanted}
 
         timeout = min(
             settings.PLUGIN_MAX_TIMEOUT,
-            int(plugin.manifest.raw.get("timeout") or settings.PLUGIN_MAX_TIMEOUT),
+            int(manifest.raw.get("timeout") or settings.PLUGIN_MAX_TIMEOUT),
         )
 
-        if plugin.manifest.isolation == "inprocess":
-            return await _result_inprocess(plugin, tool_name, args, secrets)
-        return await _result_from_sandbox(plugin, tool_name, args, secrets, timeout)
+        started = time.time()
+        try:
+            if manifest.isolation == "inprocess":
+                out = await _result_inprocess(plugin, tool_name, args, secrets)
+            else:
+                out = await _result_from_sandbox(plugin, tool_name, args, secrets, timeout)
+        except PluginError as exc:
+            latency = int((time.time() - started) * 1000)
+            # A permission denial is the sandbox doing its job — a distinct
+            # status so the audit view can show attempted escapes.
+            status = "blocked" if "denied by plugin permissions" in str(exc) else "error"
+            record_call(
+                manifest.name, tool_name, user_id, status, latency,
+                isolation=manifest.isolation, args=safe_args,
+                error=str(exc), args_redacted=was_redacted,
+            )
+            raise
+
+        latency = int((time.time() - started) * 1000)
+        record_call(
+            manifest.name, tool_name, user_id, "ok", latency,
+            isolation=manifest.isolation, args=safe_args,
+            output=out, args_redacted=was_redacted,
+        )
+        return out
 
 
 def _env_secret_store(wanted: set) -> Dict[str, str]:
     return {name: os.environ[name] for name in wanted if name in os.environ}
+
+
+# ── Rate limiting + audit ────────────────────────────────────────────────────
+
+# Plugin tool calls happen deep inside agents and background workflow tasks,
+# where threading a user id through every layer would be invasive. The current
+# actor is carried in a contextvar instead, which propagates correctly across
+# awaits within a task. An explicit user_id argument always wins.
+_actor_ctx: ContextVar[Optional[int]] = ContextVar("hexallm_plugin_actor", default=None)
+
+
+def current_actor() -> Optional[int]:
+    return _actor_ctx.get()
+
+
+class actor_scope:
+    """Bind the acting user for plugin calls made inside this block.
+
+    Used as a context manager so the previous value is always restored, even if
+    the block raises.
+    """
+
+    def __init__(self, user_id: Optional[int]):
+        self._user_id = user_id
+        self._token = None
+
+    def __enter__(self):
+        self._token = _actor_ctx.set(self._user_id)
+        return self
+
+    def __exit__(self, *exc):
+        if self._token is not None:
+            _actor_ctx.reset(self._token)
+        return False
+
+
+# How much of an arg / output payload is kept for the audit trail.
+AUDIT_PREVIEW_CHARS = 2000
+# Statuses that still consume quota. Only a successful call is "free".
+_QUOTA_STATUSES = ("ok", "error", "blocked")
+
+
+def _preview(value: Any, limit: int = AUDIT_PREVIEW_CHARS) -> str:
+    try:
+        text = value if isinstance(value, str) else json.dumps(value, default=str)
+    except Exception:
+        text = str(value)
+    if len(text) > limit:
+        return text[:limit] + f"... [truncated, {len(text)} chars]"
+    return text
+
+
+# Argument keys whose values are masked in the audit trail regardless of what
+# the manifest declares. Deliberately specific: a blanket "key"/"value" match
+# would redact ordinary data and make the audit view useless.
+SECRETISH_KEYS = (
+    "token", "secret", "password", "passwd", "credential",
+    "api_key", "apikey", "authorization", "auth",
+)
+
+
+def redact_args(args: Dict[str, Any], secrets: List[str]) -> Tuple[Dict[str, Any], bool]:
+    """Mask values whose key looks like it carries a credential.
+
+    Only the key *names* are known to the host, never the values, so this is
+    best-effort — it stops an obviously-named token from being written to the
+    audit table in plaintext.
+    """
+    if not args:
+        return {}, False
+    declared = {s.lower() for s in secrets}
+    out: Dict[str, Any] = {}
+    redacted = False
+    for key, value in args.items():
+        lowered = str(key).lower()
+        if lowered in declared or any(marker in lowered for marker in SECRETISH_KEYS):
+            out[key] = "***redacted***"
+            redacted = True
+        else:
+            out[key] = value
+    return out, redacted
+
+
+def check_rate_limit(plugin: LoadedPlugin, user_id: Optional[int]) -> None:
+    """Raise PluginRateLimited if this caller is over quota.
+
+    Counts rows in ``plugin_call_logs`` rather than keeping counters in memory,
+    so a limit survives a restart and cannot be sidestepped by crashing the
+    plugin on purpose.
+    """
+    limits = plugin.manifest.rate_limit
+    if not limits.per_user and not limits.per_plugin:
+        return
+
+    since = datetime.now(timezone.utc) - timedelta(seconds=limits.period_seconds)
+    from ..models.plugin import PluginCallLog
+
+    db = SessionLocal()
+    try:
+        base = db.query(PluginCallLog).filter(
+            PluginCallLog.plugin_name == plugin.manifest.name,
+            PluginCallLog.created_at >= since,
+            PluginCallLog.status.in_(_QUOTA_STATUSES),
+        )
+        retry_after = max(1, limits.period_seconds)
+
+        if limits.per_user and user_id is not None:
+            used = base.filter(PluginCallLog.user_id == user_id).count()
+            if used >= limits.per_user:
+                raise PluginRateLimited(
+                    f"{plugin.manifest.name}: rate limit reached for this user "
+                    f"({used}/{limits.per_user} calls per {limits.period_seconds}s). "
+                    f"Try again in {retry_after}s.",
+                    scope="user",
+                    retry_after=retry_after,
+                )
+
+        if limits.per_plugin:
+            used = base.count()
+            if used >= limits.per_plugin:
+                raise PluginRateLimited(
+                    f"{plugin.manifest.name}: plugin-wide rate limit reached "
+                    f"({used}/{limits.per_plugin} calls per {limits.period_seconds}s). "
+                    f"Try again in {retry_after}s.",
+                    scope="plugin",
+                    retry_after=retry_after,
+                )
+    finally:
+        db.close()
+
+
+def record_call(
+    plugin_name: str,
+    tool_name: str,
+    user_id: Optional[int],
+    status: str,
+    latency_ms: int,
+    isolation: Optional[str] = None,
+    args: Optional[Dict[str, Any]] = None,
+    output: Optional[str] = None,
+    error: Optional[str] = None,
+    args_redacted: bool = False,
+) -> None:
+    """Append one audit row. Never raises — logging must not break a call."""
+    from ..models.plugin import PluginCallLog
+
+    db = SessionLocal()
+    try:
+        db.add(PluginCallLog(
+            plugin_name=plugin_name,
+            tool_name=tool_name,
+            user_id=user_id,
+            status=status,
+            latency_ms=latency_ms,
+            isolation=isolation,
+            args_preview=_preview(args) if args is not None else None,
+            output_preview=_preview(output) if output is not None else None,
+            error=_preview(error, 2000) if error else None,
+            args_redacted=bool(args_redacted),
+        ))
+        db.commit()
+    except Exception:
+        logger.exception("Failed to write plugin_call_logs row")
+        try:
+            db.rollback()
+        except Exception:
+            pass
+    finally:
+        db.close()
 
 
 # Process-wide registry. The API layer and the agent both import this.

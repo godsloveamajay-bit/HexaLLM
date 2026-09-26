@@ -7,6 +7,8 @@ plugin tools appearing in the agent and workflow tool pickers.
 """
 from __future__ import annotations
 
+import csv
+import io
 import json
 import logging
 import os
@@ -14,17 +16,18 @@ import shutil
 import tarfile
 import tempfile
 import zipfile
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException
+from fastapi import APIRouter, Body, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..core.config import settings
 from ..core.database import get_db
 from ..core.security import require_admin
-from ..models.plugin import PluginInstall
+from ..models.plugin import PluginCallLog, PluginInstall
 from ..services import plugin_service
 from ..services.plugin_service import PluginError, plugin_data_dir, registry
 
@@ -112,6 +115,7 @@ def _serialize(row: PluginInstall, plugin: Optional[plugin_service.LoadedPlugin]
             for t in (m.tools if m else [])
         ],
         "permissions": (m.permissions.to_dict() if m else {}),
+        "rate_limit": (m.rate_limit.to_dict() if m else {}),
         "valid": plugin is not None and not plugin.error,
         "validation_error": plugin.error if plugin else "plugin files are missing",
     }
@@ -136,6 +140,7 @@ class PluginOut(BaseModel):
     last_error: Optional[str] = None
     tools: List[Dict[str, Any]] = []
     permissions: Dict[str, Any] = {}
+    rate_limit: Dict[str, Any] = {}
     valid: bool
     validation_error: Optional[str] = None
 
@@ -159,6 +164,32 @@ class CallOut(BaseModel):
     plugin: str
     output: str
     latency_ms: int
+
+
+class AuditEntry(BaseModel):
+    id: int
+    plugin_name: str
+    tool_name: str
+    user_id: Optional[int] = None
+    isolation: Optional[str] = None
+    status: str
+    latency_ms: int
+    args_preview: Optional[str] = None
+    output_preview: Optional[str] = None
+    error: Optional[str] = None
+    args_redacted: bool = False
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class AuditOut(BaseModel):
+    entries: List[AuditEntry]
+    total: int
+    page: int
+    page_size: int
+    summary: Dict[str, Any]
 
 
 # ── Routes ──────────────────────────────────────────────────────────────────
@@ -231,11 +262,13 @@ def enable_plugin(
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
+    # Sync first: a plugin dropped into PLUGINS_DIR has no row until something
+    # lists it, and enabling it shouldn't require a prior list.
+    _sync_db(db)
     row = db.query(PluginInstall).filter(PluginInstall.name == name).first()
     if row is None:
         raise HTTPException(404, f"plugin {name!r} is not installed")
 
-    _sync_db(db)
     plugin = registry.plugins.get(name)
     if plugin is None or plugin.error:
         raise HTTPException(400, f"plugin {name!r} failed validation: "
@@ -243,7 +276,7 @@ def enable_plugin(
 
     row.is_enabled = True
     db.commit()
-    _load_enabled(db)
+    _refresh_registry(db)
     logger.info("Plugin enabled: %s", name)
     return _serialize(row, registry.plugins.get(name))
 
@@ -254,12 +287,13 @@ def disable_plugin(
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
+    _sync_db(db)
     row = db.query(PluginInstall).filter(PluginInstall.name == name).first()
     if row is None:
         raise HTTPException(404, f"plugin {name!r} is not installed")
     row.is_enabled = False
     db.commit()
-    _load_enabled(db)
+    _refresh_registry(db)
     logger.info("Plugin disabled: %s", name)
     return _serialize(row, registry.plugins.get(name))
 
@@ -269,7 +303,7 @@ async def call_plugin_tool(
     name: str,
     body: CallRequest,
     db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
+    admin=Depends(require_admin),
 ):
     """Invoke a tool on a specific plugin (for testing from the UI)."""
     _load_enabled(db)
@@ -281,20 +315,34 @@ async def call_plugin_tool(
     if tool not in {t["name"] for t in plugin.manifest.tools}:
         raise HTTPException(400, f"plugin {name!r} does not declare tool {tool!r}")
 
-    import time
-    started = time.time()
+    from ..services.plugin_service import PluginRateLimited
+
     try:
-        output = await registry.call(tool, body.args)
+        output = await registry.call(tool, body.args, user_id=admin.id)
+    except PluginRateLimited as exc:
+        # 429 so a client can back off rather than treating it as a bug.
+        raise HTTPException(429, str(exc), headers={"Retry-After": str(exc.retry_after)})
     except PluginError as exc:
         raise HTTPException(400, str(exc))
-    latency = int((time.time() - started) * 1000)
 
     row = db.query(PluginInstall).filter(PluginInstall.name == name).first()
     if row:
         row.last_used_at = datetime.now(timezone.utc)
         row.last_error = None
         db.commit()
-    return CallOut(tool=tool, plugin=name, output=output, latency_ms=latency)
+    # latency is derived from the audit row so the two can't disagree.
+    latest = (
+        db.query(PluginCallLog)
+        .filter(PluginCallLog.plugin_name == name, PluginCallLog.tool_name == tool)
+        .order_by(PluginCallLog.id.desc())
+        .first()
+    )
+    return CallOut(
+        tool=tool,
+        plugin=name,
+        output=output,
+        latency_ms=latest.latency_ms if latest else 0,
+    )
 
 
 @router.post("/install_archive", response_model=PluginOut)
@@ -387,6 +435,153 @@ def uninstall_plugin(
     _load_enabled(db)
     _sync_db(db)
     logger.info("Plugin uninstalled: %s (data purged: %s)", name, purge_data)
+
+
+@router.get("/audit", response_model=AuditOut)
+def plugin_audit(
+    hours: int = Query(24, ge=1, le=720),
+    plugin_name: Optional[str] = None,
+    tool_name: Optional[str] = None,
+    user_id: Optional[int] = None,
+    status: Optional[str] = Query(None, pattern="^(ok|error|blocked|rate_limited)$"),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=500),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Audit trail of every plugin tool call, newest first.
+
+    Errors, permission blocks and throttled attempts are recorded too — a
+    blocked call is the interesting one. Payloads are truncated and
+    credential-shaped args are masked, so this is safe to render as-is.
+    """
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+
+    query = db.query(PluginCallLog).filter(PluginCallLog.created_at >= since)
+    if plugin_name:
+        query = query.filter(PluginCallLog.plugin_name == plugin_name)
+    if tool_name:
+        query = query.filter(PluginCallLog.tool_name == tool_name)
+    if user_id is not None:
+        query = query.filter(PluginCallLog.user_id == user_id)
+    if status:
+        query = query.filter(PluginCallLog.status == status)
+
+    total = query.count()
+    entries = (
+        query.order_by(PluginCallLog.id.desc())
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+        .all()
+    )
+
+    # Aggregate over the same window, ignoring pagination.
+    base = db.query(PluginCallLog).filter(PluginCallLog.created_at >= since)
+    if plugin_name:
+        base = base.filter(PluginCallLog.plugin_name == plugin_name)
+    by_status: Dict[str, int] = {}
+    for status_val, count in base.with_entities(
+        PluginCallLog.status, func.count(PluginCallLog.id)
+    ).group_by(PluginCallLog.status):
+        by_status[status_val] = count
+
+    by_plugin = {
+        name: count
+        for name, count in base.with_entities(
+            PluginCallLog.plugin_name, func.count(PluginCallLog.id)
+        ).group_by(PluginCallLog.plugin_name)
+    }
+    top_tools = {
+        f"{p}.{t}": n
+        for p, t, n in base.with_entities(
+            PluginCallLog.plugin_name,
+            PluginCallLog.tool_name,
+            func.count(PluginCallLog.id),
+        ).group_by(PluginCallLog.plugin_name, PluginCallLog.tool_name)
+        .order_by(func.count(PluginCallLog.id).desc())
+        .limit(10)
+    }
+    total_calls = sum(by_status.values()) or 1
+    avg_latency = base.with_entities(func.avg(PluginCallLog.latency_ms)).scalar() or 0.0
+
+    return AuditOut(
+        entries=[AuditEntry.model_validate(e) for e in entries],
+        total=total,
+        page=page,
+        page_size=page_size,
+        summary={
+            "window_hours": hours,
+            "calls": sum(by_status.values()),
+            "by_status": by_status,
+            "by_plugin": by_plugin,
+            "top_tools": top_tools,
+            "avg_latency_ms": round(float(avg_latency), 1),
+            "error_rate": round(
+                (by_status.get("error", 0) + by_status.get("blocked", 0)) / total_calls, 4
+            ),
+        },
+    )
+
+
+@router.delete("/audit", status_code=204)
+def clear_plugin_audit(
+    hours: int = Query(0, ge=0, le=720),
+    plugin_name: Optional[str] = None,
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Prune the audit trail. hours=0 clears everything.
+
+    Irreversible — the audit trail is the only record of past plugin calls.
+    """
+    query = db.query(PluginCallLog)
+    if hours:
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=hours)
+        query = query.filter(PluginCallLog.created_at < cutoff)
+    if plugin_name:
+        query = query.filter(PluginCallLog.plugin_name == plugin_name)
+    deleted = query.delete(synchronize_session=False)
+    db.commit()
+    logger.info("Pruned %d plugin audit rows", deleted)
+
+
+@router.get("/audit/export", response_model=str)
+def export_plugin_audit(
+    hours: int = Query(24, ge=1, le=720),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """CSV dump of the audit trail, for offline review."""
+    since = datetime.now(timezone.utc) - timedelta(hours=hours)
+    rows = (
+        db.query(PluginCallLog)
+        .filter(PluginCallLog.created_at >= since)
+        .order_by(PluginCallLog.id.desc())
+        .limit(10000)
+        .all()
+    )
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "id", "created_at", "plugin", "tool", "user_id", "isolation",
+        "status", "latency_ms", "args_redacted", "args", "output", "error",
+    ])
+    for r in rows:
+        writer.writerow([
+            r.id,
+            r.created_at.isoformat() if r.created_at else "",
+            r.plugin_name,
+            r.tool_name,
+            r.user_id if r.user_id is not None else "",
+            r.isolation or "",
+            r.status,
+            r.latency_ms,
+            int(bool(r.args_redacted)),
+            (r.args_preview or "").replace("\n", " "),
+            (r.output_preview or "").replace("\n", " "),
+            (r.error or "").replace("\n", " "),
+        ])
+    return buf.getvalue()
 
 
 # ── Archive safety ──────────────────────────────────────────────────────────

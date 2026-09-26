@@ -12,6 +12,11 @@
     "secrets": [],
     "subprocess": false
   },
+  "rate_limit": {
+    "per_user": 60,
+    "per_plugin": 300,
+    "period_seconds": 60
+  },
   "tools": [
     {
       "name": "text_stats",

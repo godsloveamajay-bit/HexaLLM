@@ -4,8 +4,8 @@ A plugin adds **tools** — functions an agent or a workflow can call — withou
 touching HexaLLM's source.
 
 Implemented in this document's scope: tool plugins, admin management, a
-subprocess sandbox with enforced permissions, agent + workflow integration, and
-a dev-site UI.
+subprocess sandbox with enforced permissions, per-plugin rate limiting, an
+audit trail, agent + workflow integration, and a dev-site UI.
 
 > **Scope note.** An earlier draft of this document also described model
 > adapters, UI extensions, workflow templates, auth providers, storage
@@ -78,6 +78,11 @@ called.
     "network": [],
     "secrets": [],
     "subprocess": false
+  },
+  "rate_limit": {
+    "per_user": 20,
+    "per_plugin": 60,
+    "period_seconds": 60
   },
   "tools": [
     {
@@ -157,7 +162,84 @@ Enabled plugin tools appear in three places, with no extra wiring:
   is tagged `"source": "plugin"` in the node run so it's distinguishable from a
   built-in. Output flows downstream via `{{node.output}}` like any other node.
 - **The dev-site Plugins page** (`/plugins`), which can invoke a tool directly
-  for testing.
+  for testing. It has two tabs: **installed** (list, permissions, per-tool
+  schemas, test runner) and **audit log** (stat tiles, filters, expandable
+  rows, CSV export).
+
+## Rate limiting
+
+Optional per-manifest quotas over a rolling window:
+
+```json
+"rate_limit": { "per_user": 20, "per_plugin": 60, "period_seconds": 60 }
+```
+
+`0` (or absent) means unlimited for that scope. A plugin that declares no
+limits at all is unlimited — **the default is not a limit**, so a third-party
+plugin can opt out of protection by omission. Set limits deliberately.
+
+Two scopes, both enforced before the call runs:
+
+- `per_user` — charged to the authenticated user, when one is known.
+- `per_plugin` — charged to the plugin, regardless of who called it. Calls with
+  no known actor still consume this, so an unattributed path can't bypass the
+  cap.
+
+Counting is done by querying recent `plugin_call_logs` rows rather than keeping
+counters in memory, which means a quota survives a restart and **cannot be
+bypassed by crashing the plugin on purpose** — `ok`, `error` and `blocked`
+rows all consume quota. A throttled attempt is itself recorded (as
+`rate_limited`) but deliberately does not consume a slot, otherwise a client
+hammering a throttled tool would extend its own lockout.
+
+The rate-limited error names the scope, the counts and the retry delay:
+
+```
+scratch-notes: rate limit reached for this user (20/20 calls per 60s).
+Try again in 60s.
+```
+
+The direct-call API returns **429** with a `Retry-After` header. Inside an
+agent, the throttle is returned to the model as a tool result so it can back
+off or give up rather than burning its step budget.
+
+`backend/plugins/_ratelimit_selftest.py` asserts this behaviour: exact quota
+admission, throttle auditing, no self-extending lockout, plugin-wide cap
+across distinct users, unattributed calls being capped, window expiry,
+redaction, and errors consuming quota.
+
+## Audit trail
+
+Every plugin tool call writes one row to `plugin_call_logs`: plugin, tool,
+acting user, isolation mode, status, latency, truncated args and output, and
+the error if any. Four statuses are recorded:
+
+| Status | Meaning |
+|--------|---------|
+| `ok` | Returned normally |
+| `error` | The plugin or the host raised |
+| `blocked` | The sandbox refused — a permission denial, i.e. an attempted escape |
+| `rate_limited` | Throttled before running |
+
+`blocked` is separated from `error` deliberately: a permission block is the
+sandbox doing its job and is the single most interesting row to look for.
+
+**Attribution.** Calls are attributed to the user who triggered them — the
+admin on the direct-call API, the request's user in `/agents`, the workflow
+owner for workflow tool nodes, and for delegated sub-agents the user who
+started the run. It's carried on a `contextvars` contextvar, so it propagates
+correctly across `await` boundaries inside a background task without threading
+a parameter through every layer.
+
+**Redaction.** Args are stored JSON-encoded, truncated to 2 kB, and any key
+that is a declared secret or *looks* like a credential (`token`, `secret`,
+`password`, `credential`, `api_key`, `authorization`, `auth`) is replaced with
+`***redacted***`, with `args_redacted` set. Only key *names* are known to the
+host, never values, so a secret passed under an innocuous name is not caught —
+this is a safety net, not a guarantee.
+
+Audit rows never carry enough to reconstruct a secret, and the table is
+readable only through admin-gated endpoints.
 
 ## API
 
@@ -174,6 +256,9 @@ All routes require **admin**.
 | `POST` | `/api/v1/plugins/{name}/call` | Invoke a tool (testing) |
 | `POST` | `/api/v1/plugins/install_archive` | Install from a server-side `.tar.gz` / `.zip` path |
 | `DELETE` | `/api/v1/plugins/{name}?purge_data=` | Uninstall |
+| `GET` | `/api/v1/plugins/audit` | Audit trail — filters `hours`, `plugin_name`, `tool_name`, `user_id`, `status`; paginated; includes a window summary (by status, by plugin, top tools, avg latency, error rate) |
+| `GET` | `/api/v1/plugins/audit/export` | CSV dump of the window |
+| `DELETE` | `/api/v1/plugins/audit?hours=` | Prune the trail (`hours=0` clears all) — irreversible |
 
 Install takes a **path on the server**, not a file upload, so a plugin can come
 from CI or a synced directory. The archive is extracted to a temp dir,
@@ -182,6 +267,13 @@ escape the target directory, and symlinks/hardlinks.
 
 `GET /api/v1/plugins/marketplace` deliberately returns an empty list rather
 than a stub, so nothing depends on a remote source that doesn't exist.
+
+### Retention
+
+`plugin_call_logs` is not pruned automatically — rows are kept until an admin
+calls `DELETE /api/v1/plugins/audit?hours=N`. On a quiet install that is a few
+rows per minute at worst; on a busy one, schedule the prune or the table grows
+without bound. CSV export is capped at 10 000 rows per request.
 
 ## Writing a plugin
 
@@ -206,8 +298,8 @@ Deliberately out of scope, and **not** present in the codebase:
 - A `hexallm plugin` CLI (scaffold/dev/test/build/publish).
 - WASM, gVisor, or Firecracker isolation; `inprocess` is the only non-subprocess
   mode.
-- Per-plugin rate limiting and structured audit logs. Tool calls are visible in
-  request logs; there is no per-plugin quota or audit view.
+- Per-plugin token/cost budgets — quotas are call counts, not spend.
+- Automatic audit retention. Pruning is manual (see [Retention](#retention)).
 - Secret storage beyond environment variables — declared secrets are read from
   the backend's environment, not from a vault.
 

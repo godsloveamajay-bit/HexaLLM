@@ -12,6 +12,11 @@
     "secrets": [],
     "subprocess": false
   },
+  "rate_limit": {
+    "per_user": 20,
+    "per_plugin": 60,
+    "period_seconds": 60
+  },
   "tools": [
     {
       "name": "note_write",
