@@ -397,15 +397,20 @@ def create_workflow(
 
 @router.get("", response_model=List[WorkflowResponse])
 def list_workflows(
+    templates: bool = Query(False),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    wfs = (
-        db.query(Workflow)
-        .filter(Workflow.owner_id == current_user.id)
-        .order_by(Workflow.updated_at.desc())
-        .all()
-    )
+    query = db.query(Workflow)
+    if templates:
+        # Templates are reusable: own ones plus public ones.
+        query = query.filter(
+            Workflow.is_template.is_(True),
+            (Workflow.owner_id == current_user.id) | (Workflow.is_public.is_(True)),
+        )
+    else:
+        query = query.filter(Workflow.owner_id == current_user.id)
+    wfs = query.order_by(Workflow.updated_at.desc()).all()
     return [_serialize(w) for w in wfs]
 
 
@@ -421,6 +426,48 @@ def get_workflow(
     if wf.owner_id != current_user.id and not current_user.is_admin and not wf.is_public:
         raise HTTPException(403, "Not authorized to view this workflow")
     return _serialize(wf)
+
+
+@router.post("/{workflow_id}/clone", response_model=WorkflowResponse,
+          status_code=status.HTTP_201_CREATED)
+def clone_workflow(
+    workflow_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Clone a workflow the caller can read (own, public, or template) into
+    their own account as an editable, non-template copy."""
+    wf = db.query(Workflow).filter(Workflow.id == workflow_id).first()
+    if not wf:
+        raise HTTPException(404, "Workflow not found")
+    if (wf.owner_id != current_user.id and not wf.is_public
+            and not wf.is_template and not current_user.is_admin):
+        raise HTTPException(403, "Not authorized to clone this workflow")
+
+    copy = Workflow(
+        name=f"{wf.name} (copy)",
+        description=wf.description,
+        definition=wf.definition or {},
+        version=wf.version or 1,
+        is_active=True,
+        is_template=False,
+        is_public=False,
+        tags=list(wf.tags or []),
+        task=wf.task,
+        model=wf.model,
+        tools=list(wf.tools or []),
+        system_prompt=wf.system_prompt,
+        max_steps=wf.max_steps or 10,
+        schedule=None,
+        owner_id=current_user.id,
+    )
+    db.add(copy)
+    db.flush()
+    if copy.definition and copy.definition.get("nodes"):
+        sync_nodes_and_edges(db, copy, copy.definition)
+    db.commit()
+    db.refresh(copy)
+    return _serialize(copy)
 
 
 @router.patch("/{workflow_id}", response_model=WorkflowResponse)
@@ -579,7 +626,8 @@ async def _run_llm_node(node: WorkflowNode, scope: Dict[str, Any]) -> Dict[str, 
 
 
 async def _run_tool_node(node: WorkflowNode, scope: Dict[str, Any],
-                         actor_user_id: Optional[int] = None) -> Dict[str, Any]:
+                         actor_user_id: Optional[int] = None,
+                         sandbox=None) -> Dict[str, Any]:
     """Run a built-in agent tool or a tool contributed by an enabled plugin."""
     config = resolve_inputs(node, scope)
     tool_name = config.get("tool")
@@ -606,8 +654,33 @@ async def _run_tool_node(node: WorkflowNode, scope: Dict[str, Any],
             raise ValueError(f"plugin {tool_name}: {exc}") from exc
         return {"output": result, "tool": tool_name, "source": "plugin"}
 
-    runner = _TOOL_FUNCS.get(tool_name)
+    # Resolve the runner. Built-in tools that touch the host (code/bash/file
+    # ops) must go through the sandbox; when none is supplied we spin up a
+    # throwaway one so a workflow can never reach the host unsandboxed.
+    if sandbox is None and tool_name in ("code_exec", "bash_exec", "read_file",
+                                         "write_file", "list_files"):
+        from ..services.sandbox_service import Sandbox as _Sandbox
+        sandbox = _Sandbox()
+        _owned = True
+    else:
+        _owned = False
+
+    if sandbox is not None and tool_name in ("code_exec", "bash_exec", "read_file",
+                                            "write_file", "list_files"):
+        _sb_map = {
+            "code_exec": sandbox.execute_code,
+            "bash_exec": sandbox.execute_bash,
+            "read_file": sandbox.read_file,
+            "write_file": sandbox.write_file,
+            "list_files": sandbox.list_files,
+        }
+        runner = _sb_map[tool_name]
+    else:
+        runner = _TOOL_FUNCS.get(tool_name)
+
     if runner is None:
+        if _owned:
+            sandbox.cleanup()
         raise ValueError(
             f"Unknown tool '{tool_name}'. Available: {', '.join(sorted(_TOOL_FUNCS))}"
         )
@@ -622,7 +695,11 @@ async def _run_tool_node(node: WorkflowNode, scope: Dict[str, Any],
     if isinstance(arg, str):
         arg = render_template(arg, scope)
 
-    result = await runner(arg)
+    try:
+        result = await runner(arg)
+    finally:
+        if _owned:
+            sandbox.cleanup()
     return {"output": result, "tool": tool_name}
 
 
@@ -742,8 +819,12 @@ def run_workflow_dag(execution_id: int) -> None:
             db.commit()
 
             from ..services.plugin_service import actor_scope
-            with actor_scope(wf.owner_id):
-                await _execute_graph(db, execution, wf)
+            sandbox = Sandbox()
+            try:
+                with actor_scope(wf.owner_id):
+                    await _execute_graph(db, execution, wf, sandbox=sandbox)
+            finally:
+                sandbox.cleanup()
 
         except Exception as exc:  # pragma: no cover - safety net
             db.rollback()
@@ -761,7 +842,7 @@ def run_workflow_dag(execution_id: int) -> None:
     asyncio.run(_run())
 
 
-async def _execute_graph(db: Session, execution: WorkflowExecution, wf: Workflow) -> None:
+async def _execute_graph(db: Session, execution: WorkflowExecution, wf: Workflow, sandbox=None) -> None:
     """Walk the graph in topological order, recording a run per node.
 
     Assumes the execution row is already marked RUNNING.
@@ -840,12 +921,18 @@ async def _execute_graph(db: Session, execution: WorkflowExecution, wf: Workflow
         db.commit()
 
         try:
-            runner = _NODE_RUNNERS.get(node.node_type.lower())
-            if runner is None:
-                raise ValueError(
-                    f"Unsupported node type '{node.node_type}'"
+            node_type = node.node_type.lower()
+            if node_type == "tool":
+                result = await _run_tool_node(
+                    node, scope, actor_user_id=wf.owner_id, sandbox=sandbox
                 )
-            result = await runner(node, scope)
+            else:
+                runner = _NODE_RUNNERS.get(node_type)
+                if runner is None:
+                    raise ValueError(
+                        f"Unsupported node type '{node.node_type}'"
+                    )
+                result = await runner(node, scope)
         except Exception as exc:
             node_exec.status = NodeExecutionStatus.FAILED
             node_exec.error_message = f"{type(exc).__name__}: {exc}"

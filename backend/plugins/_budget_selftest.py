@@ -169,6 +169,7 @@ async def main():
         # ── daily cost budget ─────────────────────────────────────────────
         print("=== daily cost budget ===")
         make_plugin(tmp, "bud_usd", extra_manifest={
+            "permissions": {"network": ["*"]},
             "budget": {"max_daily_cost_usd": 1.0},
         }, plugin_body=(
             "class R:\n"

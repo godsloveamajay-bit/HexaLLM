@@ -228,6 +228,13 @@ unlimited.
 | `max_output_bytes` | Per-call returned size. Exceeding it fails the call. |
 | `max_latency_ms` | Per-call wall clock. It also tightens the subprocess timeout, so an over-budget call is killed rather than merely flagged; if a call still overruns, it is recorded as an error. |
 
+Per-user daily ceilings (optional, under the same `budget` object):
+
+| Field | Effect |
+|-------|--------|
+| `per_user_day_calls` | Calls per rolling 24h for a single user. |
+| `max_user_daily_cost_usd` | Daily ceiling on self-reported spend for a single user. |
+
 Refusals are audited with status `budget_exceeded` and, like
 `rate_limited`, do not consume a slot in the window they were refused for.
 
@@ -315,6 +322,8 @@ escape the target directory, and symlinks/hardlinks.
 `GET /api/v1/plugins/marketplace` deliberately returns an empty list rather
 than a stub, so nothing depends on a remote source that doesn't exist.
 
+Secrets may be resolved from the backend's environment (default) or stored encrypted in the platform via `GET/PUT/DELETE /api/v1/plugins/{name}/secrets[/{secret}]` (admin). Stored values take precedence over environment variables.
+
 ### Retention
 
 Three independent rules, applied together by the background task. `0`/absent
@@ -380,9 +389,9 @@ Deliberately out of scope, and **not** present in the codebase:
 - WASM, gVisor, or Firecracker isolation; `inprocess` is the only non-subprocess
   mode.
 - **Verified** cost accounting. Budgets are enforced against self-reported
-  spend, which the host cannot check; see
+  spend, which the host cannot check; a cost budget now requires a declared
+  `network` permission, but spend itself cannot be verified. See
   [Cost is self-reported](#cost-is-self-reported-and-cannot-be-verified).
-- Per-user daily budgets — `budget` is per plugin, not per user.
 - Retention by row age only for plugins whose window is not overridden;
   row-count and size caps are global, not per plugin.
 - Secret storage beyond environment variables — declared secrets are read from

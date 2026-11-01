@@ -87,3 +87,33 @@ class PluginCallLog(Base):
 
     def __repr__(self):  # pragma: no cover - debug aid
         return f"<PluginCallLog {self.plugin_name}.{self.tool_name} {self.status}>"
+
+
+class PluginSecret(Base):
+    """A secret value stored for a plugin (encrypted at rest).
+
+    Declared secrets are normally resolved from the backend's environment.
+    This table lets an operator store them in the platform instead, so a
+    plugin can be configured without editing the host's environment. Values
+    are encrypted with a key derived from SECRET_KEY.
+    """
+
+    __tablename__ = "plugin_secrets"
+
+    id = Column(Integer, primary_key=True, index=True)
+    plugin_name = Column(String, nullable=False, index=True)
+    name = Column(String, nullable=False, index=True)
+    value_encrypted = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    __table_args__ = (
+        Index("ix_plugin_secret_plugin_name", "plugin_name", "name", unique=True),
+    )
+
+    def __repr__(self):  # pragma: no cover - debug aid
+        return f"<PluginSecret {self.plugin_name}.{self.name}>"

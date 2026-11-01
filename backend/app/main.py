@@ -169,11 +169,14 @@ async def lifespan(app: FastAPI):
         os.makedirs(d, exist_ok=True)
     # Trim the plugin audit trail on a timer so it doesn't grow without bound.
     from .services.plugin_service import start_audit_pruner, stop_audit_pruner
+    from .services.workflow_scheduler import start_scheduler, stop_scheduler
     start_audit_pruner()
+    start_scheduler()
     try:
         yield
     finally:
         stop_audit_pruner()
+        stop_scheduler()
 
 
 # Rate limiter — shared across the app, keyed by remote IP

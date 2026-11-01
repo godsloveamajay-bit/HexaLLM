@@ -120,13 +120,21 @@ class PluginBudget:
     max_daily_cost_usd: float = 0.0
     max_output_bytes: int = 0
     max_latency_ms: int = 0
+    # Per-user daily ceilings (0 = unlimited). These stop one user from
+    # exhausting a plugin's whole daily budget on their own.
+    per_user_day_calls: int = 0
+    max_user_daily_cost_usd: float = 0.0
 
     @classmethod
     def from_dict(cls, raw: Optional[Dict[str, Any]]) -> "PluginBudget":
         raw = raw or {}
 
-        def _int(key: str) -> int:
-            val = raw.get(key, 0)
+        def _int(key: str, *aliases: str) -> int:
+            val = 0
+            for k in (key,) + aliases:
+                if k in raw and raw.get(k) is not None:
+                    val = raw.get(k)
+                    break
             try:
                 val = int(val)
             except (TypeError, ValueError):
@@ -139,11 +147,25 @@ class PluginBudget:
         except (TypeError, ValueError):
             raise PluginError("budget.max_daily_cost_usd must be a number")
 
+        user_cost_raw = 0
+        for k in ("max_user_daily_cost_usd", "max_per_user_daily_cost_usd",
+                  "max_user_cost_usd"):
+            if k in raw and raw.get(k) is not None:
+                user_cost_raw = raw.get(k)
+                break
+        try:
+            user_cost = max(0.0, float(user_cost_raw or 0.0))
+        except (TypeError, ValueError):
+            raise PluginError("budget.max_user_daily_cost_usd must be a number")
+
         return cls(
             per_day_calls=_int("per_day_calls"),
             max_daily_cost_usd=cost,
             max_output_bytes=_int("max_output_bytes"),
             max_latency_ms=_int("max_latency_ms"),
+            per_user_day_calls=_int("per_user_day_calls", "per_user_per_day_calls",
+                                    "per_user_calls"),
+            max_user_daily_cost_usd=user_cost,
         )
 
     def to_dict(self) -> Dict[str, Any]:
@@ -152,11 +174,14 @@ class PluginBudget:
             "max_daily_cost_usd": self.max_daily_cost_usd,
             "max_output_bytes": self.max_output_bytes,
             "max_latency_ms": self.max_latency_ms,
+            "per_user_day_calls": self.per_user_day_calls,
+            "max_user_daily_cost_usd": self.max_user_daily_cost_usd,
         }
 
     def is_empty(self) -> bool:
         return not (self.per_day_calls or self.max_daily_cost_usd
-                    or self.max_output_bytes or self.max_latency_ms)
+                    or self.max_output_bytes or self.max_latency_ms
+                    or self.per_user_day_calls or self.max_user_daily_cost_usd)
 
 
 @dataclass
@@ -292,6 +317,13 @@ class PluginManifest:
             if not str(spec.get("description") or "").strip():
                 raise PluginError(f"tool {tname} must have a description")
 
+        _permissions = PluginPermissions.from_dict(data.get("permissions"))
+        _budget = PluginBudget.from_dict(data.get("budget"))
+        if (_budget.max_daily_cost_usd > 0 or _budget.max_user_daily_cost_usd > 0) and not _permissions.network:
+            raise PluginError(
+                "declaring a daily cost budget requires a non-empty network permission"
+            )
+
         return cls(
             name=name,
             version=str(data.get("version") or "0.0.0"),
@@ -300,9 +332,9 @@ class PluginManifest:
             license=str(data.get("license") or ""),
             entry_point=entry_point,
             isolation=isolation,
-            permissions=PluginPermissions.from_dict(data.get("permissions")),
+            permissions=_permissions,
             rate_limit=PluginRateLimit.from_dict(data.get("rate_limit")),
-            budget=PluginBudget.from_dict(data.get("budget")),
+            budget=_budget,
             retention_days=_opt_int(data.get("retention_days"), "retention_days"),
             tools=tools,
             raw=data,
@@ -833,7 +865,7 @@ class PluginRegistry:
         # slot in the window it was refused for.
         try:
             check_rate_limit(plugin, user_id)
-            check_daily_budget(plugin)
+            check_daily_budget(plugin, user_id)
         except PluginRateLimited as limited:
             record_call(
                 manifest.name, tool_name, user_id, "rate_limited", 0,
@@ -852,7 +884,7 @@ class PluginRegistry:
         secrets: Dict[str, str] = {}
         if manifest.permissions.secrets:
             wanted = set(manifest.permissions.secrets)
-            resolver = secret_store or _env_secret_store
+            resolver = secret_store or (lambda wanted: _default_secret_store(manifest.name, wanted))
             secrets = {k: v for k, v in (resolver(wanted) or {}).items() if k in wanted}
 
         # The manifest may tighten the ceiling but never raise it.
@@ -920,6 +952,53 @@ class PluginRegistry:
             cost_usd=cost, output_bytes=out_bytes,
         )
         return out
+
+
+def _secret_fernet():
+    import base64
+    import hashlib
+    from cryptography.fernet import Fernet
+    digest = hashlib.sha256(settings.SECRET_KEY.encode("utf-8")).digest()
+    return Fernet(base64.urlsafe_b64encode(digest))
+
+
+def encrypt_secret(value: str) -> str:
+    return _secret_fernet().encrypt((value or "").encode("utf-8")).decode("utf-8")
+
+
+def decrypt_secret(value: str) -> str:
+    try:
+        return _secret_fernet().decrypt((value or "").encode("utf-8")).decode("utf-8")
+    except Exception:
+        return ""
+
+
+def _db_secret_store(plugin_name: str, wanted) -> Dict[str, str]:
+    wanted = set(wanted or [])
+    if not wanted:
+        return {}
+    from ..models.plugin import PluginSecret
+    from ..core.database import SessionLocal
+    db = SessionLocal()
+    try:
+        rows = db.query(PluginSecret).filter(
+            PluginSecret.plugin_name == plugin_name,
+            PluginSecret.name.in_(list(wanted)),
+        ).all()
+        out = {}
+        for row in rows:
+            val = decrypt_secret(row.value_encrypted)
+            if val or row.value_encrypted:
+                out[row.name] = val
+        return out
+    finally:
+        db.close()
+
+
+def _default_secret_store(plugin_name: str, wanted) -> Dict[str, str]:
+    out = _env_secret_store(set(wanted or []))
+    out.update(_db_secret_store(plugin_name, wanted))
+    return out
 
 
 def _env_secret_store(wanted: set) -> Dict[str, str]:
@@ -1061,14 +1140,15 @@ def _seconds_until_rolling_day(since: datetime) -> int:
     return max(1, int(86400 - elapsed))
 
 
-def check_daily_budget(plugin: LoadedPlugin) -> None:
+def check_daily_budget(plugin: LoadedPlugin, user_id: Optional[int] = None) -> None:
     """Raise PluginBudgetExceeded if the plugin is over a declared daily cap.
 
     Daily windows are what stop a runaway loop from spending all night; the
     per-second ``rate_limit`` only bounds burst rate.
     """
     budget = plugin.manifest.budget
-    if not (budget.per_day_calls or budget.max_daily_cost_usd):
+    if not (budget.per_day_calls or budget.max_daily_cost_usd
+            or budget.per_user_day_calls or budget.max_user_daily_cost_usd):
         return
 
     since = datetime.now(timezone.utc) - timedelta(days=1)
@@ -1108,6 +1188,39 @@ def check_daily_budget(plugin: LoadedPlugin) -> None:
                     kind="cost",
                     retry_after=_seconds_until_rolling_day(since),
                 )
+
+        # Per-user daily ceilings, when a user is known.
+        if user_id is not None and (budget.per_user_day_calls
+                                    or budget.max_user_daily_cost_usd):
+            user_base = db.query(PluginCallLog).filter(
+                PluginCallLog.plugin_name == plugin.manifest.name,
+                PluginCallLog.user_id == user_id,
+                PluginCallLog.created_at >= since,
+                PluginCallLog.status.in_(_QUOTA_STATUSES),
+            )
+            if budget.per_user_day_calls:
+                used = user_base.count()
+                if used >= budget.per_user_day_calls:
+                    raise PluginBudgetExceeded(
+                        f"{plugin.manifest.name}: per-user daily call budget spent "
+                        f"({used}/{budget.per_user_day_calls} per 24h).",
+                        kind="calls",
+                        retry_after=_seconds_until_rolling_day(since),
+                    )
+            if budget.max_user_daily_cost_usd:
+                spent = float(
+                    user_base.with_entities(
+                        func.coalesce(func.sum(PluginCallLog.cost_usd), 0.0)
+                    ).scalar() or 0.0
+                )
+                if spent >= budget.max_user_daily_cost_usd:
+                    raise PluginBudgetExceeded(
+                        f"{plugin.manifest.name}: per-user daily cost budget spent "
+                        f"(${spent:.4f} of ${budget.max_user_daily_cost_usd:.2f} per 24h, "
+                        f"as reported by the plugin).",
+                        kind="cost",
+                        retry_after=_seconds_until_rolling_day(since),
+                    )
     finally:
         db.close()
 

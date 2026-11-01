@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, ExternalLink, Lock, Palette, Sun, Moon, MonitorSmartphone, Sparkles, CreditCard, Zap, AudioLines } from 'lucide-react'
+import { User, Save, Loader2, Shield, RefreshCw, CheckCircle2, Smartphone, ExternalLink, Lock, Palette, Sun, Moon, MonitorSmartphone, Sparkles, CreditCard, Zap, AudioLines, Download, Upload } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
@@ -88,6 +88,37 @@ export default function SettingsPage() {
     } catch {
       toast.error('Failed to save AI settings')
     } finally { setAiSaving(false) }
+  }
+
+
+  const exportChats = async () => {
+    try {
+      const res = await api.post('/export-import/export', { format: 'zip' }, { responseType: 'blob' })
+      const url = URL.createObjectURL(res.data)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = 'hexallm_chats.zip'
+      a.click()
+      URL.revokeObjectURL(url)
+      toast.success('Chats exported')
+    } catch {
+      toast.error('Export failed')
+    }
+  }
+
+  const importChats = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const fd = new FormData()
+    fd.append('file', file)
+    try {
+      const { data } = await api.post('/export-import/import', fd, { headers: { 'Content-Type': 'multipart/form-data' } })
+      toast.success(`Imported ${data.imported_sessions} sessions (${data.skipped_sessions} skipped)`)
+    } catch {
+      toast.error('Import failed')
+    } finally {
+      e.target.value = ''
+    }
   }
 
   const LENGTH_PRESETS: { value: number; label: string }[] = [
@@ -507,6 +538,26 @@ export default function SettingsPage() {
           <Zap className="w-4 h-4" />
           View Plans
         </button>
+      </div>
+
+
+      {/* Data (export / import) */}
+      <div className="card">
+        <h2 className="font-semibold text-gray-100 mb-4">Data</h2>
+        <p className="text-sm text-gray-500 mb-4">
+          Export all your chats as a ZIP (JSONL + Markdown) or import a previously exported archive.
+        </p>
+        <div className="flex flex-wrap gap-3">
+          <button onClick={exportChats} className="btn-secondary">
+            <Download className="w-4 h-4" />
+            Export chats (ZIP)
+          </button>
+          <label className="btn-secondary cursor-pointer">
+            <Upload className="w-4 h-4" />
+            Import chats (ZIP/JSONL)
+            <input type="file" accept=".zip,.jsonl" className="hidden" onChange={importChats} />
+          </label>
+        </div>
       </div>
 
       {/* Account info */}

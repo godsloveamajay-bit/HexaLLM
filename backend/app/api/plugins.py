@@ -28,13 +28,17 @@ from sqlalchemy.orm import Session
 from ..core.config import settings
 from ..core.database import SessionLocal, get_db
 from ..core.security import require_admin
-from ..models.plugin import PluginCallLog, PluginInstall
+from ..models.plugin import PluginCallLog, PluginInstall, PluginSecret
 from ..services import plugin_service
-from ..services.plugin_service import PluginError, plugin_data_dir, registry
+from ..services.plugin_service import PluginError, plugin_data_dir, registry, encrypt_secret, decrypt_secret
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/plugins", tags=["plugins"])
+
+
+class PluginSecretSet(BaseModel):
+    value: str = Field(..., min_length=1)
 
 
 # ── Helpers ─────────────────────────────────────────────────────────────────
@@ -264,7 +268,8 @@ def marketplace(_admin=Depends(require_admin)):
         "sources": [],
         "note": (
             "No remote marketplace is configured. Install plugins with "
-            "POST /api/v1/plugins/install using a .tar.gz or .zip archive."
+            "POST /api/v1/plugins/install_archive (local path) or "
+            "POST /api/v1/plugins/install_url (remote URL)."
         ),
     }
 
@@ -373,26 +378,8 @@ async def call_plugin_tool(
     )
 
 
-@router.post("/install_archive", response_model=PluginOut)
-def install_plugin_archive(
-    payload: Dict[str, Any] = Body(...),
-    db: Session = Depends(get_db),
-    _admin=Depends(require_admin),
-):
-    """Install from a local .tar.gz or .zip archive path on the server.
-
-    Takes a path rather than an upload so a plugin can be installed from CI or
-    a synced directory. The archive is extracted into a temp dir, validated,
-    and only then moved into PLUGINS_DIR.
-    """
-    path = str(payload.get("path") or "").strip()
-    if not path:
-        raise HTTPException(400, "'path' is required")
-    if not os.path.isfile(path):
-        raise HTTPException(404, f"no such file: {path}")
-    if not (path.endswith((".tar.gz", ".tgz", ".zip"))):
-        raise HTTPException(400, "archive must be .tar.gz, .tgz or .zip")
-
+def _install_from_path(path: str, db: Session):
+    """Shared install logic for a local archive path. Returns the serialized plugin."""
     tmp = tempfile.mkdtemp(prefix="hexallm_plugin_")
     try:
         try:
@@ -439,6 +426,64 @@ def install_plugin_archive(
         raise HTTPException(500, "plugin installed but could not be recorded")
     logger.info("Plugin installed: %s v%s", manifest.name, manifest.version)
     return _serialize(row, registry.plugins.get(manifest.name))
+
+
+@router.post("/install_archive", response_model=PluginOut)
+def install_plugin_archive(
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Install from a local .tar.gz or .zip archive path on the server."""
+    path = str(payload.get("path") or "").strip()
+    if not path:
+        raise HTTPException(400, "'path' is required")
+    if not os.path.isfile(path):
+        raise HTTPException(404, f"no such file: {path}")
+    if not (path.endswith((".tar.gz", ".tgz", ".zip"))):
+        raise HTTPException(400, "archive must be .tar.gz, .tgz or .zip")
+    return _install_from_path(path, db)
+
+
+@router.post("/install_url", response_model=PluginOut)
+def install_plugin_url(
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Install a plugin from a remote URL (unsigned).
+
+    The archive is downloaded to a temp file and then installed through the
+    same validation path as a local archive. Signature verification is not
+    performed, so only use trusted sources.
+    """
+    url = str(payload.get("url") or "").strip()
+    if not url:
+        raise HTTPException(400, "'url' is required")
+    if not url.lower().startswith(("http://", "https://")):
+        raise HTTPException(400, "url must be http(s)")
+    if not url.lower().endswith((".tar.gz", ".tgz", ".zip")):
+        raise HTTPException(400, "url must point to a .tar.gz, .tgz or .zip archive")
+
+    import httpx
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=os.path.splitext(url)[1] or ".zip")
+    tmp.close()
+    try:
+        with httpx.Client(timeout=60, follow_redirects=True) as client:
+            with client.stream("GET", url) as resp:
+                resp.raise_for_status()
+                with open(tmp.name, "wb") as f:
+                    for chunk in resp.iter_bytes():
+                        f.write(chunk)
+        return _install_from_path(tmp.name, db)
+    except httpx.HTTPError as exc:
+        raise HTTPException(400, f"could not download archive: {exc}")
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
 
 
 @router.delete("/{name}", status_code=204)
@@ -677,3 +722,57 @@ def _safe_extract_zip(zf: zipfile.ZipFile, dest: str) -> None:
         if not _is_within(dest, os.path.join(dest, normalised)):
             raise HTTPException(400, f"archive path escapes target dir: {member}")
     zf.extractall(dest)
+
+
+# ── Plugin secrets (vault) ──────────────────────────────────────────────────
+
+@router.get("/{name}/secrets")
+def list_plugin_secrets(
+    name: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """List the names of secrets stored for a plugin (values are never returned)."""
+    rows = db.query(PluginSecret).filter(PluginSecret.plugin_name == name).all()
+    return {"plugin": name, "secrets": [r.name for r in rows]}
+
+
+@router.put("/{name}/secrets/{secret_name}", status_code=200)
+def set_plugin_secret(
+    name: str,
+    secret_name: str,
+    body: PluginSecretSet,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    """Store (or replace) a secret value for a plugin, encrypted at rest."""
+    row = db.query(PluginSecret).filter(
+        PluginSecret.plugin_name == name,
+        PluginSecret.name == secret_name,
+    ).first()
+    if row is None:
+        row = PluginSecret(plugin_name=name, name=secret_name,
+                           value_encrypted=encrypt_secret(body.value))
+        db.add(row)
+    else:
+        row.value_encrypted = encrypt_secret(body.value)
+    db.commit()
+    db.refresh(row)
+    return {"plugin": name, "name": secret_name, "stored": True}
+
+
+@router.delete("/{name}/secrets/{secret_name}", status_code=204)
+def delete_plugin_secret(
+    name: str,
+    secret_name: str,
+    db: Session = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    row = db.query(PluginSecret).filter(
+        PluginSecret.plugin_name == name,
+        PluginSecret.name == secret_name,
+    ).first()
+    if row is not None:
+        db.delete(row)
+        db.commit()
+    return None

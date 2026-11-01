@@ -24,3 +24,6 @@ beautifulsoup4==4.12.3
 duckduckgo-search==7.2.1
 celery==5.4.0
 redis==5.2.1
+
+# MCP server SSE transport (imported by app/api/mcp/server.py)
+sse-starlette>=2.0.0

@@ -34,6 +34,8 @@ type Plugin = {
     max_daily_cost_usd: number
     max_output_bytes: number
     max_latency_ms: number
+    per_user_day_calls?: number
+    max_user_daily_cost_usd?: number
   }
   retention_days?: number | null
   valid: boolean

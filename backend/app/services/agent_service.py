@@ -215,6 +215,7 @@ async def _delegate_subagent(input_str: str) -> str:
     ctx = _agent_ctx.get()
     depth = ctx.get("subagent_depth", 0) if ctx else 0
     actor = ctx.get("actor_user_id") if ctx else None
+    sandbox = ctx.get("sandbox") if ctx else None
     max_depth = ctx.get("subagent_max_depth", MAX_SUBAGENT_DEPTH) if ctx else MAX_SUBAGENT_DEPTH
     model = ctx.get("subagent_model", SUBAGENT_MODEL) if ctx else SUBAGENT_MODEL
 
@@ -229,6 +230,7 @@ async def _delegate_subagent(input_str: str) -> str:
             tools=tools,
             max_steps=max_sub_steps,
             actor_user_id=actor,
+            sandbox=sandbox,
             persona_prompt="You are a focused sub-agent. Complete the assigned subtask efficiently. Use tools as needed. Output only the final result without extra commentary.",
         )
     finally:
@@ -332,6 +334,10 @@ async def run_agent(
     exception — otherwise a stale context leaks into the next run in the same
     task (stale depth → sub-agents spuriously refused)."""
     had_ctx = bool(_agent_ctx.get())
+    owned_sandbox = sandbox is None
+    if owned_sandbox:
+        from .sandbox_service import Sandbox as _Sandbox
+        sandbox = _Sandbox()
     try:
         return await _run_agent_inner(
             task, model, tools, max_steps, on_step, persona_prompt,
@@ -339,6 +345,11 @@ async def run_agent(
             images, actor_user_id,
         )
     finally:
+        if owned_sandbox:
+            try:
+                sandbox.cleanup()
+            except Exception:
+                pass
         if not had_ctx:
             _agent_ctx.set({})
 
@@ -369,6 +380,9 @@ async def _run_agent_inner(
             # Carried so a delegated sub-agent's plugin calls stay attributed
             # to the user who started the run, not left anonymous.
             "actor_user_id": actor_user_id,
+            # Carried so delegated sub-agents reuse the parent's sandbox
+            # instead of falling back to unsandboxed host tools.
+            "sandbox": sandbox,
         })
 
     available = {k: TOOL_DESCRIPTIONS[k] for k in tools if k in TOOL_DESCRIPTIONS}
