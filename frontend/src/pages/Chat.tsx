@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
-import {
+import {GitBranch, Command, 
   Send, Loader2, ChevronDown,
   FileText, Sparkles, Zap, Scale, Brain, Settings2, User,
   X, Paperclip, BookMarked, Clipboard, ClipboardCheck,
@@ -219,11 +219,11 @@ function ThinkingIndicator({ label, since }: { label?: string; since?: number })
 
 // ── Message bubble with copy/actions ────────────────────────────────────
 function MessageBubble({
-  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, isCliActive, activity, activitySince, reasoningPhase, model, onModelChange,
+  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, onFork, isCliActive, activity, activitySince, reasoningPhase, model, onModelChange,
 }: {
   msg: Message; index: number; isLast: boolean
   isActive: boolean; streamPhase: string; warmingModel?: string; sending: boolean
-  onRegenerate: () => void; isCliActive: boolean; activity?: string | null; activitySince?: number | null
+  onRegenerate: () => void; onFork?: () => void; isCliActive: boolean; activity?: string | null; activitySince?: number | null
   reasoningPhase?: boolean; model: string; onModelChange: (m: string) => void
 }) {
   const [copied, setCopied] = useState(false)
@@ -371,6 +371,11 @@ function MessageBubble({
                   <RotateCcw className="w-3.5 h-3.5" />Regenerate
                 </button>
               )}
+              {msg.content && (
+                <button onClick={() => onFork?.()} className="btn-ghost py-1 px-2 text-xs gap-1">
+                  <GitBranch className="w-3.5 h-3.5" />Fork
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -430,6 +435,7 @@ export default function ChatPage() {
   const [reasoningPhase, setReasoningPhase] = useState(false)
   const [systemPrompt, setSystemPrompt] = useState('')
   const [showSystem, setShowSystem] = useState(false)
+  const [showInspector, setShowInspector] = useState(false)
   const [variants, setVariants] = useState<HexaLLMVariant[]>([])
   const [hubModels, setHubModels] = useState<{ slug: string; name: string }[]>([])
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
@@ -1019,7 +1025,20 @@ export default function ChatPage() {
     await doStream(history, session, false, { regenerate: true })
   }
 
+  const forkSession = async () => {
+    if (!activeSession) return
+    try {
+      const { data } = await api.post(`/chat/sessions/${activeSession.id}/fork`)
+      await fetchSessions()
+      selectSessionId(data.id)
+      toast.success('Conversation forked')
+    } catch {
+      toast.error('Failed to fork conversation')
+    }
+  }
+
   const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (slashMatches.length > 0 && e.key === 'Enter') { e.preventDefault(); runSlash(slashMatches[0]); return }
     if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); sendMessage() }
   }
 
@@ -1436,6 +1455,22 @@ export default function ChatPage() {
     textareaRef.current?.focus()
   }
 
+  const SLASH_COMMANDS = [
+    { name: '/new', label: 'Start a new chat', run: () => { navigate('/chat?new=1') } },
+    { name: '/clear', label: 'Clear the composer', run: () => setInput('') },
+    { name: '/export', label: 'Export conversation', run: () => exportConversation() },
+    { name: '/voice', label: 'Toggle voice mode', run: () => (voiceMode ? stopVoice() : startVoiceMode()) },
+    { name: '/system', label: 'Edit system prompt', run: () => setShowSystem(true) },
+    { name: '/share', label: 'Copy share link', run: () => shareSession() },
+  ]
+  const slashQuery = input.startsWith('/') && !input.includes(' ') ? input.slice(1).toLowerCase() : null
+  const slashMatches = slashQuery === null ? [] : SLASH_COMMANDS.filter((c) => c.name.slice(1).startsWith(slashQuery))
+  const runSlash = (cmd: (typeof SLASH_COMMANDS)[number]) => {
+    cmd.run()
+    setInput('')
+    textareaRef.current?.focus()
+  }
+
   const composer = (
     <div data-templates-panel
       className="w-full rounded-3xl border border-gray-700/50 bg-gray-900/70 light:bg-white/80 backdrop-blur
@@ -1469,7 +1504,7 @@ export default function ChatPage() {
         </div>
       ) : (
         <>
-          <div className="flex items-end gap-2 px-3 py-2.5">
+          <div className="relative flex items-end gap-2 px-3 py-2.5">
             <input ref={fileInputRef} type="file" accept="image/*,.pdf,.txt,.md" className="hidden" onChange={handleFile} />
             {!isGuest && (
               <button onClick={() => fileInputRef.current?.click()} className="btn-ghost p-2 flex-shrink-0" title="Attach file or image">
@@ -1485,6 +1520,17 @@ export default function ChatPage() {
             <button onClick={insertMath} className="btn-ghost p-2 flex-shrink-0 text-indigo-400 hover:text-cyan-300 transition-colors" title="Insert math ($$ ... $$)">
               <Sigma className="w-4 h-4" />
             </button>
+            {slashMatches.length > 0 && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 rounded-xl border border-gray-800 bg-gray-900 shadow-xl overflow-hidden">
+                {slashMatches.map((cmd) => (
+                  <button key={cmd.name} onClick={() => runSlash(cmd)}
+                    className="flex w-full items-center gap-3 px-3 py-2 text-left text-sm hover:bg-gray-800">
+                    <span className="font-mono text-primary-400">{cmd.name}</span>
+                    <span className="text-gray-400">{cmd.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
             <textarea
               ref={textareaRef} value={input} onChange={e => setInput(e.target.value)} onKeyDown={handleKeyDown}
               placeholder={voiceMode ? (voiceSpeaking ? 'Speaking…' : 'Voice mode — just talk') : listening ? 'Recording… click the mic to stop' : transcribing ? 'Transcribing…' : messages.length === 0 ? 'What would you like to know?' : 'Message… (Enter to send, Shift+Enter for newline)'}
@@ -1679,7 +1725,7 @@ export default function ChatPage() {
     <div className="flex flex-col h-full">
       {/* Guest trial banner */}
       {isGuest && (
-        <div className="px-4 py-2 border-b border-gray-800 bg-gradient-to-r from-primary-900/20 to-secondary-900/10 flex items-center gap-2 flex-wrap text-xs">
+        <div className="px-4 py-2 border-b border-gray-800 bg-gray-900 flex items-center gap-2 flex-wrap text-xs">
           <Sparkle className="w-3.5 h-3.5 text-primary-400 flex-shrink-0" />
           <span className="text-gray-300">
             You're chatting as a guest.{' '}
@@ -1707,14 +1753,24 @@ export default function ChatPage() {
           {streamError && <ErrorHint>{streamError}</ErrorHint>}
           {composer}
           {panels}
+          <button onClick={() => setShowInspector(v => !v)} className="ml-auto inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs border border-gray-800 bg-gray-900 text-gray-400 hover:text-gray-200">
+            <SlidersHorizontal className="w-3 h-3" />Details
+          </button>
+          {showInspector && (
+            <div className="mb-2.5 rounded-lg border border-gray-800 bg-gray-950 p-3 text-xs text-gray-400 grid gap-1 sm:grid-cols-3">
+              <div><span className="text-gray-500">Model:</span> <span className="text-gray-200">{model}</span></div>
+              <div><span className="text-gray-500">Temperature:</span> <span className="text-gray-200">{temperature ?? 'default'}</span></div>
+              <div><span className="text-gray-500">Web search:</span> <span className="text-gray-200">{webSearch ? 'on' : 'off'}</span></div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Messages / empty state */}
       {messages.length === 0 ? (
         <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto">
-          <div className="min-h-full flex flex-col items-center justify-center px-4 py-10">
-            <div className="max-w-2xl w-full flex flex-col items-center">
+          <div className="min-h-full flex flex-col items-center justify-center px-6 py-16">
+            <div className="max-w-xl w-full flex flex-col items-center">
               <LogoMark size={64} className="mb-5" />
               {greetingLoading ? (
                 <div className="flex flex-col items-center justify-center gap-3 py-6">
@@ -1723,7 +1779,7 @@ export default function ChatPage() {
                 </div>
               ) : (
                 <>
-                  <h1 className="text-2xl font-semibold text-gray-100 leading-relaxed text-center">{greeting}</h1>
+                  <h1 className="text-xl font-medium text-gray-100 leading-relaxed text-center">{greeting}</h1>
                   {continueSession && (
                     <button onClick={() => requestSession(continueSession.id)}
                       className="mt-3 inline-flex items-center gap-2 rounded-full border border-primary-500/40 bg-primary-500/10 hover:bg-primary-500/20 px-4 py-1.5 text-sm text-primary-300 transition-colors">
@@ -1757,7 +1813,7 @@ export default function ChatPage() {
                 <div className="grid sm:grid-cols-2 gap-2 w-full">
                   {suggestions.map((s) => (
                     <button key={s} onClick={() => pickSuggestion(s)}
-                      className="text-left rounded-xl border border-gray-800 bg-gray-900/60 hover:border-primary-500/50 hover:bg-gray-900 px-4 py-3 text-sm text-gray-300 transition-colors">
+                      className="text-left rounded-lg border border-gray-800 bg-gray-900 px-4 py-3 text-sm text-gray-300 transition-colors hover:bg-gray-800">
                       {s}
                     </button>
                   ))}
@@ -1770,7 +1826,7 @@ export default function ChatPage() {
       ) : (
         <div className="flex-1 min-h-0 relative">
           <div ref={scrollRef} onScroll={onMessagesScroll} className="h-full overflow-y-auto py-6">
-            <div className="max-w-3xl mx-auto space-y-5 px-4">
+            <div className="mx-auto max-w-3xl space-y-6 px-4">
               {messages.map((msg, i) => (
                 <MessageBubble
                   key={i} msg={msg} index={i}
@@ -1778,6 +1834,7 @@ export default function ChatPage() {
                   isActive={(streamPhase !== 'idle' || sending) && i === messages.length - 1 && msg.role === 'assistant'}
                   streamPhase={streamPhase} warmingModel={warmingModel} sending={sending}
                   onRegenerate={regenerate}
+                  onFork={forkSession}
                   isCliActive={false}
                   activity={i === messages.length - 1 ? streamActivity : null}
                   activitySince={i === messages.length - 1 ? activitySince : null}
@@ -1800,7 +1857,7 @@ export default function ChatPage() {
           </div>
           {showJump && (
             <button onClick={jumpToLatest}
-              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 inline-flex items-center gap-1.5 rounded-full bg-gray-800 hover:bg-gray-700 border border-gray-700 text-gray-200 text-xs py-1.5 px-3 shadow-lg transition-colors">
+              className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 inline-flex items-center gap-1.5 rounded-full bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-200 text-xs py-1.5 px-3 shadow-lg transition-colors">
               <ChevronDown className="w-3.5 h-3.5" /> Jump to latest
             </button>
           )}

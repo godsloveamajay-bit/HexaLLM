@@ -156,258 +156,167 @@ export default function LandingPage() {
   const [tab, setTab] = useState<ApiTab>('python')
 
   return (
-    <div className="scroll-smooth bg-[#0D0D0D] text-white antialiased py-2 sm:py-3 space-y-2 sm:space-y-3">
-      {/* ═══ 1 · HERO — Hex Black + Hex Cyan ═══ */}
-      <header className="relative min-h-screen flex flex-col overflow-hidden bg-[#0D0D0D] mx-2 sm:mx-4 rounded-[2rem]">
-        <div
-          className="absolute inset-0 opacity-60 bg-drift"
-          style={{ backgroundImage: `url("${HEX_TILE}")`, backgroundSize: '56px 100px' }}
-          aria-hidden
-        />
-        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-[#0D0D0D]/60 to-[#0D0D0D]" aria-hidden />
-        <div
-          className="absolute -top-32 left-1/2 -translate-x-1/2 w-[42rem] h-[42rem] rounded-full bg-primary-400/10 blur-3xl glow-breathe"
-          aria-hidden
-        />
-
-        <nav className="relative z-10 mx-auto w-full max-w-6xl px-6 py-6 flex items-center justify-between hero-rise">
-          <Logo />
-          <div className="hidden md:flex items-center gap-8 text-sm text-[#C8C8C8]">
-            <a href="#families" className="hover:text-primary-400 transition-colors">Models</a>
-            <a href="#features" className="hover:text-primary-400 transition-colors">Features</a>
-            <a href="#api" className="hover:text-primary-400 transition-colors">API</a>
-            <a href="#catalog" className="hover:text-primary-400 transition-colors">Catalog</a>
-            <Link to="/downloads" className="hover:text-primary-400 transition-colors">Downloads</Link>
-          </div>
+    <div className="min-h-screen bg-gray-950 text-gray-100 antialiased">
+      {/* Nav */}
+      <header className="sticky top-0 z-20 border-b border-gray-800/70 bg-gray-950/80 backdrop-blur">
+        <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+          <Logo size={28} />
+          <nav className="hidden items-center gap-6 text-sm text-gray-400 md:flex">
+            <a href="#features" className="hover:text-gray-100">Features</a>
+            <a href="#models" className="hover:text-gray-100">Models</a>
+            <a href="#api" className="hover:text-gray-100">API</a>
+            <Link to="/downloads" className="hover:text-gray-100">Downloads</Link>
+          </nav>
           <div className="flex items-center gap-3">
-            <Link to="/login" className="text-sm text-[#C8C8C8] hover:text-white transition-colors">
-              Sign in
+            <Link to="/login" className="text-sm text-gray-400 hover:text-gray-100">Sign in</Link>
+            <Link to="/register" className="rounded-md bg-primary-500 px-4 py-2 text-sm font-medium text-white hover:bg-primary-400">
+              Get started
             </Link>
-            <Link
-              to="/register"
-              className="text-sm font-medium px-4 py-2 rounded-lg bg-[#4FF3FF] text-[#0D0D0D] hover:bg-[#7ff8ff] shadow-lg shadow-primary-400/25 transition-all"
-            >
-              Get Started
-            </Link>
-          </div>
-        </nav>
-
-        <div className="relative z-10 flex-1 flex flex-col items-center justify-center text-center px-6 pb-24">
-          <div className="relative mb-8 float-y">
-            <div className="absolute inset-0 rounded-full bg-primary-400/20 blur-2xl scale-150 glow-breathe" aria-hidden />
-            <Hexagon className="relative text-primary-400 w-16 h-16 hero-rise" strokeWidth={1} />
-          </div>
-          <h1 className="font-display font-bold tracking-tight text-4xl sm:text-6xl lg:text-7xl leading-tight hero-rise hero-rise-1">
-            Frontier Intelligence.
-            <br />
-            Minimal Design. <span className="text-primary-400">HexaLLM.</span>
-          </h1>
-          <p className="mt-6 max-w-xl text-lg text-[#C8C8C8] hero-rise hero-rise-2">
-            A premium AI ecosystem built on geometric precision and modular intelligence.
-          </p>
-          <div className="mt-10 flex flex-wrap items-center justify-center gap-4 hero-rise hero-rise-3">
-            <Link
-              to="/register"
-              className="inline-flex items-center gap-2 px-7 py-3 rounded-lg font-semibold bg-[#4FF3FF] text-[#0D0D0D] hover:bg-[#7ff8ff] shadow-lg shadow-primary-400/30 transition-all hover:-translate-y-0.5 active:scale-95"
-            >
-              Get Started <ArrowRight className="w-4 h-4" />
-            </Link>
-            <a
-              href="#catalog"
-              className="inline-flex items-center gap-2 px-7 py-3 rounded-lg font-semibold bg-[#3B82F6] text-white hover:bg-[#60a5fa] shadow-lg shadow-energy-500/30 transition-all hover:-translate-y-0.5 active:scale-95"
-            >
-              View Models
-            </a>
           </div>
         </div>
       </header>
 
-      {/* ═══ 2 · MODEL OVERVIEW — White section, Graphite cards ═══ */}
-      <section id="families" className="mx-2 sm:mx-4 rounded-[2rem] overflow-hidden bg-[#FFFFFF] text-[#0F172A] py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <p className="font-mono text-sm tracking-widest uppercase text-[#3B82F6]">Model Families</p>
-            <h2 className="mt-3 font-display font-bold text-3xl sm:text-4xl tracking-tight">
-              One host. Every tier of intelligence.
-            </h2>
-          </Reveal>
-          <div className="mt-12 grid gap-6 md:grid-cols-3">
-            {FAMILIES.map((f, i) => (
-              <Reveal key={f.series} delay={i * 90}>
-                <div
-                  className="group rounded-2xl border border-[#E5E7EB] bg-[#1A1A1A] p-7 shadow-sm hover:border-primary-400 hover:shadow-[0_0_24px_rgba(79,243,255,0.25)] transition-all duration-300 hover:-translate-y-1"
-                >
-                  <p className="font-mono text-2xl text-primary-400">{f.series}</p>
-                  <p className="mt-2 text-sm text-[#C8C8C8]">{f.blurb}</p>
-                  <div className="mt-5 flex flex-wrap gap-2">
-                    {f.variants.map((v) => (
-                      <span key={v} className="font-mono text-xs px-2.5 py-1 rounded-md bg-white/10 text-[#E5E7EB] border border-white/10">
-                        {v}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ 3 · FEATURE HIGHLIGHTS — Slate background ═══ */}
-      <section id="features" className="mx-2 sm:mx-4 rounded-[2rem] overflow-hidden bg-[#334155] py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <h2 className="font-display font-bold text-3xl sm:text-4xl tracking-tight text-center">
-              Built in two geometric parts.
-            </h2>
-          </Reveal>
-          <div className="mt-14 grid gap-8 md:grid-cols-2 max-w-3xl mx-auto">
-            {FEATURES.map((f, i) => (
-              <Reveal key={f.title} delay={i * 100}>
-                <div className="group text-center md:text-left">
-                  <div className="mx-auto md:mx-0 w-14 h-14 rounded-xl border border-white/20 bg-white/5 flex items-center justify-center transition-all duration-300 group-hover:-translate-y-1 group-hover:shadow-[0_8px_24px_rgba(79,243,255,0.15)]">
-                    <f.icon className="w-7 h-7 text-primary-400 group-hover:scale-110 transition-transform" strokeWidth={1.5} />
-                  </div>
-                  <h3 className="mt-5 font-display font-semibold text-xl">{f.title}</h3>
-                  <p className="mt-2 text-[#E5E7EB]/90 leading-relaxed">{f.text}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ 4 · MODEL CARDS — Charcoal background ═══ */}
-      <section id="catalog" className="mx-2 sm:mx-4 rounded-[2rem] overflow-hidden bg-[#0F172A] py-20">
-        <div className="mx-auto max-w-6xl px-6">
-          <Reveal>
-            <p className="font-mono text-sm tracking-widest uppercase text-[#4FF3FF] text-center">The Catalog</p>
-            <h2 className="mt-3 font-display font-bold text-3xl sm:text-4xl tracking-tight text-center">
-              Choose your model.
-            </h2>
-          </Reveal>
-          <div className="mt-14 grid gap-6 sm:grid-cols-2 lg:grid-cols-4">
-            {CATALOG.map((m, i) => (
-              <Reveal key={m.name} delay={i * 80}>
-                <div
-                  className="group rounded-2xl border border-white/10 bg-[#1A1A1A] overflow-hidden hover:border-primary-400/50 hover:shadow-[0_0_28px_rgba(79,243,255,0.18)] transition-all duration-300 hover:-translate-y-1"
-                >
-                  <div className="h-1 bg-gradient-to-r from-primary-400 to-transparent transition-all duration-300 group-hover:from-primary-400 group-hover:to-primary-400" />
-                  <div className="p-6">
-                    <p className="font-mono text-[#4FF3FF]">{m.name}</p>
-                    <p className="mt-1 font-mono text-[10px] tracking-widest uppercase text-[#A78BFA]">{m.tag}</p>
-                    <p className="mt-3 text-sm text-[#C8C8C8]">{m.blurb}</p>
-                    <ul className="mt-4 space-y-2">
-                      {m.caps.map((c) => (
-                        <li key={c} className="flex items-start gap-2 text-sm text-[#E5E7EB]">
-                          <Check className="w-4 h-4 mt-0.5 text-primary-400 shrink-0" />
-                          {c}
-                        </li>
-                      ))}
-                    </ul>
-                    <Link
-                      to="/models"
-                      className="mt-6 inline-flex items-center gap-1.5 text-sm font-medium text-primary-400 hover:text-primary-300 transition-colors group-hover:gap-2.5"
-                    >
-                      View Model Card <ArrowRight className="w-4 h-4 transition-transform duration-300 group-hover:translate-x-0.5" />
-                    </Link>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ═══ 5 · API DOCUMENTATION PREVIEW — White section, dark code block ═══ */}
-      <section id="api" className="mx-2 sm:mx-4 rounded-[2rem] overflow-hidden bg-[#FFFFFF] text-[#0F172A] py-20">
-        <div className="mx-auto max-w-6xl px-6 grid gap-12 lg:grid-cols-2 items-center">
-          <Reveal>
-            <p className="font-mono text-sm tracking-widest uppercase text-[#3B82F6]">HexaAPI</p>
-            <h2 className="mt-3 font-display font-bold text-3xl sm:text-4xl tracking-tight">
-              Three lines to your first completion.
-            </h2>
-            <p className="mt-4 text-[#334155] leading-relaxed">
-              Every hex model speaks the OpenAI-compatible protocol. Swap the base URL, drop in your API
-              key, and the full catalog is yours — from <span className="font-mono text-sm">hex-4.2-turbo</span>{' '}
-              chat to <span className="font-mono text-sm">hex-6.0-reason</span> deep thinking.
+      {/* Hero */}
+      <section className="mx-auto max-w-6xl px-6 py-20 sm:py-28">
+        <div className="grid gap-12 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+          <div>
+            <p className="text-sm font-medium text-primary-400">HexaLLM</p>
+            <h1 className="mt-4 text-4xl font-semibold tracking-tight sm:text-6xl">
+              Local AI, presented like a product.
+            </h1>
+            <p className="mt-6 max-w-xl text-base leading-7 text-gray-400">
+              Chat, agents, workflows, and an OpenAI-compatible API on your own host. Fast models, private data, and tools you control.
             </p>
-            <ul className="mt-6 space-y-3 text-sm text-[#334155]">
-              {[
-                'OpenAI-compatible — use your existing tooling',
-                'Runs on your own GPU, behind your own tunnel',
-                'Per-model streaming, tool calls and vision support',
-              ].map((b) => (
-                <li key={b} className="flex items-start gap-2">
-                  <Check className="w-4 h-4 mt-0.5 text-[#4FF3FF] shrink-0" />
-                  {b}
-                </li>
-              ))}
-            </ul>
-            <Link
-              to="/register"
-              className="mt-8 inline-flex items-center gap-2 px-6 py-3 rounded-lg font-semibold bg-[#3B82F6] text-white hover:bg-[#60a5fa] transition-all hover:-translate-y-0.5 active:scale-95"
-            >
-              Get an API key <ArrowRight className="w-4 h-4" />
-            </Link>
-          </Reveal>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <Link to="/register" className="rounded-md bg-primary-500 px-5 py-3 text-sm font-medium text-white hover:bg-primary-400">
+                Create account
+              </Link>
+              <Link to="/login" className="rounded-md border border-gray-700 px-5 py-3 text-sm font-medium text-gray-200 hover:bg-gray-900">
+                Sign in
+              </Link>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-gray-800 bg-gray-900 p-4 shadow-2xl">
+            <div className="rounded-xl border border-gray-800 bg-gray-950 p-5">
+              <div className="flex items-center gap-2 text-xs text-gray-500">
+                <span className="h-2 w-2 rounded-full bg-primary-400" />
+                HexaLLM chat
+              </div>
+              <p className="mt-4 text-sm text-gray-300">Summarize this repository and suggest the next refactor.</p>
+              <div className="mt-4 rounded-lg bg-gray-900 p-3 text-sm text-gray-400">
+                I found 3 hotspots: session state, workflow execution, and agent tool safety. I can patch them now.
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
 
-          <Reveal delay={140}>
-            <div className="rounded-2xl bg-[#0D0D0D] shadow-2xl overflow-hidden">
-              <div className="flex items-center gap-1 px-4 py-3 border-b border-white/10">
+      {/* Features */}
+      <section id="features" className="border-y border-gray-800 bg-gray-900/40">
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <h2 className="text-3xl font-semibold tracking-tight">Everything in one workspace.</h2>
+          <div className="mt-10 grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            {FEATURES.map((f) => (
+              <div key={f.title} className="rounded-xl border border-gray-800 bg-gray-950 p-5">
+                <f.icon className="h-5 w-5 text-primary-400" />
+                <h3 className="mt-4 font-medium">{f.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-gray-400">{f.text}</p>
+              </div>
+            ))}
+            {FAMILIES.map((f) => (
+              <div key={f.series} className="rounded-xl border border-gray-800 bg-gray-950 p-5">
+                <p className="font-mono text-sm text-primary-400">{f.series}</p>
+                <p className="mt-2 text-sm leading-6 text-gray-400">{f.blurb}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* Models */}
+      <section id="models" className="mx-auto max-w-6xl px-6 py-20">
+        <div className="flex items-end justify-between gap-6">
+          <div>
+            <p className="text-sm font-medium text-primary-400">Models</p>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight">Choose the right engine.</h2>
+          </div>
+          <Link to="/models" className="text-sm text-gray-400 hover:text-gray-100">View all</Link>
+        </div>
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          {CATALOG.map((m) => (
+            <div key={m.name} className="rounded-xl border border-gray-800 bg-gray-900 p-5">
+              <p className="font-mono text-sm text-primary-400">{m.name}</p>
+              <p className="mt-1 text-xs text-gray-500">{m.tag}</p>
+              <p className="mt-3 text-sm text-gray-400">{m.blurb}</p>
+              <ul className="mt-4 space-y-2 text-sm text-gray-400">
+                {m.caps.map((c) => (
+                  <li key={c} className="flex gap-2">
+                    <Check className="mt-0.5 h-4 w-4 text-primary-400" />
+                    {c}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* API */}
+      <section id="api" className="border-y border-gray-800 bg-gray-900/40">
+        <div className="mx-auto max-w-6xl px-6 py-20">
+          <div className="grid gap-10 lg:grid-cols-2 lg:items-center">
+            <div>
+              <p className="text-sm font-medium text-primary-400">API</p>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight">OpenAI-compatible from the first request.</h2>
+              <p className="mt-4 text-gray-400">Use your existing SDKs. Point the base URL at HexaLLM and start building.</p>
+              <Link to="/register" className="mt-8 inline-flex rounded-md bg-primary-500 px-5 py-3 text-sm font-medium text-white hover:bg-primary-400">
+                Get an API key
+              </Link>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-gray-800 bg-gray-950">
+              <div className="flex gap-1 border-b border-gray-800 px-4 py-3">
                 {TABS.map((t) => (
                   <button
                     key={t.id}
                     onClick={() => setTab(t.id)}
-                    className={`font-mono text-xs px-3 py-1.5 rounded-md transition-colors ${
-                      tab === t.id
-                        ? 'bg-white/10 text-[#4FF3FF]'
-                        : 'text-[#C8C8C8] hover:text-white'
-                    }`}
+                    className={`rounded-md px-3 py-1.5 font-mono text-xs ${tab === t.id ? 'bg-gray-800 text-primary-400' : 'text-gray-500 hover:text-gray-200'}`}
                   >
                     {t.label}
                   </button>
                 ))}
-                <div className="ml-auto flex items-center gap-1.5">
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#A78BFA]/60" />
-                  <span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6]/60" />
-                </div>
               </div>
-              <pre className="p-5 font-mono text-[13px] leading-7 overflow-x-auto fade-in" key={tab}>
+              <pre className="overflow-x-auto p-5 font-mono text-xs leading-6 text-gray-300">
                 {API_SAMPLES[tab].map((line, i) => highlight(line, i))}
               </pre>
             </div>
-          </Reveal>
+          </div>
         </div>
       </section>
 
-      {/* ═══ 6 · FOOTER — Hex Black ═══ */}
-      <footer className="mx-2 sm:mx-4 rounded-[2rem] overflow-hidden bg-[#0D0D0D] border border-white/5">
-        <div className="mx-auto max-w-6xl px-6 py-14 flex flex-col md:flex-row items-center justify-center gap-8">
-          <Reveal delay={80}>
-            <nav className="flex flex-wrap items-center justify-center gap-6 text-sm text-[#C8C8C8]">
-              <a href="#api" className="hover:text-primary-400 transition-colors">Docs</a>
-              <a href="#families" className="hover:text-primary-400 transition-colors">Models</a>
-              <a href="#api" className="hover:text-primary-400 transition-colors">API</a>
-              <Link to="/downloads" className="hover:text-primary-400 transition-colors">Downloads</Link>
-              <a href="https://github.com/HexaLLM" className="hover:text-primary-400 transition-colors">GitHub</a>
-            </nav>
-          </Reveal>
-          <Reveal delay={160}>
-            <div className="flex items-center gap-4 text-[#C8C8C8]">
-              <a href="https://github.com/HexaLLM" aria-label="GitHub" className="hover:text-primary-400 transition-colors">
-                <Github className="w-5 h-5" />
-              </a>
-              <a href="https://x.com/hexallm" aria-label="Twitter" className="hover:text-primary-400 transition-colors">
-                <Twitter className="w-5 h-5" />
-              </a>
-            </div>
-          </Reveal>
+      {/* CTA */}
+      <section className="mx-auto max-w-6xl px-6 py-20">
+        <div className="rounded-2xl border border-gray-800 bg-gray-900 p-10 text-center">
+          <h2 className="text-3xl font-semibold tracking-tight">Start building with HexaLLM.</h2>
+          <p className="mt-3 text-gray-400">Create an account and run your first model in minutes.</p>
+          <div className="mt-8 flex justify-center gap-3">
+            <Link to="/register" className="rounded-md bg-primary-500 px-5 py-3 text-sm font-medium text-white hover:bg-primary-400">
+              Get started
+            </Link>
+            <Link to="/login" className="rounded-md border border-gray-700 px-5 py-3 text-sm font-medium text-gray-200 hover:bg-gray-900">
+              Sign in
+            </Link>
+          </div>
         </div>
-        <div className="border-t border-white/5">
-          <p className="mx-auto max-w-6xl px-6 py-5 text-xs text-[#C8C8C8]/70 text-center">
-            © {new Date().getFullYear()} HexaLLM — Frontier Intelligence. Minimal Design.
-          </p>
+      </section>
+
+      <footer className="border-t border-gray-800">
+        <div className="mx-auto flex max-w-6xl flex-col gap-4 px-6 py-8 text-sm text-gray-500 sm:flex-row sm:items-center sm:justify-between">
+          <Logo size={24} />
+          <div className="flex gap-5">
+            <a href="https://github.com/HexaLLM" className="hover:text-gray-200">GitHub</a>
+            <Link to="/downloads" className="hover:text-gray-200">Downloads</Link>
+            <Link to="/login" className="hover:text-gray-200">Sign in</Link>
+          </div>
         </div>
       </footer>
     </div>

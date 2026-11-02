@@ -3,7 +3,7 @@ import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
   MessageSquare, Cpu, ImageIcon, Clapperboard, Brain, Wand2, LayoutDashboard,
   LogOut, Settings, Sun, Moon, MonitorSmartphone, LogIn, UserPlus,
-  Pencil, ChevronDown, X, Cable, Key,
+  Pencil, ChevronDown, X, Cable, Key, Search,
 } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { useSessions } from '../../store/sessions'
@@ -50,6 +50,7 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
   const navigate = useNavigate()
   const [theme, setTheme] = useTheme()
   const [showApps, setShowApps] = useState(false)
+  const [query, setQuery] = useState('')
   const { sessions, activeId, loaded, fetch, setActive, remove } = useSessions()
 
   useEffect(() => {
@@ -73,8 +74,10 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
     navigate('/chat?new=1')
   }
 
+  const q = query.trim().toLowerCase()
+  const visibleSessions = q ? sessions.filter((s) => s.title.toLowerCase().includes(q)) : sessions
   const groups = GROUP_ORDER
-    .map((g) => ({ group: g, items: sessions.filter((s) => groupOf(s.updated_at) === g) }))
+    .map((g) => ({ group: g, items: visibleSessions.filter((s) => groupOf(s.updated_at) === g) }))
     .filter((g) => g.items.length > 0)
 
   const links = [...EXTRA_LINKS, ...(user?.is_admin ? [ADMIN_LINK] : [])]
@@ -167,6 +170,21 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
           </button>
         )}
       </div>
+
+      {/* Search */}
+      {(!collapsed || mobileOpen) && (
+        <div className="px-3 pb-2">
+          <div className="relative">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-500" />
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search chats…"
+              className="w-full rounded-lg border border-gray-800 bg-gray-950 pl-8 pr-3 py-1.5 text-xs text-gray-200 placeholder-gray-500 focus:border-primary-500/60 focus:outline-none"
+            />
+          </div>
+        </div>
+      )}
 
       {/* Conversation history */}
       <div className="flex-1 min-h-0 overflow-y-auto px-2 py-1 space-y-3">

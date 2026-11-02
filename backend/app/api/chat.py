@@ -873,6 +873,41 @@ def create_session(
     return session
 
 
+@router.post("/sessions/{session_id}/fork", response_model=ChatSessionOut, status_code=201)
+def fork_session(
+    session_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    src = db.query(ChatSession).filter(
+        ChatSession.id == session_id, ChatSession.user_id == current_user.id
+    ).first()
+    if not src:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    copy = ChatSession(
+        user_id=current_user.id,
+        title=f"{src.title} (fork)"[:80],
+        model_name=src.model_name,
+        system_prompt=src.system_prompt,
+    )
+    db.add(copy)
+    db.flush()
+    for msg in src.messages:
+        db.add(ChatMessage(
+            session_id=copy.id,
+            role=msg.role,
+            content=msg.content,
+            tokens_used=msg.tokens_used,
+            latency_ms=msg.latency_ms,
+            steps=msg.steps,
+            created_at=msg.created_at,
+        ))
+    db.commit()
+    db.refresh(copy)
+    return copy
+
+
 @router.post("/sessions/{session_id}/rename", response_model=ChatSessionOut)
 async def rename_session(
     session_id: int,
