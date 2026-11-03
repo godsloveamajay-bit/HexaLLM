@@ -12,6 +12,7 @@ import io
 import json
 import logging
 import os
+import subprocess
 import shutil
 import base64
 import hashlib
@@ -396,6 +397,36 @@ async def call_plugin_tool(
     )
 
 
+def _install_from_dir(root: str, db: Session):
+    """Shared install logic for a directory containing manifest.json."""
+    manifest_path = os.path.join(root, "manifest.json")
+    if not os.path.isfile(manifest_path):
+        raise HTTPException(400, "source has no manifest.json at its root")
+    with open(manifest_path) as f:
+        try:
+            manifest = plugin_service.PluginManifest.from_dict(json.load(f), root)
+        except json.JSONDecodeError as exc:
+            raise HTTPException(400, f"manifest.json is not valid JSON: {exc}")
+        except PluginError as exc:
+            raise HTTPException(400, str(exc))
+
+    dest = os.path.join(plugin_service._plugins_root(), manifest.name)
+    if os.path.exists(dest):
+        raise HTTPException(409, f"plugin {manifest.name!r} is already installed")
+
+    shutil.copytree(root, dest, dirs_exist_ok=False)
+    # Drop any VCS metadata that came along.
+    shutil.rmtree(os.path.join(dest, ".git"), ignore_errors=True)
+
+    _load_enabled(db)
+    rows = _sync_db(db)
+    row = rows.get(manifest.name)
+    if row is None:
+        raise HTTPException(500, "plugin installed but could not be recorded")
+    logger.info("Plugin installed: %s v%s", manifest.name, manifest.version)
+    return _serialize(row, registry.plugins.get(manifest.name))
+
+
 def _install_from_path(path: str, db: Session):
     """Shared install logic for a local archive path. Returns the serialized plugin."""
     tmp = tempfile.mkdtemp(prefix="hexallm_plugin_")
@@ -412,38 +443,14 @@ def _install_from_path(path: str, db: Session):
         except Exception as exc:
             raise HTTPException(400, f"could not read archive: {exc}")
 
-        # The archive may or may not wrap everything in a single directory.
         root = tmp
         entries = [e for e in os.listdir(tmp) if not e.startswith((".", "__MACOSX"))]
         if len(entries) == 1 and os.path.isdir(os.path.join(tmp, entries[0])):
             root = os.path.join(tmp, entries[0])
 
-        manifest_path = os.path.join(root, "manifest.json")
-        if not os.path.isfile(manifest_path):
-            raise HTTPException(400, "archive has no manifest.json at its root")
-        with open(manifest_path) as f:
-            try:
-                manifest = plugin_service.PluginManifest.from_dict(json.load(f), root)
-            except json.JSONDecodeError as exc:
-                raise HTTPException(400, f"manifest.json is not valid JSON: {exc}")
-            except PluginError as exc:
-                raise HTTPException(400, str(exc))
-
-        dest = os.path.join(plugin_service._plugins_root(), manifest.name)
-        if os.path.exists(dest):
-            raise HTTPException(409, f"plugin {manifest.name!r} is already installed")
-
-        shutil.move(root, dest)
+        return _install_from_dir(root, db)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
-
-    _load_enabled(db)
-    rows = _sync_db(db)
-    row = rows.get(manifest.name)
-    if row is None:
-        raise HTTPException(500, "plugin installed but could not be recorded")
-    logger.info("Plugin installed: %s v%s", manifest.name, manifest.version)
-    return _serialize(row, registry.plugins.get(manifest.name))
 
 
 @router.post("/install_archive", response_model=PluginOut)
@@ -537,6 +544,44 @@ def install_plugin_url(
             os.unlink(tmp.name)
         except OSError:
             pass
+
+
+
+@router.post("/install_git", response_model=PluginOut)
+def install_plugin_git(
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Install a plugin from a git repository.
+
+    Clones the repository into a temp directory and installs it through the
+    same validation path as a local archive. Only http(s)/ssh git URLs are
+    accepted.
+    """
+    url = str(payload.get("url") or "").strip()
+    if not url:
+        raise HTTPException(400, "'url' is required")
+    if not (url.startswith(("http://", "https://", "git@", "git://")) or url.startswith("ssh://")):
+        raise HTTPException(400, "url must be an http(s), ssh or git@ URL")
+    ref = str(payload.get("ref") or "").strip()
+
+    tmp = tempfile.mkdtemp(prefix="hexallm_git_")
+    try:
+        cmd = ["git", "clone", "--depth", "1"]
+        if ref:
+            cmd += ["--branch", ref]
+        cmd += [url, tmp]
+        try:
+            proc = subprocess.run(cmd, capture_output=True, text=True, timeout=120)
+        except subprocess.TimeoutExpired:
+            raise HTTPException(400, "git clone timed out")
+        if proc.returncode != 0:
+            raise HTTPException(400, f"git clone failed: {proc.stderr.strip() or proc.stdout.strip()}")
+        shutil.rmtree(os.path.join(tmp, ".git"), ignore_errors=True)
+        return _install_from_dir(tmp, db)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
 
 
 @router.delete("/{name}", status_code=204)
