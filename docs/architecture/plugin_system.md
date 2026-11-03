@@ -384,7 +384,8 @@ Deliberately out of scope, and **not** present in the codebase:
 
 - Model adapters, UI extension slots, auth providers, storage backends,
   event hooks, and workflow templates.
-- Remote marketplace, signature verification, and `git`/`npm` install.
+- Remote marketplace (configured sources), signed archive verification, and `install_url`.
+  `git`/`npm` install is still not implemented.
 - A `hexallm plugin` CLI (scaffold/dev/test/build/publish).
 - WASM, gVisor, or Firecracker isolation; `inprocess` is the only non-subprocess
   mode.

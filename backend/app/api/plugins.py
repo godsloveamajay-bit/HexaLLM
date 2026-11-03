@@ -13,6 +13,8 @@ import json
 import logging
 import os
 import shutil
+import base64
+import hashlib
 import tarfile
 import tempfile
 import zipfile
@@ -258,18 +260,34 @@ def list_tools(
 
 @router.get("/marketplace")
 def marketplace(_admin=Depends(require_admin)):
-    """No remote registry is configured.
+    """List configured remote plugin sources.
 
-    Deliberately empty rather than a stub: plugins are installed from local
-    archives. A future remote source would go here, with signature
-    verification, and would need to be opt-in.
+    Sources are read from PLUGIN_MARKETPLACE_URLS (comma-separated). Each
+    source is expected to return JSON with a ``plugins`` array. Fetch failures
+    are reported per source rather than failing the whole request.
     """
+    import httpx
+
+    sources = []
+    for raw in [u.strip() for u in settings.PLUGIN_MARKETPLACE_URLS.split(",") if u.strip()]:
+        entry = {"url": raw, "plugins": [], "error": None}
+        try:
+            with httpx.Client(timeout=15, follow_redirects=True) as client:
+                resp = client.get(raw)
+                resp.raise_for_status()
+                payload = resp.json()
+            plugins = payload.get("plugins") if isinstance(payload, dict) else payload
+            if not isinstance(plugins, list):
+                raise ValueError("source did not return a plugin list")
+            entry["plugins"] = plugins
+        except Exception as exc:
+            entry["error"] = str(exc)
+        sources.append(entry)
     return {
-        "sources": [],
+        "sources": sources,
         "note": (
-            "No remote marketplace is configured. Install plugins with "
-            "POST /api/v1/plugins/install_archive (local path) or "
-            "POST /api/v1/plugins/install_url (remote URL)."
+            "Install a plugin with POST /api/v1/plugins/install_archive (local "
+            "path) or POST /api/v1/plugins/install_url (remote URL)."
         ),
     }
 
@@ -445,17 +463,36 @@ def install_plugin_archive(
     return _install_from_path(path, db)
 
 
+
+def _verify_archive_signature(data: bytes, signature_b64: str, public_key_pem: str) -> None:
+    """Verify an Ed25519 signature over the archive bytes."""
+    if not signature_b64:
+        raise PluginError("signature is required")
+    if not public_key_pem:
+        raise PluginError("PLUGIN_MARKETPLACE_PUBLIC_KEY is not configured")
+    try:
+        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+        from cryptography.hazmat.primitives.serialization import load_pem_public_key
+        key = load_pem_public_key(public_key_pem.encode("utf-8"))
+        if not isinstance(key, Ed25519PublicKey):
+            raise PluginError("PLUGIN_MARKETPLACE_PUBLIC_KEY must be an Ed25519 public key")
+        key.verify(base64.b64decode(signature_b64), data)
+    except Exception as exc:
+        raise PluginError(f"signature verification failed: {exc}")
+
+
 @router.post("/install_url", response_model=PluginOut)
 def install_plugin_url(
     payload: Dict[str, Any] = Body(...),
     db: Session = Depends(get_db),
     _admin=Depends(require_admin),
 ):
-    """Install a plugin from a remote URL (unsigned).
+    """Install a plugin from a remote URL.
 
-    The archive is downloaded to a temp file and then installed through the
-    same validation path as a local archive. Signature verification is not
-    performed, so only use trusted sources.
+    Optional ``sha256`` and ``signature`` fields pin and verify the archive.
+    When ``PLUGIN_MARKETPLACE_PUBLIC_KEY`` is configured, a signature is
+    required; otherwise unsigned installs remain allowed for backwards
+    compatibility.
     """
     url = str(payload.get("url") or "").strip()
     if not url:
@@ -464,6 +501,10 @@ def install_plugin_url(
         raise HTTPException(400, "url must be http(s)")
     if not url.lower().endswith((".tar.gz", ".tgz", ".zip")):
         raise HTTPException(400, "url must point to a .tar.gz, .tgz or .zip archive")
+
+    expected_sha = str(payload.get("sha256") or "").strip().lower()
+    signature = str(payload.get("signature") or "").strip()
+    public_key = settings.PLUGIN_MARKETPLACE_PUBLIC_KEY
 
     import httpx
 
@@ -476,6 +517,18 @@ def install_plugin_url(
                 with open(tmp.name, "wb") as f:
                     for chunk in resp.iter_bytes():
                         f.write(chunk)
+        with open(tmp.name, "rb") as f:
+            data = f.read()
+        digest = hashlib.sha256(data).hexdigest()
+        if expected_sha and digest != expected_sha:
+            raise HTTPException(400, "archive sha256 does not match")
+        if public_key and not signature:
+            raise HTTPException(400, "signature is required when a marketplace public key is configured")
+        if signature:
+            try:
+                _verify_archive_signature(data, signature, public_key)
+            except PluginError as exc:
+                raise HTTPException(400, str(exc))
         return _install_from_path(tmp.name, db)
     except httpx.HTTPError as exc:
         raise HTTPException(400, f"could not download archive: {exc}")

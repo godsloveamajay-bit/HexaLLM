@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "HexaLLM AI Platform"
-    VERSION: str = "14.0.8"
+    VERSION: str = "14.0.9"
     DEBUG: bool = False
 
     DATABASE_URL: str = "sqlite:///./hexallm.db"
@@ -77,6 +77,11 @@ class Settings(BaseSettings):
     # discovery is off unless explicitly turned on.
     PLUGINS_ENABLED: bool = True
     PLUGINS_DIR: str = "./plugins"
+    # Optional remote plugin marketplace. Comma-separated JSON source URLs.
+    PLUGIN_MARKETPLACE_URLS: str = ""
+    # Optional Ed25519 public key (PEM) used to verify plugin archives and
+    # marketplace descriptors. When set, signed installs are required.
+    PLUGIN_MARKETPLACE_PUBLIC_KEY: str = ""
     # Hard ceiling on a single plugin tool call, regardless of manifest.
     PLUGIN_MAX_TIMEOUT: int = 60
     # Cap on a plugin's stdout, to stop a runaway loop filling the DB.
