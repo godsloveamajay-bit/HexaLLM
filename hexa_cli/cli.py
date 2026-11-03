@@ -829,3 +829,65 @@ def cmd_models():
             console.print(f"[red]Error:[/] {e}")
 
     asyncio.run(_list())
+
+
+# ── Plugin scaffolding ──────────────────────────────────────────────────────
+
+@main.group("plugin")
+def cmd_plugin():
+    """Scaffold and manage HexaLLM plugins."""
+
+
+@cmd_plugin.command("new")
+@click.argument("name")
+@click.option("--dir", "target_dir", default=".", help="Parent directory for the new plugin.")
+def cmd_plugin_new(name: str, target_dir: str):
+    """Create a new plugin scaffold (manifest.json + plugin.py)."""
+    import re
+
+    if not re.match(r"^[a-z][a-z0-9_-]*$", name):
+        console.print("[red]Plugin name must start with a letter and use lowercase letters, digits, - or _.[/]")
+        return
+
+    root = Path(target_dir) / name
+    if root.exists():
+        console.print(f"[red]Directory already exists: {root}[/]")
+        return
+
+    root.mkdir(parents=True)
+    manifest = {
+        "name": name,
+        "version": "0.1.0",
+        "description": "A HexaLLM tool plugin.",
+        "author": "",
+        "license": "MIT",
+        "entry_point": "plugin.py",
+        "isolation": "sandbox",
+        "permissions": {"filesystem": [], "network": [], "secrets": [], "subprocess": False},
+        "tools": [
+            {
+                "name": f"{name.replace('-', '_')}_echo",
+                "description": "Echo the provided text.",
+                "input_schema": {
+                    "type": "object",
+                    "properties": {"text": {"type": "string"}},
+                    "required": ["text"],
+                },
+            }
+        ],
+    }
+    tool_name = f"{name.replace('-', '_')}_echo"
+    plugin_body = (
+        "TOOLS = [\n"
+        f"    {{\"name\": {tool_name!r}, \"description\": \"Echo the provided text.\",\n"
+        "     \"input_schema\": {\"type\": \"object\", \"properties\": {\"text\": {\"type\": \"string\"}}, \"required\": [\"text\"]}},\n"
+        "]\n\n"
+        "def run(tool, args):\n"
+        f"    if tool == {tool_name!r}:\n"
+        "        return str(args.get(\"text\", \"\"))\n"
+        "    raise ValueError(f\"unknown tool: {tool}\")\n"
+    )
+    (root / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (root / "plugin.py").write_text(plugin_body)
+    console.print(f"[green]Created plugin scaffold:[/] {root}")
+    console.print("Next: review manifest.json, then install with POST /api/v1/plugins/install_archive")
