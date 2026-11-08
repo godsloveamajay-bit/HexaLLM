@@ -594,6 +594,47 @@ def install_plugin_git(
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+
+@router.post("/install_npm", response_model=PluginOut)
+def install_plugin_npm(
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Install a plugin from an npm package.
+
+    Runs ``npm pack`` to fetch the package tarball into a temp directory, then
+    installs it through the same validation path as a local archive. The package
+    must contain a ``manifest.json`` at its root (or in a single top-level
+    directory).
+    """
+    package = str(payload.get("package") or "").strip()
+    if not package:
+        raise HTTPException(400, "'package' is required")
+
+    tmp = tempfile.mkdtemp(prefix="hexallm_npm_")
+    try:
+        try:
+            proc = subprocess.run(
+                ["npm", "pack", package, "--pack-destination", tmp],
+                capture_output=True, text=True, timeout=180,
+                cwd=tmp,
+            )
+        except subprocess.TimeoutExpired:
+            raise HTTPException(400, "npm pack timed out")
+        if proc.returncode != 0:
+            raise HTTPException(400, f"npm pack failed: {proc.stderr.strip() or proc.stdout.strip()}")
+
+        tarballs = [os.path.join(tmp, f) for f in os.listdir(tmp)
+                    if f.endswith((".tgz", ".tar.gz"))]
+        if not tarballs:
+            raise HTTPException(400, "npm pack produced no archive")
+        tarball = max(tarballs, key=os.path.getmtime)
+        return _install_from_path(tarball, db)
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 @router.delete("/{name}", status_code=204)
 def uninstall_plugin(
     name: str,
