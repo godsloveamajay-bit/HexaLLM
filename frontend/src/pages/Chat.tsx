@@ -438,6 +438,7 @@ export default function ChatPage() {
   const [showInspector, setShowInspector] = useState(false)
   const [variants, setVariants] = useState<HexaLLMVariant[]>([])
   const [hubModels, setHubModels] = useState<{ slug: string; name: string }[]>([])
+  const [pluginModels, setPluginModels] = useState<{ id: string; name: string }[]>([])
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [attachment, setAttachment] = useState<Attachment | null>(null)
   const [templates, setTemplates] = useState<Template[]>([])
@@ -612,6 +613,10 @@ export default function ChatPage() {
     try {
       const { data } = await api.get('/models')
       setHubModels((data || []).map((m: any) => ({ slug: m.slug, name: m.name })))
+    } catch {}
+    try {
+      const { data } = await api.get('/plugins/models')
+      setPluginModels((data?.models || []).map((m: any) => ({ id: m.id, name: m.name })))
     } catch {}
   }
   const loadTemplates = async () => {
@@ -1564,6 +1569,14 @@ export default function ChatPage() {
                 className="bg-gray-900 border border-gray-800 rounded-md px-1.5 py-1 text-xs text-gray-400 focus:outline-none">
                 <optgroup label="Model Hub">
                   {hubModels.map((m) => <option key={m.slug} value={`custom:${m.slug}`}>{m.name}</option>)}
+                </optgroup>
+              </select>
+            )}
+            {pluginModels.length > 0 && (
+              <select value={model} onChange={(e) => onModelChange(e.target.value)}
+                className="bg-gray-900 border border-gray-800 rounded-md px-1.5 py-1 text-xs text-gray-400 focus:outline-none">
+                <optgroup label="Plugin adapters">
+                  {pluginModels.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
                 </optgroup>
               </select>
             )}

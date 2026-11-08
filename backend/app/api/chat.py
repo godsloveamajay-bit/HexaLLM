@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import AsyncIterator, Dict, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, List, Optional, Tuple
 from ..core.database import get_db
 from ..core.security import get_current_user, get_optional_user
 from ..models.user import User
@@ -226,6 +226,41 @@ def _resolve_hub_model(req: ChatRequest, db: Session, current_user: Optional[Use
     return m
 
 
+def _resolve_model_adapter(req: ChatRequest) -> Optional[Dict[str, Any]]:
+    """Plugin model adapters arrive as model='adapter:<name>'. Resolve the
+    adapter to its base model, merging its prompt/sampling into the request."""
+    if not req.model.startswith("adapter:"):
+        return None
+    from ..services.plugin_service import registry
+    registry.ensure_loaded()
+    name = req.model[len("adapter:"):]
+    adapter = registry.model_adapter(name)
+    if adapter is None:
+        raise HTTPException(status_code=404, detail=f"Model adapter {name!r} not found")
+    req.model = str(adapter.get("base_model") or req.model)
+    if adapter.get("system_prompt"):
+        if req.system_prompt:
+            req.system_prompt = f"{req.system_prompt}\n\n{adapter['system_prompt']}"
+        else:
+            req.system_prompt = str(adapter["system_prompt"])
+    if adapter.get("temperature") is not None and req.temperature is None:
+        try:
+            req.temperature = float(adapter["temperature"])
+        except (TypeError, ValueError):
+            pass
+    if adapter.get("top_p") is not None and req.top_p is None:
+        try:
+            req.top_p = float(adapter["top_p"])
+        except (TypeError, ValueError):
+            pass
+    if adapter.get("max_tokens") is not None and req.max_tokens is None:
+        try:
+            req.max_tokens = int(adapter["max_tokens"])
+        except (TypeError, ValueError):
+            pass
+    return adapter
+
+
 def _resolve_attachment(req: ChatRequest, messages: List[Dict]) -> List[str]:
     """Extract attachment from request. Mutates messages in-place for text/pdf.
     Returns list of base64 image strings for multimodal, or empty list."""
@@ -291,6 +326,7 @@ async def chat_completions(
     # Model Hub models arrive as custom:<slug>; resolve the entry before any
     # model gating so its base is what the gates evaluate (public entries are
     # usable by anyone; private ones only by their owner).
+    _resolve_model_adapter(req)
     custom_model = _resolve_hub_model(req, db, current_user)
 
     if is_guest:

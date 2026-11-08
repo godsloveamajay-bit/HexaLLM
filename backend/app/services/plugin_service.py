@@ -273,6 +273,7 @@ class PluginManifest:
     # a negative value pins the plugin's rows indefinitely.
     retention_days: Optional[int] = None
     tools: List[Dict[str, Any]] = field(default_factory=list)
+    model_adapters: List[Dict[str, Any]] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -324,6 +325,30 @@ class PluginManifest:
                 "declaring a daily cost budget requires a non-empty network permission"
             )
 
+
+        adapters = data.get("model_adapters") or data.get("models") or []
+        if not isinstance(adapters, list):
+            raise PluginError("model_adapters must be a list")
+        seen_adapters: set[str] = set()
+        for spec in adapters:
+            if not isinstance(spec, dict):
+                raise PluginError("each model adapter must be an object")
+            aname = str(spec.get("name") or "").strip()
+            if not aname:
+                raise PluginError("model adapter must have a name")
+            if aname in seen_adapters:
+                raise PluginError(f"duplicate model adapter name: {aname}")
+            seen_adapters.add(aname)
+            base = str(spec.get("base_model") or spec.get("base") or "").strip()
+            if not base:
+                raise PluginError(f"model adapter {aname} must declare base_model")
+            if spec.get("temperature") is not None:
+                try:
+                    float(spec.get("temperature"))
+                except (TypeError, ValueError):
+                    raise PluginError(f"model adapter {aname}: temperature must be a number")
+        adapters = [dict(a) for a in adapters]
+
         return cls(
             name=name,
             version=str(data.get("version") or "0.0.0"),
@@ -337,6 +362,7 @@ class PluginManifest:
             budget=_budget,
             retention_days=_opt_int(data.get("retention_days"), "retention_days"),
             tools=tools,
+            model_adapters=adapters,
             raw=data,
         )
 
@@ -806,6 +832,37 @@ class PluginRegistry:
                         "input_schema": spec.get("input_schema", {}),
                     })
         return out
+
+
+    def model_adapters(self) -> List[Dict[str, Any]]:
+        """Model adapters contributed by enabled plugins."""
+        self.ensure_loaded()
+        out: List[Dict[str, Any]] = []
+        for pname, plugin in self._plugins.items():
+            if not plugin.enabled or plugin.error:
+                continue
+            for spec in plugin.manifest.model_adapters:
+                name = str(spec.get("name") or "").strip()
+                if not name:
+                    continue
+                out.append({
+                    "id": f"adapter:{name}",
+                    "name": name,
+                    "plugin": pname,
+                    "description": str(spec.get("description") or ""),
+                    "base_model": str(spec.get("base_model") or spec.get("base") or ""),
+                    "system_prompt": spec.get("system_prompt"),
+                    "temperature": spec.get("temperature"),
+                    "top_p": spec.get("top_p"),
+                    "max_tokens": spec.get("max_tokens"),
+                })
+        return out
+
+    def model_adapter(self, name: str) -> Optional[Dict[str, Any]]:
+        for adapter in self.model_adapters():
+            if adapter["name"] == name or adapter["id"] == name:
+                return adapter
+        return None
 
     def tool_schema(self, tool_name: str) -> Dict[str, Any]:
         """The declared input schema for a tool, or {} if unknown."""

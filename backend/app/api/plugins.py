@@ -30,7 +30,7 @@ from sqlalchemy.orm import Session
 
 from ..core.config import settings
 from ..core.database import SessionLocal, get_db
-from ..core.security import require_admin
+from ..core.security import get_current_user, require_admin
 from ..models.plugin import PluginCallLog, PluginInstall, PluginSecret
 from ..services import plugin_service
 from ..services.plugin_service import PluginError, plugin_data_dir, registry, encrypt_secret, decrypt_secret
@@ -291,6 +291,16 @@ def marketplace(_admin=Depends(require_admin)):
             "path) or POST /api/v1/plugins/install_url (remote URL)."
         ),
     }
+
+
+@router.get("/models")
+def list_plugin_models(
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    """List model adapters contributed by enabled plugins."""
+    _load_enabled(db)
+    return {"models": registry.model_adapters()}
 
 
 @router.get("/{name}/manifest")
