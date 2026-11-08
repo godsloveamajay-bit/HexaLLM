@@ -272,6 +272,8 @@ class PluginManifest:
     # PLUGIN_AUDIT_RETENTION_DAYS when set. 0 means "use the global setting";
     # a negative value pins the plugin's rows indefinitely.
     retention_days: Optional[int] = None
+    retention_max_rows: Optional[int] = None
+    retention_max_mb: Optional[float] = None
     tools: List[Dict[str, Any]] = field(default_factory=list)
     model_adapters: List[Dict[str, Any]] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)
@@ -361,6 +363,8 @@ class PluginManifest:
             rate_limit=PluginRateLimit.from_dict(data.get("rate_limit")),
             budget=_budget,
             retention_days=_opt_int(data.get("retention_days"), "retention_days"),
+            retention_max_rows=_opt_int(data.get("retention_max_rows"), "retention_max_rows"),
+            retention_max_mb=_opt_float(data.get("retention_max_mb"), "retention_max_mb"),
             tools=tools,
             model_adapters=adapters,
             raw=data,
@@ -379,6 +383,8 @@ class PluginManifest:
             "rate_limit": self.rate_limit.to_dict(),
             "budget": self.budget.to_dict(),
             "retention_days": self.retention_days,
+            "retention_max_rows": self.retention_max_rows,
+            "retention_max_mb": self.retention_max_mb,
             "tools": self.tools,
         }
 
@@ -408,6 +414,15 @@ def _opt_int(value: Any, field_name: str) -> Optional[int]:
         return int(value)
     except (TypeError, ValueError):
         raise PluginError(f"{field_name} must be an integer")
+
+def _opt_float(value: Any, field_name: str) -> Optional[float]:
+    if value is None:
+        return None
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        raise PluginError(f"{field_name} must be a number")
+    return max(0.0, v)
 
 
 def plugin_data_dir(name: str) -> str:
@@ -1343,6 +1358,24 @@ def effective_retention_days(plugin_name: Optional[str]) -> Optional[int]:
     return declared
 
 
+def effective_retention_max_rows(plugin_name: Optional[str]) -> Optional[int]:
+    if not plugin_name:
+        return None
+    plugin = registry.plugins.get(plugin_name)
+    if not plugin or plugin.error:
+        return None
+    return plugin.manifest.retention_max_rows
+
+
+def effective_retention_max_mb(plugin_name: Optional[str]) -> Optional[float]:
+    if not plugin_name:
+        return None
+    plugin = registry.plugins.get(plugin_name)
+    if not plugin or plugin.error:
+        return None
+    return plugin.manifest.retention_max_mb
+
+
 def prune_audit(retention_days: Optional[int] = None, batch_size: int = 2000) -> int:
     """Trim the audit trail. Returns the number of rows removed.
 
@@ -1425,6 +1458,57 @@ def prune_audit(retention_days: Optional[int] = None, batch_size: int = 2000) ->
                 + func.coalesce(func.length(PluginCallLog.output_preview), 0)
                 + func.coalesce(func.length(PluginCallLog.error), 0),
             ).order_by(PluginCallLog.id.desc()).all()
+            used = 0
+            for row_id, size in rows:
+                used += int(size or 0)
+                if used > budget_bytes:
+                    candidates.append(row_id)
+        finally:
+            db.close()
+
+    # Ensure distinct plugin names are available even when age pruning is off.
+    try:
+        names
+    except NameError:
+        db = SessionLocal()
+        try:
+            names = [n for (n,) in db.query(PluginCallLog.plugin_name).distinct().all()]
+        finally:
+            db.close()
+
+    # Per-plugin row-count caps (override the global cap for that plugin).
+    for name in names:
+        cap = effective_retention_max_rows(name)
+        if not cap:
+            continue
+        db = SessionLocal()
+        try:
+            total = db.query(PluginCallLog.id).filter(PluginCallLog.plugin_name == name).count()
+            if total > cap:
+                surplus = total - cap
+                oldest = [
+                    row_id for (row_id,) in db.query(PluginCallLog.id)
+                    .filter(PluginCallLog.plugin_name == name)
+                    .order_by(PluginCallLog.id).limit(surplus).all()
+                ]
+                candidates.extend(oldest)
+        finally:
+            db.close()
+
+    # Per-plugin size caps.
+    for name in names:
+        cap_mb = effective_retention_max_mb(name)
+        if not cap_mb:
+            continue
+        budget_bytes = int(cap_mb * 1024 * 1024)
+        db = SessionLocal()
+        try:
+            rows = db.query(
+                PluginCallLog.id,
+                func.coalesce(func.length(PluginCallLog.args_preview), 0)
+                + func.coalesce(func.length(PluginCallLog.output_preview), 0)
+                + func.coalesce(func.length(PluginCallLog.error), 0),
+            ).filter(PluginCallLog.plugin_name == name).order_by(PluginCallLog.id.desc()).all()
             used = 0
             for row_id, size in rows:
                 used += int(size or 0)

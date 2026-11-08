@@ -394,8 +394,8 @@ Deliberately out of scope, and **not** present in the codebase:
   spend, which the host cannot check; a cost budget now requires a declared
   `network` permission, but spend itself cannot be verified. See
   [Cost is self-reported](#cost-is-self-reported-and-cannot-be-verified).
-- Retention by row age only for plugins whose window is not overridden;
-  row-count and size caps are global, not per plugin.
+- Retention row-count and size caps may be overridden per plugin via
+  `retention_max_rows` and `retention_max_mb`.
 - Secret storage beyond environment variables — declared secrets are read from
   the backend's environment, not from a vault.
 
