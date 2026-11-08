@@ -891,3 +891,65 @@ def cmd_plugin_new(name: str, target_dir: str):
     (root / "plugin.py").write_text(plugin_body)
     console.print(f"[green]Created plugin scaffold:[/] {root}")
     console.print("Next: review manifest.json, then install with POST /api/v1/plugins/install_archive")
+
+
+@cmd_plugin.command("validate")
+@click.argument("path", type=click.Path(exists=True, file_okay=False))
+def cmd_plugin_validate(path: str):
+    """Validate a plugin directory's manifest.json."""
+    import json
+    root = Path(path)
+    manifest_path = root / "manifest.json"
+    if not manifest_path.is_file():
+        console.print("[red]manifest.json not found[/]")
+        return
+    try:
+        data = json.loads(manifest_path.read_text())
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]Invalid JSON: {exc}[/]")
+        return
+    required = ("name", "version", "entry_point", "tools")
+    missing = [k for k in required if k not in data]
+    if missing:
+        console.print(f"[red]Missing fields: {', '.join(missing)}[/]")
+        return
+    if not (root / str(data["entry_point"])).is_file():
+        console.print(f"[red]entry_point not found: {data['entry_point']}[/]")
+        return
+    console.print(f"[green]Valid manifest:[/] {data['name']} v{data['version']} ({len(data['tools'])} tools)")
+
+
+@cmd_plugin.command("test")
+@click.argument("path", type=click.Path(exists=True, file_okay=False))
+def cmd_plugin_test(path: str):
+    """Run a plugin's module in a subprocess to catch syntax/import errors."""
+    import subprocess as _sp
+    root = Path(path)
+    entry = root / "manifest.json"
+    if not entry.is_file():
+        console.print("[red]manifest.json not found[/]")
+        return
+    plugin_file = root / "plugin.py"
+    if not plugin_file.is_file():
+        console.print("[red]plugin.py not found[/]")
+        return
+    proc = _sp.run([sys.executable, "-c",
+                    f"import runpy, sys; sys.path.insert(0, {str(root)!r}); runpy.run_path({str(plugin_file)!r}, run_name='__main__')"],
+                   capture_output=True, text=True, timeout=30)
+    if proc.returncode != 0:
+        console.print(f"[red]Plugin failed to load:[/]\n{proc.stderr or proc.stdout}")
+        return
+    console.print("[green]Plugin module loads successfully.[/]")
+
+
+@cmd_plugin.command("build")
+@click.argument("path", type=click.Path(exists=True, file_okay=False))
+@click.option("-o", "--output", default=None, help="Output archive path.")
+def cmd_plugin_build(path: str, output: Optional[str]):
+    """Build a .tar.gz archive from a plugin directory."""
+    import tarfile
+    root = Path(path)
+    out = Path(output) if output else Path(f"{root.name}.tar.gz")
+    with tarfile.open(out, "w:gz") as tf:
+        tf.add(root, arcname=root.name)
+    console.print(f"[green]Built archive:[/] {out}")

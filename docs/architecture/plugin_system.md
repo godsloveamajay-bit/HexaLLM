@@ -383,8 +383,8 @@ second is logged, so don't rely on shadowing.
 Deliberately out of scope, and **not** present in the codebase:
 
 - Model adapters (plugin-contributed model adapters via `model_adapters`).
-- UI extension slots, auth providers, storage backends, event hooks, and
-  workflow templates.
+- Event hooks (plugins may declare `hooks`: event -> tool).
+- UI extension slots, auth providers, storage backends, and workflow templates.
 - Remote marketplace (configured sources), signed archive verification,
   `install_url`, `install_git`, and `install_npm`.
 - A `hexallm plugin` CLI (scaffold/dev/test/build/publish).

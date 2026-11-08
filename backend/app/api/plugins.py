@@ -293,6 +293,25 @@ def marketplace(_admin=Depends(require_admin)):
     }
 
 
+@router.post("/emit")
+async def emit_plugin_event(
+    payload: Dict[str, Any] = Body(...),
+    db: Session = Depends(get_db),
+    admin=Depends(require_admin),
+):
+    """Emit a named event to plugins that declared a hook for it."""
+    _load_enabled(db)
+    event = str(payload.get("event") or "").strip()
+    if not event:
+        raise HTTPException(400, "'event' is required")
+    body = payload.get("payload")
+    if body is not None and not isinstance(body, dict):
+        raise HTTPException(400, "'payload' must be an object")
+    handlers = len(registry.hooks_for(event))
+    await registry.emit(event, body or {}, user_id=admin.id)
+    return {"event": event, "handlers": handlers}
+
+
 @router.get("/models")
 def list_plugin_models(
     db: Session = Depends(get_db),

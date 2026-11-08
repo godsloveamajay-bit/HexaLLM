@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "HexaLLM AI Platform"
-    VERSION: str = "14.0.12"
+    VERSION: str = "14.0.13"
     DEBUG: bool = False
 
     DATABASE_URL: str = "sqlite:///./hexallm.db"

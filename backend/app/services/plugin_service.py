@@ -276,6 +276,7 @@ class PluginManifest:
     retention_max_mb: Optional[float] = None
     tools: List[Dict[str, Any]] = field(default_factory=list)
     model_adapters: List[Dict[str, Any]] = field(default_factory=list)
+    hooks: Dict[str, str] = field(default_factory=dict)
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -351,6 +352,23 @@ class PluginManifest:
                     raise PluginError(f"model adapter {aname}: temperature must be a number")
         adapters = [dict(a) for a in adapters]
 
+
+        hooks_raw = data.get("hooks") or {}
+        if isinstance(hooks_raw, list):
+            hooks_raw = {str(x): str(x) for x in hooks_raw}
+        if not isinstance(hooks_raw, dict):
+            raise PluginError("hooks must be an object or list")
+        hooks: Dict[str, str] = {}
+        tool_names = {str(t.get("name")) for t in tools}
+        for event, tool in hooks_raw.items():
+            event = str(event).strip()
+            tool = str(tool).strip()
+            if not event:
+                raise PluginError("hook event name must not be empty")
+            if tool not in tool_names:
+                raise PluginError(f"hook {event!r} references undeclared tool {tool!r}")
+            hooks[event] = tool
+
         return cls(
             name=name,
             version=str(data.get("version") or "0.0.0"),
@@ -367,6 +385,7 @@ class PluginManifest:
             retention_max_mb=_opt_float(data.get("retention_max_mb"), "retention_max_mb"),
             tools=tools,
             model_adapters=adapters,
+            hooks=hooks,
             raw=data,
         )
 
@@ -878,6 +897,30 @@ class PluginRegistry:
             if adapter["name"] == name or adapter["id"] == name:
                 return adapter
         return None
+
+
+    def hooks_for(self, event: str) -> List[Tuple["LoadedPlugin", str]]:
+        """Enabled plugins that handle ``event``."""
+        self.ensure_loaded()
+        out: List[Tuple[LoadedPlugin, str]] = []
+        for plugin in self._plugins.values():
+            if not plugin.enabled or plugin.error:
+                continue
+            tool = plugin.manifest.hooks.get(event)
+            if tool:
+                out.append((plugin, tool))
+        return out
+
+    async def emit(self, event: str, payload: Optional[Dict[str, Any]] = None,
+                   user_id: Optional[int] = None) -> None:
+        """Emit an event to plugins that declared a hook for it."""
+        payload = payload or {}
+        for plugin, tool in self.hooks_for(event):
+            try:
+                await self.call(tool, {"event": event, "payload": payload}, user_id=user_id)
+            except Exception:
+                logger.exception("Plugin hook %s.%s failed for event %s",
+                                 plugin.manifest.name, tool, event)
 
     def tool_schema(self, tool_name: str) -> Dict[str, Any]:
         """The declared input schema for a tool, or {} if unknown."""
