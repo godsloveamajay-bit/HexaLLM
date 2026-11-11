@@ -23,11 +23,12 @@ async function login(page: any) {
   await page.fill('input[type="email"]', 'test@example.com')
   await page.fill('input[type="password"]', 'TestPass123!')
   await page.click('button:has-text("Sign In")')
-  await page.waitForURL('**/chat', { timeout: 15_000 })
+  await page.waitForURL(/\/(chat|system)$/, { timeout: 15_000 })
 }
 
 test('chat composer is available', async ({ page }) => {
   await login(page)
+  await page.goto('/chat')
   await expect(page.locator('textarea').first()).toBeVisible()
 })
 
