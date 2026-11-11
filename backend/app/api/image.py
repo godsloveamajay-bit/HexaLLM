@@ -24,7 +24,6 @@ _ENHANCE_SYSTEM = (
 )
 
 STABILITY_MODELS = {
-    "sd3-ultra": "Stable Diffusion 3.5 Ultra",
     "sd3-core": "Stable Diffusion 3.5 Core",
 }
 

@@ -18,7 +18,6 @@ interface GeneratedImage {
 // Server-side generation via Stability AI — works in every browser (no
 // browser-side SDK or popup auth).
 const IMAGE_MODELS: ImageModel[] = [
-  { id: 'sd3-ultra', name: 'Stable Diffusion 3.5 Ultra' },
   { id: 'sd3-core', name: 'Stable Diffusion 3.5 Core' },
 ]
 
@@ -43,7 +42,7 @@ const STYLE_PRESETS = [
 export default function ImageGenPage() {
   const [prompt, setPrompt] = useState('')
   const [size, setSize] = useState(SIZES[0])
-  const [model, setModel] = useState('sd3-ultra')
+  const [model, setModel] = useState('sd3-core')
   const [enhancePrompt, setEnhancePrompt] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [enhancing, setEnhancing] = useState(false)
