@@ -27,6 +27,13 @@ STABILITY_MODELS = {
     "sd3-core": "Stable Diffusion 3.5 Core",
 }
 
+POLLINATIONS_MODELS = {
+    "pollinations-flux": "Pollinations Flux (free)",
+    "pollinations-turbo": "Pollinations Turbo (free)",
+}
+
+ALL_IMAGE_MODELS = {**STABILITY_MODELS, **POLLINATIONS_MODELS}
+
 _ASPECT_RATIOS = {
     (16, 9): "16:9", (9, 16): "9:16",
     (3, 2): "3:2", (2, 3): "2:3",
@@ -67,6 +74,21 @@ async def generate_image_data_url(
     negative_prompt: str = "",
 ) -> dict:
     seed = seed if seed is not None else random.randint(1, 2**31)
+
+    if model in POLLINATIONS_MODELS:
+        from urllib.parse import quote
+        pm = model.split("-", 1)[1] or "flux"
+        url = (
+            "https://image.pollinations.ai/prompt/" + quote(prompt, safe="")
+            + f"?width={width}&height={height}&seed={seed}&model={pm}&nologo=true"
+        )
+        async with httpx.AsyncClient(timeout=120.0, follow_redirects=True) as client:
+            resp = await client.get(url)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=502, detail=f"Pollinations: {resp.text[:300]}")
+        content_type = resp.headers.get("content-type", "image/png").split(";")[0]
+        b64 = base64.b64encode(resp.content).decode()
+        return {"data_url": f"data:{content_type};base64,{b64}", "seed": seed}
 
     api_key = settings.STABILITY_API_KEY
     if not api_key:
@@ -123,7 +145,7 @@ async def generate_image(
     from ..services.billing_enforcement import check_image_gen
     check_image_gen(db, current_user, client_ip=request.client.host if request.client else None)
 
-    if req.model not in STABILITY_MODELS:
+    if req.model not in ALL_IMAGE_MODELS:
         raise HTTPException(status_code=400, detail=f"Unknown model '{req.model}'")
 
     final_prompt = req.prompt
@@ -146,12 +168,13 @@ async def generate_image(
     except Exception as exc:
         raise HTTPException(status_code=502, detail=f"Image provider error: {exc}")
 
+    provider = "pollinations" if req.model in POLLINATIONS_MODELS else "stability"
     return {
         "url": result["data_url"],
         "seed": result["seed"],
         "prompt": req.prompt,
         "enhanced_prompt": final_prompt if req.enhance_prompt else None,
-        "provider": "stability",
+        "provider": provider,
     }
 
 
@@ -174,4 +197,5 @@ async def enhance_prompt_only(req: EnhanceRequest, current_user: User = Depends(
 async def list_image_models():
     return {
         "stability": [{"id": k, "name": v} for k, v in STABILITY_MODELS.items()],
+        "pollinations": [{"id": k, "name": v} for k, v in POLLINATIONS_MODELS.items()],
     }

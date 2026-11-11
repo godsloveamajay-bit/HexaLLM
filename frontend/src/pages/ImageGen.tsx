@@ -18,6 +18,8 @@ interface GeneratedImage {
 // Server-side generation via Stability AI — works in every browser (no
 // browser-side SDK or popup auth).
 const IMAGE_MODELS: ImageModel[] = [
+  { id: 'pollinations-flux', name: 'Pollinations Flux (free)' },
+  { id: 'pollinations-turbo', name: 'Pollinations Turbo (free)' },
   { id: 'sd3-core', name: 'Stable Diffusion 3.5 Core' },
 ]
 
@@ -42,7 +44,7 @@ const STYLE_PRESETS = [
 export default function ImageGenPage() {
   const [prompt, setPrompt] = useState('')
   const [size, setSize] = useState(SIZES[0])
-  const [model, setModel] = useState('sd3-core')
+  const [model, setModel] = useState('pollinations-flux')
   const [enhancePrompt, setEnhancePrompt] = useState(false)
   const [generating, setGenerating] = useState(false)
   const [enhancing, setEnhancing] = useState(false)
@@ -130,7 +132,7 @@ export default function ImageGenPage() {
         <form onSubmit={generate} className="space-y-4">
           <p className="text-xs text-gray-500 flex items-center gap-1.5">
             <Zap className="w-3.5 h-3.5 text-primary-400" />
-            Generated on the server with Stable Diffusion — works in any browser.
+            Generated on the server — Pollinations needs no API key.
           </p>
 
           <div>
