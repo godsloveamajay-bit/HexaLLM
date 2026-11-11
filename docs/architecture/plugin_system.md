@@ -388,8 +388,10 @@ Deliberately out of scope, and **not** present in the codebase:
 - Remote marketplace (configured sources), signed archive verification,
   `install_url`, `install_git`, and `install_npm`.
 - A `hexallm plugin` CLI (scaffold/dev/test/build/publish).
-- WASM, gVisor, or Firecracker isolation; `inprocess` is the only non-subprocess
-  mode.
+- WASM, gVisor, or Firecracker isolation; `inprocess` is the only non-subprocess mode. When Docker is unavailable the
+  subprocess fallback now runs under bubblewrap (`bwrap`) when it is installed,
+  with a read-only root and an isolated network namespace; otherwise it falls
+  back to a plain subprocess with a timeout.
 - **Verified** cost accounting. Budgets are enforced against self-reported
   spend, which the host cannot check; a cost budget now requires a declared
   `network` permission, but spend itself cannot be verified. See

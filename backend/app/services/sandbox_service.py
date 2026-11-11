@@ -101,6 +101,9 @@ class Sandbox:
         self._cleaned = False
         self._container_id: Optional[str] = None
         self.mode = "docker" if DOCKER_AVAILABLE else "subprocess"
+        self._bwrap = shutil.which("bwrap") is not None
+        if self.mode == "subprocess" and self._bwrap:
+            self.mode = "bwrap"
 
         if DOCKER_AVAILABLE:
             self._container_id = self._start_container()
@@ -118,6 +121,8 @@ class Sandbox:
             f.write(code)
         if self._container_id:
             return await self._docker_exec(["python", "/workspace/_run.py"], timeout)
+        if self._bwrap:
+            return await self._bwrap_run(["python3", "/var/tmp/_run.py"], timeout)
         return await self._subprocess_run(["python3", code_path], timeout)
 
     async def list_files(self, pattern: str) -> str:
@@ -125,6 +130,9 @@ class Sandbox:
         pattern = pattern.strip() or "."
         if self._container_id:
             return await self._docker_exec(["bash", "-c",
+                f"find {pattern} -maxdepth 2 -not -path '*/.*' 2>/dev/null | head -50 || true"], timeout=10)
+        if self._bwrap:
+            return await self._bwrap_run(["bash", "-c",
                 f"find {pattern} -maxdepth 2 -not -path '*/.*' 2>/dev/null | head -50 || true"], timeout=10)
         import glob as _glob
         try:
@@ -145,6 +153,8 @@ class Sandbox:
     async def execute_bash(self, cmd: str, timeout: int = DEFAULT_TIMEOUT) -> str:
         if self._container_id:
             return await self._docker_exec(["bash", "-c", cmd], timeout)
+        if self._bwrap:
+            return await self._bwrap_run(["bash", "-c", cmd], timeout)
         return await self._subprocess_run(["bash", "-c", cmd], timeout, cwd=self.workspace)
 
     async def write_file(self, input_str: str) -> str:
@@ -286,6 +296,38 @@ class Sandbox:
             return out or "(no output)"
         except Exception as e:
             return f"Execution error: {e}"
+
+    async def _bwrap_run(self, cmd: List[str], timeout: int) -> str:
+        bwrap_cmd = [
+            "bwrap",
+            "--ro-bind", "/", "/",
+            "--bind", self.workspace, "/var/tmp",
+            "--proc", "/proc",
+            "--dev", "/dev",
+            "--unshare-all",
+            "--unshare-net",
+            "--die-with-parent",
+            "--chdir", "/var/tmp",
+            *cmd,
+        ]
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *bwrap_cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(proc.communicate(), timeout=timeout)
+            except asyncio.TimeoutError:
+                proc.kill()
+                return f"Execution timed out after {timeout}s"
+            out = stdout.decode(errors="replace")
+            err = stderr.decode(errors="replace").strip()
+            if err:
+                out += f"\nSTDERR:\n{err}"
+            return out or "(no output)"
+        except Exception as e:
+            return f"Sandbox exec error: {e}"
 
     # ── Helpers ─────────────────────────────────────────────────────────────
 
