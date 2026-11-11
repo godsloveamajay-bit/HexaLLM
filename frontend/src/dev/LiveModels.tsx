@@ -17,7 +17,7 @@ export default function LiveModels() {
     try {
       const h = await api.get('/health')
       setHealth(h.data?.ollama ?? 'unknown')
-      const m = await api.get('/models/ollama')
+      const m = await api.get('/models/ollama/list')
       setModels(m.data?.models ?? [])
       setError(null)
     } catch (e: any) {
