@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
-import { Loader2, Eye, EyeOff, Github } from 'lucide-react'
+import { Loader2, Eye, EyeOff, Github, MessageCircle, GitBranch } from 'lucide-react'
 import { useAuth } from '../store/auth'
 import { postLoginPath } from '../lib/devFeatures'
 import { baseURL } from '../lib/api'
@@ -23,6 +23,8 @@ function parseApiError(err: any, fallback: string): string {
 const PROVIDERS = [
   { id: 'google', label: 'Google', icon: GoogleIcon },
   { id: 'github', label: 'GitHub', icon: Github },
+  { id: 'discord', label: 'Discord', icon: MessageCircle },
+  { id: 'gitlab', label: 'GitLab', icon: GitBranch },
 ]
 
 function oauthRedirect(provider: string) {

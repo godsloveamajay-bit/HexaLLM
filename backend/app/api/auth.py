@@ -36,6 +36,18 @@ _OAUTH = {
         "userinfo_url": "https://api.github.com/user",
         "scope":        "read:user user:email",
     },
+    "discord": {
+        "auth_url":     "https://discord.com/api/oauth2/authorize",
+        "token_url":    "https://discord.com/api/oauth2/token",
+        "userinfo_url": "https://discord.com/api/users/@me",
+        "scope":        "identify email",
+    },
+    "gitlab": {
+        "auth_url":     "https://gitlab.com/oauth/authorize",
+        "token_url":    "https://gitlab.com/oauth/token",
+        "userinfo_url": "https://gitlab.com/api/v4/user",
+        "scope":        "read_user",
+    },
     "microsoft": {
         "auth_url":     "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
         "token_url":    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
@@ -206,6 +218,16 @@ def _get_userinfo(provider: str, access_token: str, id_token: str = "") -> Optio
                     pass
             if not data.get("name"):
                 data["name"] = data.get("login")
+            data.setdefault("picture", data.get("avatar_url"))
+
+        if provider == "discord":
+            data.setdefault("sub", str(data.get("id", "")))
+            if not data.get("name"):
+                data["name"] = data.get("global_name") or data.get("username")
+            if data.get("avatar") and data.get("id"):
+                data.setdefault("picture", f"https://cdn.discordapp.com/avatars/{data['id']}/{data['avatar']}.png")
+        if provider == "gitlab":
+            data.setdefault("sub", str(data.get("id", "")))
             data.setdefault("picture", data.get("avatar_url"))
         return data
     except Exception:
