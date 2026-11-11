@@ -6,7 +6,7 @@ import re
 import io
 import zipfile
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 from io import BytesIO
 
 from fastapi import APIRouter, Depends, HTTPException, Query, File, UploadFile, Form
@@ -143,7 +143,7 @@ def export_to_zip(sessions: List, include_messages: bool = True) -> bytes:
         
         # Add metadata file
         metadata = {
-            "exported_at": datetime.utcnow().isoformat(),
+            "exported_at": datetime.now(timezone.utc).isoformat(),
             "session_count": len(sessions),
             "version": "1.0",
         }
@@ -391,7 +391,7 @@ async def export_chats(
     
     if request.format == "jsonl":
         content = export_to_jsonl(sessions, request.include_messages)
-        filename = f"hexallm_chats_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.jsonl"
+        filename = f"hexallm_chats_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.jsonl"
         return StreamingResponse(
             io.BytesIO(content.encode('utf-8')),
             media_type="application/jsonl",
@@ -401,7 +401,7 @@ async def export_chats(
     elif request.format == "markdown":
         # Create zip with markdown files
         zip_content = export_to_zip(sessions, request.include_messages)
-        filename = f"hexallm_chats_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.zip"
+        filename = f"hexallm_chats_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.zip"
         return StreamingResponse(
             io.BytesIO(zip_content),
             media_type="application/zip",
@@ -410,7 +410,7 @@ async def export_chats(
     
     elif request.format == "zip":
         zip_content = export_to_zip(sessions, request.include_messages)
-        filename = f"hexallm_chats_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}.zip"
+        filename = f"hexallm_chats_{datetime.now(timezone.utc).strftime('%Y%m%d_%H%M%S')}.zip"
         return StreamingResponse(
             io.BytesIO(zip_content),
             media_type="application/zip",

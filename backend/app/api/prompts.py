@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
@@ -28,8 +28,8 @@ class Prompt(Base):
     is_public = Column(Boolean, default=False)
     is_system = Column(Boolean, default=False)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), onupdate=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
     use_count = Column(Integer, default=0)
 
     owner = relationship("User", back_populates="prompts")
@@ -193,7 +193,7 @@ async def update_prompt(
     for field, value in update_data.items():
         setattr(prompt, field, value)
 
-    prompt.updated_at = datetime.utcnow()
+    prompt.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
     db.commit()
     db.refresh(prompt)
     return _to_response(prompt, current_user.username)

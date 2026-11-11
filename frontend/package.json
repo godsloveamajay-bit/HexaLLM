@@ -1,6 +1,6 @@
 {
   "name": "hexallm-frontend",
-  "version": "14.0.18",
+  "version": "14.0.19",
   "private": true,
   "type": "module",
   "scripts": {

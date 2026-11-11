@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 from typing import Any, Dict, List, Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from collections import defaultdict
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -29,7 +29,7 @@ class CostRecord(Base):
     estimated_cost_usd = Column(Float, default=0.0)
     request_type = Column(String(50), nullable=True)  # chat, image, transcribe, etc.
     endpoint = Column(String(100), nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None), index=True)
 
     __table_args__ = (
         Index('ix_cost_user_model_date', 'user_id', 'model_name', 'created_at'),
@@ -187,7 +187,7 @@ async def get_cost_dashboard(
     current_user: User = Depends(get_current_user),
 ):
     """Get cost dashboard for a user or all users (admin)."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
     query = db.query(CostRecord).filter(CostRecord.created_at >= since)
 
@@ -285,7 +285,7 @@ async def get_cost_records(
     current_user: User = Depends(get_current_user),
 ):
     """Get raw cost records (own records; admins may pass user_id)."""
-    since = datetime.utcnow() - timedelta(days=days)
+    since = datetime.now(timezone.utc).replace(tzinfo=None) - timedelta(days=days)
 
     query = db.query(CostRecord).filter(CostRecord.created_at >= since)
 
