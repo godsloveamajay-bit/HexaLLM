@@ -414,12 +414,14 @@ async def call_plugin_tool(
     if tool not in {t["name"] for t in plugin.manifest.tools}:
         raise HTTPException(400, f"plugin {name!r} does not declare tool {tool!r}")
 
-    from ..services.plugin_service import PluginRateLimited
+    from ..services.plugin_service import PluginBudgetExceeded, PluginRateLimited
 
     try:
         output = await registry.call(tool, body.args, user_id=admin.id)
     except PluginRateLimited as exc:
         # 429 so a client can back off rather than treating it as a bug.
+        raise HTTPException(429, str(exc), headers={"Retry-After": str(exc.retry_after)})
+    except PluginBudgetExceeded as exc:
         raise HTTPException(429, str(exc), headers={"Retry-After": str(exc.retry_after)})
     except PluginError as exc:
         raise HTTPException(400, str(exc))
