@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { Logo as BrandLogo } from '../components/Logo'
 import Reveal from '../components/ui/Reveal'
+import ExtensionSlot from '../components/extensions/ExtensionSlot'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    HexaLLM Brand Landing — Palette:
@@ -210,6 +211,8 @@ export default function LandingPage() {
           </div>
         </div>
       </section>
+
+      <div className="mx-auto max-w-6xl px-6 py-4"><ExtensionSlot name="landing.hero" /></div>
 
       {/* Features */}
       <section id="features" className="border-y border-gray-800 bg-gray-900/40">

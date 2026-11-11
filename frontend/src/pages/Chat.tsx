@@ -17,6 +17,7 @@ import AiSparkle from '../components/AiSparkle'
 import { LogoMark } from '../components/Logo'
 import Markdown from '../components/ui/Markdown'
 import ErrorHint from '../components/ui/ErrorHint'
+import ExtensionSlot from '../components/extensions/ExtensionSlot'
 import api, { baseURL } from '../lib/api'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
@@ -1818,6 +1819,8 @@ export default function ChatPage() {
                 {composer}
                 {panels}
               </div>
+
+              <div className="mt-4 w-full"><ExtensionSlot name="chat.empty-state" /></div>
 
               <div className="mt-5 w-full">
                 <p className="text-xs font-medium tracking-wide text-gray-500 uppercase mb-2">

@@ -9,6 +9,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from ..core.config import settings
+from ..services.storage_service import get_storage
 from ..core.database import SessionLocal, get_db
 from ..core.security import get_current_user
 from ..models.knowledge import KBChunk, KBDocument, KnowledgeBase
@@ -191,9 +192,6 @@ async def upload_document(
             detail=f"File too large (max {settings.MAX_UPLOAD_SIZE_MB} MB)",
         )
 
-    kb_dir = Path(settings.UPLOADS_DIR) / f"kb_{kb.id}"
-    kb_dir.mkdir(parents=True, exist_ok=True)
-
     safe_name = _sanitize_filename(file.filename or "")
     document = KBDocument(
         kb_id=kb.id,
@@ -205,11 +203,14 @@ async def upload_document(
     db.commit()
     db.refresh(document)
 
-    dest = kb_dir / f"{document.id}_{safe_name}"
-    with open(dest, "wb") as out:
-        shutil.copyfileobj(file.file, out)
-    document.source_path = str(dest)
-    document.size_bytes = os.path.getsize(dest)
+    storage = get_storage()
+    key = f"kb_{kb.id}/{document.id}_{safe_name}"
+    source_path = storage.save(key, file.file)
+    document.source_path = source_path
+    try:
+        document.size_bytes = os.path.getsize(source_path) if os.path.exists(source_path) else 0
+    except OSError:
+        document.size_bytes = 0
     db.commit()
     db.refresh(document)
 
@@ -240,11 +241,15 @@ def delete_document(
     ).first()
     if not document:
         raise HTTPException(status_code=404, detail="Document not found")
-    if document.source_path and os.path.exists(document.source_path):
+    if document.source_path:
         try:
-            os.unlink(document.source_path)
-        except OSError:
-            pass
+            get_storage().delete(document.source_path)
+        except Exception:
+            try:
+                if os.path.exists(document.source_path):
+                    os.unlink(document.source_path)
+            except OSError:
+                pass
     db.delete(document)
     db.commit()
 
@@ -356,9 +361,6 @@ async def crawl_url(
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to fetch URL: {e}")
 
-    kb_dir = Path(settings.UPLOADS_DIR) / f"kb_{kb.id}"
-    kb_dir.mkdir(parents=True, exist_ok=True)
-
     document = KBDocument(
         kb_id=kb.id,
         filename=f"{_sanitize_filename(title[:80])}.txt",
@@ -370,9 +372,10 @@ async def crawl_url(
     db.commit()
     db.refresh(document)
 
-    dest = kb_dir / f"{document.id}_crawl.txt"
-    dest.write_text(text, encoding="utf-8")
-    document.source_path = str(dest)
+    storage = get_storage()
+    key = f"kb_{kb.id}/{document.id}_crawl.txt"
+    source_path = storage.save(key, text.encode("utf-8"))
+    document.source_path = source_path
     document.size_bytes = dest.stat().st_size
     db.commit()
 

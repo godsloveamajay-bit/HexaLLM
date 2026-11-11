@@ -312,6 +312,24 @@ async def emit_plugin_event(
     return {"event": event, "handlers": handlers}
 
 
+@router.get("/ui-extensions")
+def list_ui_extensions(
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    _load_enabled(db)
+    return {"extensions": registry.ui_extensions()}
+
+
+@router.get("/storage-backends")
+def list_storage_backends(
+    db: Session = Depends(get_db),
+    _user=Depends(get_current_user),
+):
+    _load_enabled(db)
+    return {"backends": registry.storage_backends()}
+
+
 @router.get("/models")
 def list_plugin_models(
     db: Session = Depends(get_db),

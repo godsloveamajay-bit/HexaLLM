@@ -384,7 +384,9 @@ Deliberately out of scope, and **not** present in the codebase:
 
 - Model adapters (plugin-contributed model adapters via `model_adapters`).
 - Event hooks (plugins may declare `hooks`: event -> tool).
-- UI extension slots, auth providers, storage backends, and workflow templates.
+- UI extension slots (plugins may declare `ui_extensions` rendered by `ExtensionSlot`).
+- Auth providers (GitHub, Discord, GitLab, plus Google/Microsoft/Apple/Yahoo/Samsung).
+- Storage backends, and workflow templates.
 - Remote marketplace (configured sources), signed archive verification,
   `install_url`, `install_git`, and `install_npm`.
 - A `hexallm plugin` CLI (scaffold, validate, test, build, publish).

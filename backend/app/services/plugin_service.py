@@ -277,6 +277,8 @@ class PluginManifest:
     tools: List[Dict[str, Any]] = field(default_factory=list)
     model_adapters: List[Dict[str, Any]] = field(default_factory=list)
     hooks: Dict[str, str] = field(default_factory=dict)
+    ui_extensions: List[Dict[str, Any]] = field(default_factory=list)
+    storage_backends: List[Dict[str, Any]] = field(default_factory=list)
     raw: Dict[str, Any] = field(default_factory=dict)
 
     @classmethod
@@ -369,6 +371,23 @@ class PluginManifest:
                 raise PluginError(f"hook {event!r} references undeclared tool {tool!r}")
             hooks[event] = tool
 
+
+        ui_extensions = data.get("ui_extensions") or []
+        if not isinstance(ui_extensions, list):
+            raise PluginError("ui_extensions must be a list")
+        for spec in ui_extensions:
+            if not isinstance(spec, dict) or not str(spec.get("slot") or "").strip():
+                raise PluginError("each ui_extension must be an object with a slot")
+        ui_extensions = [dict(x) for x in ui_extensions]
+
+        storage_backends = data.get("storage_backends") or []
+        if not isinstance(storage_backends, list):
+            raise PluginError("storage_backends must be a list")
+        for spec in storage_backends:
+            if not isinstance(spec, dict) or not str(spec.get("name") or "").strip():
+                raise PluginError("each storage_backend must be an object with a name")
+        storage_backends = [dict(x) for x in storage_backends]
+
         return cls(
             name=name,
             version=str(data.get("version") or "0.0.0"),
@@ -386,6 +405,8 @@ class PluginManifest:
             tools=tools,
             model_adapters=adapters,
             hooks=hooks,
+            ui_extensions=ui_extensions,
+            storage_backends=storage_backends,
             raw=data,
         )
 
@@ -921,6 +942,27 @@ class PluginRegistry:
             except Exception:
                 logger.exception("Plugin hook %s.%s failed for event %s",
                                  plugin.manifest.name, tool, event)
+
+
+    def ui_extensions(self) -> List[Dict[str, Any]]:
+        self.ensure_loaded()
+        out: List[Dict[str, Any]] = []
+        for plugin in self._plugins.values():
+            if not plugin.enabled or plugin.error:
+                continue
+            for spec in plugin.manifest.ui_extensions:
+                out.append({"plugin": plugin.manifest.name, **spec})
+        return out
+
+    def storage_backends(self) -> List[Dict[str, Any]]:
+        self.ensure_loaded()
+        out: List[Dict[str, Any]] = []
+        for plugin in self._plugins.values():
+            if not plugin.enabled or plugin.error:
+                continue
+            for spec in plugin.manifest.storage_backends:
+                out.append({"plugin": plugin.manifest.name, **spec})
+        return out
 
     def tool_schema(self, tool_name: str) -> Dict[str, Any]:
         """The declared input schema for a tool, or {} if unknown."""

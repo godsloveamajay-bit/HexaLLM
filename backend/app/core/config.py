@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "HexaLLM AI Platform"
-    VERSION: str = "14.0.17"
+    VERSION: str = "14.0.18"
     DEBUG: bool = False
 
     DATABASE_URL: str = "sqlite:///./hexallm.db"
@@ -27,6 +27,11 @@ class Settings(BaseSettings):
     MODELS_DIR: str = "./models"
     DATASETS_DIR: str = "./datasets"
     UPLOADS_DIR: str = "./uploads"
+    # Pluggable storage backend for uploaded files: "local" (default) or "s3".
+    STORAGE_BACKEND: str = "local"
+    STORAGE_ROOT: str = "./storage"
+    S3_BUCKET: str = ""
+    S3_PREFIX: str = ""
 
     MAX_UPLOAD_SIZE_MB: int = 500
 
