@@ -382,26 +382,17 @@ second is logged, so don't rely on shadowing.
 
 Deliberately out of scope, and **not** present in the codebase:
 
-- Model adapters (plugin-contributed model adapters via `model_adapters`).
-- Event hooks (plugins may declare `hooks`: event -> tool).
-- UI extension slots (plugins may declare `ui_extensions` rendered by `ExtensionSlot`).
-- Auth providers (GitHub, Discord, GitLab, plus Google/Microsoft/Apple/Yahoo/Samsung).
-- Storage backends, and workflow templates.
-- Remote marketplace (configured sources), signed archive verification,
-  `install_url`, `install_git`, and `install_npm`.
-- A `hexallm plugin` CLI (scaffold, validate, test, build, publish).
-- WASM, gVisor, or Firecracker isolation; `inprocess` is the only non-subprocess mode. When Docker is unavailable the
-  subprocess fallback now runs under bubblewrap (`bwrap`) when it is installed,
-  with a read-only root and an isolated network namespace; otherwise it falls
-  back to a plain subprocess with a timeout.
+- WASM, gVisor, or Firecracker isolation. `inprocess` is the only
+  non-subprocess mode. When Docker is unavailable the subprocess fallback now
+  runs under bubblewrap (`bwrap`) when it is installed, with a read-only root
+  and an isolated network namespace; otherwise it falls back to a plain
+  subprocess with a timeout.
 - **Verified** cost accounting. Budgets are enforced against self-reported
   spend, which the host cannot check; a cost budget now requires a declared
   `network` permission, but spend itself cannot be verified. See
   [Cost is self-reported](#cost-is-self-reported-and-cannot-be-verified).
-- Retention row-count and size caps may be overridden per plugin via
-  `retention_max_rows` and `retention_max_mb`.
-- Secret storage beyond environment variables — declared secrets are read from
-  the backend's environment, not from a vault.
 
-Each of these is a real piece of work, not a follow-up tag. Treat this document
-as the description of the system that exists.
+Everything else originally listed here has since been implemented (model
+adapters, event hooks, UI extension slots, auth providers, storage backends,
+workflow templates, remote marketplace with signed installs, the `hexallm
+plugin` CLI, per-plugin retention caps, and encrypted secret storage).
