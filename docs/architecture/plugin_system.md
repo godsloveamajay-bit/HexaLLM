@@ -387,7 +387,7 @@ Deliberately out of scope, and **not** present in the codebase:
 - UI extension slots, auth providers, storage backends, and workflow templates.
 - Remote marketplace (configured sources), signed archive verification,
   `install_url`, `install_git`, and `install_npm`.
-- A `hexallm plugin` CLI (scaffold/dev/test/build/publish).
+- A `hexallm plugin` CLI (scaffold, validate, test, build, publish).
 - WASM, gVisor, or Firecracker isolation; `inprocess` is the only non-subprocess mode. When Docker is unavailable the
   subprocess fallback now runs under bubblewrap (`bwrap`) when it is installed,
   with a read-only root and an isolated network namespace; otherwise it falls

@@ -953,3 +953,73 @@ def cmd_plugin_build(path: str, output: Optional[str]):
     with tarfile.open(out, "w:gz") as tf:
         tf.add(root, arcname=root.name)
     console.print(f"[green]Built archive:[/] {out}")
+
+
+@cmd_plugin.command("publish")
+@click.argument("path", type=click.Path(exists=True, file_okay=False))
+@click.option("--server", default=None, help="HexaLLM server URL (defaults to configured).")
+@click.option("--token", default=None, help="Auth token (defaults to configured).")
+def cmd_plugin_publish(path: str, server: Optional[str], token: Optional[str]):
+    """Build an archive from a plugin directory and upload it to a HexaLLM server."""
+    import httpx
+    import tarfile
+    import tempfile
+
+    cfg = load_config()
+    server = (server or cfg.hexallm_url or "").rstrip("/")
+    token = token or cfg.hexallm_token
+    if not server:
+        console.print("[red]No server URL. Run 'hexallm login <url>' or pass --server.[/]")
+        return
+    if not token:
+        console.print("[red]Not logged in. Run 'hexallm login <url>'.[/]")
+        return
+
+    root = Path(path)
+    manifest_path = root / "manifest.json"
+    if not manifest_path.is_file():
+        console.print("[red]manifest.json not found[/]")
+        return
+
+    # Validate first.
+    try:
+        data = json.loads(manifest_path.read_text())
+    except json.JSONDecodeError as exc:
+        console.print(f"[red]Invalid manifest: {exc}[/]")
+        return
+    if not data.get("name") or not data.get("tools"):
+        console.print("[red]Manifest must declare name and at least one tool.[/]")
+        return
+
+    # Build archive in a temp file.
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".tar.gz")
+    tmp.close()
+    archive_path = Path(tmp.name)
+    try:
+        with tarfile.open(archive_path, "w:gz") as tf:
+            tf.add(root, arcname=root.name)
+        console.print(f"[dim]Built {archive_path}[/]")
+
+        with open(archive_path, "rb") as f:
+            files = {"file": (f"{root.name}.tar.gz", f, "application/gzip")}
+            headers = {"Authorization": f"Bearer {token}"}
+            try:
+                with httpx.Client(timeout=120) as c:
+                    r = c.post(f"{server}/api/v1/plugins/install_upload", files=files, headers=headers)
+            except Exception as exc:
+                console.print(f"[red]Upload failed: {exc}[/]")
+                return
+        if r.status_code not in (200, 201):
+            try:
+                detail = r.json().get("detail", r.text)
+            except Exception:
+                detail = r.text
+            console.print(f"[red]Publish failed ({r.status_code}): {detail}[/]")
+            return
+        body = r.json()
+        console.print(f"[green]Published plugin:[/] {body.get('name')} v{body.get('version')}")
+    finally:
+        try:
+            archive_path.unlink()
+        except OSError:
+            pass

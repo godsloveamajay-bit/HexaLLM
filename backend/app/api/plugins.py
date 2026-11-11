@@ -22,7 +22,7 @@ import zipfile
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Body, Depends, HTTPException, Query
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from sqlalchemy import func
@@ -652,6 +652,37 @@ def install_plugin_npm(
         return _install_from_path(tarball, db)
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+
+@router.post("/install_upload", response_model=PluginOut)
+async def install_plugin_upload(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _admin=Depends(require_admin),
+):
+    """Install a plugin from an uploaded .tar.gz/.tgz/.zip archive.
+
+    This is the publish target for the ``hexallm plugin publish`` command:
+    the CLI builds an archive locally and uploads it here, so a plugin can be
+    published to a HexaLLM instance without a shared filesystem.
+    """
+    filename = (file.filename or "").lower()
+    if not filename.endswith((".tar.gz", ".tgz", ".zip")):
+        raise HTTPException(400, "archive must be .tar.gz, .tgz or .zip")
+
+    suffix = ".zip" if filename.endswith(".zip") else ".tar.gz"
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=suffix)
+    tmp.close()
+    try:
+        with open(tmp.name, "wb") as out:
+            shutil.copyfileobj(file.file, out)
+        return _install_from_path(tmp.name, db)
+    finally:
+        try:
+            os.unlink(tmp.name)
+        except OSError:
+            pass
 
 
 @router.delete("/{name}", status_code=204)
