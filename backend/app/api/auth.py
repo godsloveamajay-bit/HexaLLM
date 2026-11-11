@@ -30,6 +30,12 @@ _OAUTH = {
         "userinfo_url": "https://www.googleapis.com/oauth2/v3/userinfo",
         "scope":        "openid email profile",
     },
+    "github": {
+        "auth_url":     "https://github.com/login/oauth/authorize",
+        "token_url":    "https://github.com/login/oauth/access_token",
+        "userinfo_url": "https://api.github.com/user",
+        "scope":        "read:user user:email",
+    },
     "microsoft": {
         "auth_url":     "https://login.microsoftonline.com/common/oauth2/v2.0/authorize",
         "token_url":    "https://login.microsoftonline.com/common/oauth2/v2.0/token",
@@ -182,6 +188,25 @@ def _get_userinfo(provider: str, access_token: str, id_token: str = "") -> Optio
         if provider == "microsoft":
             data.setdefault("email", data.get("mail") or data.get("userPrincipalName", ""))
             data.setdefault("sub", data.get("id", ""))
+        if provider == "github":
+            data.setdefault("sub", str(data.get("id", "")))
+            if not data.get("email"):
+                try:
+                    er = httpx.get(
+                        "https://api.github.com/user/emails",
+                        headers={"Authorization": f"Bearer {access_token}", "Accept": "application/json"},
+                        timeout=10,
+                    )
+                    if er.status_code == 200:
+                        for item in er.json():
+                            if item.get("primary") or item.get("verified"):
+                                data["email"] = item.get("email")
+                                break
+                except Exception:
+                    pass
+            if not data.get("name"):
+                data["name"] = data.get("login")
+            data.setdefault("picture", data.get("avatar_url"))
         return data
     except Exception:
         return None
