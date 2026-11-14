@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import {
   Plus, X, Loader2, BookOpen, FileText, Upload, Trash2, Search,
-  CheckCircle2, AlertCircle, Clock, Globe,
+  CheckCircle2, AlertCircle, Clock, Globe, RefreshCw,
 } from 'lucide-react'
 import api from '../lib/api'
 import { useAuth } from '../store/auth'
@@ -243,6 +243,16 @@ function KBDetail({ kb, onChanged, onDelete }: {
     onChanged()
   }
 
+  const reprocessDoc = async (docId: number) => {
+    try {
+      await api.post(`/knowledge/${kb.id}/documents/${docId}/reprocess`)
+      toast.success('Reprocessing started')
+      onChanged()
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to reprocess')
+    }
+  }
+
   const runQuery = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!query.trim()) return
@@ -360,6 +370,9 @@ function KBDetail({ kb, onChanged, onDelete }: {
                   )}
                 </div>
                 {statusBadge(d.status)}
+                <button onClick={() => reprocessDoc(d.id)} className="text-gray-600 hover:text-primary-400 p-1" title="Reprocess">
+                  <RefreshCw className="w-4 h-4" />
+                </button>
                 <button onClick={() => deleteDoc(d.id)} className="text-gray-600 hover:text-red-400 p-1">
                   <Trash2 className="w-4 h-4" />
                 </button>

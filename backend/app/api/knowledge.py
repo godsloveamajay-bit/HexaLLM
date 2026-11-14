@@ -229,6 +229,33 @@ def list_documents(
     return [KBDocumentOut.model_validate(d) for d in kb.documents]
 
 
+@router.post("/{kb_id}/documents/{doc_id}/reprocess", response_model=KBDocumentOut)
+async def reprocess_document(
+    kb_id: int,
+    doc_id: int,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Re-chunk and re-embed an existing document."""
+    kb = _kb_or_404(db, kb_id, current_user)
+    document = db.query(KBDocument).filter(
+        KBDocument.id == doc_id, KBDocument.kb_id == kb.id
+    ).first()
+    if not document:
+        raise HTTPException(status_code=404, detail="Document not found")
+    if not document.source_path:
+        raise HTTPException(status_code=400, detail="Document has no stored source")
+    db.query(KBChunk).filter(KBChunk.document_id == document.id).delete()
+    document.status = "pending"
+    document.error = None
+    document.chunks_count = 0
+    db.commit()
+    db.refresh(document)
+    background_tasks.add_task(_process_upload, document.id, kb.id)
+    return KBDocumentOut.model_validate(document)
+
+
 @router.delete("/{kb_id}/documents/{doc_id}", status_code=204)
 def delete_document(
     kb_id: int,
