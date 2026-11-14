@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import api from '../lib/api'
 import { useSessions } from '../store/sessions'
 import toast from 'react-hot-toast'
+import Skeleton from '../components/ui/Skeleton'
 
 interface Bookmark {
   id: number
@@ -58,7 +59,10 @@ export default function BookmarksPage() {
       </div>
 
       {loading ? (
-        <div className="py-10 flex justify-center text-gray-500"><Loader2 className="w-5 h-5 animate-spin" /></div>
+        <div className="space-y-3 py-4">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </div>
       ) : items.length === 0 ? (
         <div className="card py-10 text-center text-gray-500">
           <Star className="w-10 h-10 mx-auto mb-2" />

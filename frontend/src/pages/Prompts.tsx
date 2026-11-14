@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Plus, Trash2, Copy, History, RotateCcw, Search, Loader2, BookMarked } from 'lucide-react'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
+import Skeleton from '../components/ui/Skeleton'
 import { useAuth } from '../store/auth'
 
 interface Prompt {
@@ -171,7 +172,11 @@ export default function PromptsPage() {
             <input className="input pl-9" placeholder="Search prompts..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
           {loading ? (
-            <div className="py-8 flex justify-center text-gray-500"><Loader2 className="w-5 h-5 animate-spin" /></div>
+            <div className="space-y-2 py-4">
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-full" />
+              <Skeleton className="h-10 w-2/3" />
+            </div>
           ) : prompts.length === 0 ? (
             <p className="text-sm text-gray-500 py-6 text-center">No prompts yet.</p>
           ) : (

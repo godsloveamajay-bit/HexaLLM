@@ -8,6 +8,7 @@ import { useAuth } from '../store/auth'
 import toast from 'react-hot-toast'
 import { clsx } from 'clsx'
 import { formatDistanceToNow } from 'date-fns'
+import Skeleton from '../components/ui/Skeleton'
 
 interface KnowledgeBase {
   id: number
@@ -347,8 +348,10 @@ function KBDetail({ kb, onChanged, onDelete }: {
         )}
 
         {loading ? (
-          <div className="py-10 flex justify-center text-gray-500">
-            <Loader2 className="w-5 h-5 animate-spin" />
+          <div className="space-y-3 py-4">
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-full" />
+            <Skeleton className="h-12 w-2/3" />
           </div>
         ) : docs.length === 0 ? (
           <div className="py-10 text-center text-gray-600">
