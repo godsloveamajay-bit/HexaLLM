@@ -9,9 +9,9 @@ import ExtensionSlot from '../components/extensions/ExtensionSlot'
 
 /* ─────────────────────────────────────────────────────────────────────────────
    HexaLLM Brand Landing — Palette:
-   Hex Black #0D0D0D · Hex White #FFFFFF · Hex Graphite #1A1A1A · Hex Silver #C8C8C8
-   Hex Cyan #4FF3FF · Hex Violet #A78BFA · Hex Blue #3B82F6
-   Hex Slate #334155 · Hex Charcoal #0F172A · Hex Fog #E5E7EB
+   Hex Black #131314 · Hex White #FFFFFF · Hex Graphite #1e1f20 · Hex Silver #C8C8C8
+   Hex Cyan #8ab4f8 · Hex Violet #8ab4f8 · Hex Blue #1a73e8
+   Hex Slate #1e1f20 · Hex Charcoal #131314 · Hex Fog #E5E7EB
    ─────────────────────────────────────────────────────────────────────────────*/
 
 const HEX_TILE =

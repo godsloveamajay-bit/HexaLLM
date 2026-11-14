@@ -10,34 +10,34 @@
 
 :root {
   color-scheme: dark;
-  /* Premium minimal: graphite neutrals + restrained blue */
-  --g-50: 248 250 252;   --g-100: 241 245 249;  --g-200: 226 232 240;  --g-300: 203 213 225;
-  --g-400: 148 163 184;  --g-500: 100 116 139;  --g-600: 71 85 105;    --g-700: 51 65 85;
-  --g-800: 30 41 59;     --g-850: 22 29 45;     --g-900: 17 24 39;     --g-925: 12 17 29;
-  --g-950: 9 13 20;
-  /* Primary: restrained blue */
-  --p-50: 239 246 255;   --p-100: 219 234 254;  --p-200: 191 219 254;  --p-300: 147 197 253;
-  --p-400: 96 165 250;   --p-500: 59 130 246;   --p-600: 37 99 235;    --p-700: 29 78 216;
-  --p-800: 30 64 175;    --p-900: 30 58 138;    --p-950: 23 37 84;
-  /* Secondary: muted slate */
-  --s-50: 248 250 252;   --s-100: 241 245 249;  --s-200: 226 232 240;  --s-300: 203 213 225;
-  --s-400: 148 163 184;  --s-500: 100 116 139;  --s-600: 71 85 105;    --s-700: 51 65 85;
-  --s-800: 30 41 59;     --s-900: 15 23 42;     --s-950: 2 6 23;
-  /* Energy: same restrained blue */
-  --e-50: 239 246 255;   --e-100: 219 234 254;  --e-200: 191 219 254;  --e-300: 147 197 253;
-  --e-400: 96 165 250;   --e-500: 59 130 246;   --e-600: 37 99 235;    --e-700: 29 78 216;
-  --e-800: 30 64 175;    --e-900: 30 58 138;    --e-950: 23 37 84;
+  /* Google Gemini-inspired dark palette */
+  --g-50: 248 249 250;   --g-100: 227 227 227;  --g-200: 196 199 197;  --g-300: 154 160 166;
+  --g-400: 128 134 139;  --g-500: 95 99 104;    --g-600: 60 64 67;     --g-700: 44 44 44;
+  --g-800: 32 33 36;     --g-850: 28 28 28;     --g-900: 30 31 32;     --g-925: 23 23 23;
+  --g-950: 19 19 20;
+  /* Primary: Google blue */
+  --p-50: 232 240 254;   --p-100: 210 227 252;  --p-200: 168 200 250;  --p-300: 124 172 250;
+  --p-400: 138 180 248;  --p-500: 26 115 232;   --p-600: 21 90 183;    --p-700: 17 72 147;
+  --p-800: 13 58 120;    --p-900: 10 46 96;     --p-950: 7 33 69;
+  /* Secondary: neutral slate */
+  --s-50: 248 249 250;   --s-100: 227 227 227;  --s-200: 196 199 197;  --s-300: 154 160 166;
+  --s-400: 128 134 139;  --s-500: 95 99 104;    --s-600: 60 64 67;     --s-700: 44 44 44;
+  --s-800: 32 33 36;     --s-900: 30 31 32;     --s-950: 19 19 20;
+  /* Energy: same blue */
+  --e-50: 232 240 254;   --e-100: 210 227 252;  --e-200: 168 200 250;  --e-300: 124 172 250;
+  --e-400: 138 180 248;  --e-500: 26 115 232;   --e-600: 21 90 183;    --e-700: 17 72 147;
+  --e-800: 13 58 120;    --e-900: 10 46 96;     --e-950: 7 33 69;
 }
 
 :root.light {
   color-scheme: light;
-  --g-50: 15 23 42;      --g-100: 30 41 59;     --g-200: 51 65 85;     --g-300: 71 85 105;
-  --g-400: 100 116 139;  --g-500: 148 163 184;  --g-600: 203 213 225;  --g-700: 226 232 240;
-  --g-800: 241 245 249;  --g-850: 245 247 250;  --g-900: 248 250 252;  --g-925: 250 251 253;
-  --g-950: 254 254 255;
-  --p-300: 37 99 235;    --p-400: 59 130 246;   --p-500: 96 165 250;
-  --s-300: 71 85 105;    --s-400: 100 116 139;  --s-500: 148 163 184;
-  --e-300: 37 99 235;    --e-400: 59 130 246;   --e-500: 96 165 250;
+  --g-50: 15 15 15;      --g-100: 32 33 36;     --g-200: 60 64 67;     --g-300: 95 99 104;
+  --g-400: 128 134 139;  --g-500: 154 160 166;  --g-600: 196 199 197;  --g-700: 227 227 227;
+  --g-800: 241 243 244;  --g-850: 248 249 250;  --g-900: 255 255 255;  --g-925: 255 255 255;
+  --g-950: 255 255 255;
+  --p-300: 21 90 183;    --p-400: 26 115 232;   --p-500: 66 133 244;
+  --s-300: 60 64 67;     --s-400: 95 99 104;    --s-500: 128 134 139;
+  --e-300: 21 90 183;    --e-400: 26 115 232;   --e-500: 66 133 244;
 }
 
 html, body { transition: background-color 0.3s ease, color 0.3s ease; }
@@ -72,17 +72,10 @@ html, body { transition: background-color 0.3s ease, color 0.3s ease; }
 @layer components {
   /* Glassmorphism Card */
   .card {
-    @apply bg-gray-900/50 backdrop-blur-xl border border-gray-700/30 rounded-3xl p-5 shadow-lg
-           transition-all duration-300;
-    background: rgba(45, 52, 79, 0.4);
-    backdrop-filter: blur(20px);
-    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3), 
-                inset 0 1px 1px rgba(255, 255, 255, 0.1);
+    @apply bg-gray-900 border border-gray-800 rounded-2xl p-5 transition-colors duration-200;
   }
   .card:hover {
-    @apply border-primary-500/30 shadow-xl;
-    box-shadow: 0 8px 32px rgba(6, 182, 212, 0.15),
-                inset 0 1px 1px rgba(255, 255, 255, 0.15);
+    @apply border-gray-700;
   }
   
   .card-sm {
@@ -105,13 +98,11 @@ html, body { transition: background-color 0.3s ease, color 0.3s ease; }
   }
   
   .btn-primary {
-    @apply btn bg-gradient-to-br from-primary-500 to-primary-600 hover:from-primary-400 hover:to-primary-500
-           text-white shadow-lg shadow-primary-500/30 ring-1 ring-primary-400/30;
+    @apply btn bg-primary-500 hover:bg-primary-400 text-white rounded-full;
   }
   
   .btn-secondary {
-    @apply btn bg-gray-800/60 hover:bg-gray-700/70 text-gray-200 border border-gray-700/60
-           shadow-md shadow-gray-900/20;
+    @apply btn bg-gray-800 hover:bg-gray-700 text-gray-200 border border-gray-700 rounded-full;
   }
   
   .btn-ghost {
