@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, JSON
+from sqlalchemy import Boolean, Column, Integer, String, DateTime, ForeignKey, Text, JSON
 from sqlalchemy.orm import relationship
 from datetime import datetime, timezone
 from ..core.database import Base
@@ -32,6 +32,7 @@ class ChatMessage(Base):
     # Persisted agent tool-steps (CLI ReAct loop) so the "Agent Thinking" drawer
     # survives a reload. List of {name, input, output, thought}.
     steps = Column(JSON, nullable=True)
+    is_bookmarked = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     session = relationship("ChatSession", back_populates="messages")

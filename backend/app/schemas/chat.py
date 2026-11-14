@@ -58,6 +58,7 @@ class ChatMessageOut(BaseModel):
     tokens_used: Optional[int]
     latency_ms: Optional[int]
     steps: Optional[List[dict]] = None
+    is_bookmarked: bool = False
     created_at: datetime
 
     class Config:

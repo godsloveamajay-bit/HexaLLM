@@ -39,6 +39,12 @@ def _migrate_db():
                 "ON chat_sessions (share_token)"
             ))
 
+        # Chat messages — bookmarked flag for the UI.
+        if inspector.has_table("chat_messages"):
+            msg_cols = {c["name"] for c in inspector.get_columns("chat_messages")}
+            if "is_bookmarked" not in msg_cols:
+                conn.execute(text("ALTER TABLE chat_messages ADD COLUMN is_bookmarked BOOLEAN DEFAULT 0"))
+
         user_cols = {c["name"] for c in inspector.get_columns("users")}
         if "oauth_provider" not in user_cols:
             conn.execute(text("ALTER TABLE users ADD COLUMN oauth_provider VARCHAR"))

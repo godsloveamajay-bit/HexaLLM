@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react'
 import {GitBranch, Command, 
-  Send, Loader2, ChevronDown,
+  Send, Loader2, ChevronDown, Star,
   FileText, Sparkles, Zap, Scale, Brain, Settings2, User,
   X, Paperclip, BookMarked, Clipboard, ClipboardCheck,
   Mic, MicOff, Square, Download, RotateCcw, AudioLines, Volume2, Pause,
@@ -28,6 +28,7 @@ interface Citation {
 }
 interface RouteInfo { variant: string; chosen_model: string; reason: string; routed_variant?: string }
 interface Message {
+  id?: number
   role: 'user' | 'assistant' | 'system'
   content: string
   citations?: Citation[]
@@ -35,6 +36,7 @@ interface Message {
   usage?: { prompt_tokens: number; completion_tokens: number }
   latency_ms?: number
   steps?: StepEvent[]
+  is_bookmarked?: boolean
 }
 interface StepEvent { name: string; input: string; output: string; thought: string }
 interface Template { id: number; name: string; content: string }
@@ -220,11 +222,11 @@ function ThinkingIndicator({ label, since }: { label?: string; since?: number })
 
 // ── Message bubble with copy/actions ────────────────────────────────────
 function MessageBubble({
-  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, onFork, isCliActive, activity, activitySince, reasoningPhase, model, onModelChange,
+  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, onFork, onBookmark, isCliActive, activity, activitySince, reasoningPhase, model, onModelChange,
 }: {
   msg: Message; index: number; isLast: boolean
   isActive: boolean; streamPhase: string; warmingModel?: string; sending: boolean
-  onRegenerate: () => void; onFork?: () => void; isCliActive: boolean; activity?: string | null; activitySince?: number | null
+  onRegenerate: () => void; onFork?: () => void; onBookmark?: (index: number) => void; isCliActive: boolean; activity?: string | null; activitySince?: number | null
   reasoningPhase?: boolean; model: string; onModelChange: (m: string) => void
 }) {
   const [copied, setCopied] = useState(false)
@@ -367,6 +369,12 @@ function MessageBubble({
                 {copied ? <ClipboardCheck className="w-3.5 h-3.5 text-green-400" /> : <Clipboard className="w-3.5 h-3.5" />}
                 {copied ? 'Copied' : 'Copy'}
               </button>
+              {msg.id && (
+                <button onClick={() => onBookmark?.(index)} className="btn-ghost py-1 px-2 text-xs gap-1">
+                  <Star className={clsx('w-3.5 h-3.5', msg.is_bookmarked && 'fill-current text-primary-400')} />
+                  {msg.is_bookmarked ? 'Saved' : 'Save'}
+                </button>
+              )}
               {isLast && (
                 <button onClick={onRegenerate} className="btn-ghost py-1 px-2 text-xs gap-1">
                   <RotateCcw className="w-3.5 h-3.5" />Regenerate
@@ -392,6 +400,12 @@ function MessageBubble({
                 {copied ? <ClipboardCheck className="w-3.5 h-3.5 text-green-400" /> : <Clipboard className="w-3.5 h-3.5" />}
                 {copied ? 'Copied' : 'Copy'}
               </button>
+              {msg.id && (
+                <button onClick={() => onBookmark?.(index)} className="btn-ghost py-1 px-2 text-xs gap-1">
+                  <Star className={clsx('w-3.5 h-3.5', msg.is_bookmarked && 'fill-current text-primary-400')} />
+                  {msg.is_bookmarked ? 'Saved' : 'Save'}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -688,7 +702,7 @@ export default function ChatPage() {
     const live = liveStreams.get(id)
     if (live) {
       if (live.done) {
-        try { const { data } = await api.get(`/chat/sessions/${id}/messages`); setMessages(data.map((m: any) => ({ role: m.role as Message['role'], content: m.content, steps: m.steps || undefined }))) } catch {}
+        try { const { data } = await api.get(`/chat/sessions/${id}/messages`); setMessages(data.map((m: any) => ({ id: m.id, role: m.role as Message['role'], content: m.content, steps: m.steps || undefined, is_bookmarked: !!m.is_bookmarked }))) } catch {}
         liveStreams.delete(id)
       } else {
         try { const { data } = await api.get(`/chat/sessions/${id}/messages`); setMessages([...data.map((m: any) => ({ role: m.role as Message['role'], content: m.content, steps: m.steps || undefined })), { role: 'assistant' as const, content: live.content }]) } catch { setMessages([{ role: 'assistant' as const, content: live.content }]) }
@@ -702,7 +716,7 @@ export default function ChatPage() {
       }
       return
     }
-    try { const { data } = await api.get(`/chat/sessions/${id}/messages`); setMessages(data.map((m: any) => ({ role: m.role, content: m.content, steps: m.steps || undefined }))) } catch {}
+    try { const { data } = await api.get(`/chat/sessions/${id}/messages`); setMessages(data.map((m: any) => ({ id: m.id, role: m.role, content: m.content, steps: m.steps || undefined, is_bookmarked: !!m.is_bookmarked }))) } catch {}
   }
 
   // Sidebar click → load that chat. The ref marks the click so the activeId
@@ -1040,6 +1054,18 @@ export default function ChatPage() {
       toast.success('Conversation forked')
     } catch {
       toast.error('Failed to fork conversation')
+    }
+  }
+
+
+  const toggleBookmark = async (index: number) => {
+    const msg = messages[index]
+    if (!msg?.id) return
+    try {
+      const { data } = await api.post(`/chat/messages/${msg.id}/bookmark`)
+      setMessages((prev) => prev.map((m, i) => i === index ? { ...m, is_bookmarked: !!data.is_bookmarked } : m))
+    } catch {
+      toast.error('Failed to bookmark message')
     }
   }
 
@@ -1851,6 +1877,7 @@ export default function ChatPage() {
                   streamPhase={streamPhase} warmingModel={warmingModel} sending={sending}
                   onRegenerate={regenerate}
                   onFork={forkSession}
+                  onBookmark={toggleBookmark}
                   isCliActive={false}
                   activity={i === messages.length - 1 ? streamActivity : null}
                   activitySince={i === messages.length - 1 ? activitySince : null}
