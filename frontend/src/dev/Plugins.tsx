@@ -405,6 +405,8 @@ export default function Plugins() {
   const [testing, setTesting] = useState<Record<string, { tool: string; args: string; out?: string; err?: string }>>({})
   const [installPath, setInstallPath] = useState('')
   const [tab, setTab] = useState<'installed' | 'audit'>('installed')
+  const [secretInputs, setSecretInputs] = useState<Record<string, string>>({})
+  const [storedSecrets, setStoredSecrets] = useState<Record<string, string[]>>({})
 
   const load = useCallback(async () => {
     try {
@@ -429,6 +431,36 @@ export default function Plugins() {
       setError(typeof d === 'object' ? JSON.stringify(d) : d || e?.message || 'request failed')
     } finally {
       setBusy(null)
+    }
+  }
+
+  const loadSecrets = async (name: string) => {
+    try {
+      const r = await api.get(`/plugins/${name}/secrets`)
+      setStoredSecrets((s) => ({ ...s, [name]: r.data.secrets || [] }))
+    } catch {
+      setStoredSecrets((s) => ({ ...s, [name]: [] }))
+    }
+  }
+
+  const setSecret = async (name: string, secret: string) => {
+    const value = secretInputs[`${name}:${secret}`] || ''
+    if (!value.trim()) return
+    try {
+      await api.put(`/plugins/${name}/secrets/${secret}`, { value })
+      setSecretInputs((s) => ({ ...s, [`${name}:${secret}`]: '' }))
+      await loadSecrets(name)
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || e?.message || 'failed to store secret')
+    }
+  }
+
+  const deleteSecret = async (name: string, secret: string) => {
+    try {
+      await api.delete(`/plugins/${name}/secrets/${secret}`)
+      await loadSecrets(name)
+    } catch (e: any) {
+      setError(e?.response?.data?.detail || e?.message || 'failed to delete secret')
     }
   }
 
@@ -583,6 +615,51 @@ export default function Plugins() {
                     </span>
                     <PermissionBadges p={p.permissions} />
                   </div>
+
+                  {p.permissions.secrets?.length > 0 && (
+                    <div className="mt-2 rounded p-2.5" style={{ background: '#010409', border: '1px solid #21262d' }}>
+                      <div className="font-mono text-[10px] uppercase tracking-wide mb-1.5" style={{ color: '#6e7681' }}>
+                        secrets (stored values are never shown)
+                      </div>
+                      <div className="flex flex-col gap-2">
+                        {p.permissions.secrets.map((secret) => {
+                          const stored = (storedSecrets[p.name] || []).includes(secret)
+                          return (
+                            <div key={secret} className="flex items-center gap-2">
+                              <span className="font-mono text-xs" style={{ color: '#c084fc' }}>{secret}</span>
+                              <span className="font-mono text-[10px]" style={{ color: stored ? '#4ade80' : '#6e7681' }}>
+                                {stored ? 'stored' : 'missing'}
+                              </span>
+                              <input
+                                type="password"
+                                className="flex-1 font-mono text-xs px-2 py-1 rounded border"
+                                style={{ background: '#0d1117', borderColor: '#30363d', color: '#e6edf3' }}
+                                placeholder="value"
+                                value={secretInputs[`${p.name}:${secret}`] || ''}
+                                onChange={(e) => setSecretInputs((s) => ({ ...s, [`${p.name}:${secret}`]: e.target.value }))}
+                              />
+                              <button
+                                onClick={() => setSecret(p.name, secret)}
+                                className="font-mono text-[10px] px-2 py-1 rounded border"
+                                style={{ borderColor: '#30363d', color: '#4ade80' }}
+                              >
+                                save
+                              </button>
+                              {stored && (
+                                <button
+                                  onClick={() => deleteSecret(p.name, secret)}
+                                  className="font-mono text-[10px] px-2 py-1 rounded border"
+                                  style={{ borderColor: '#30363d', color: '#f87171' }}
+                                >
+                                  delete
+                                </button>
+                              )}
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+                  )}
 
                   {p.rate_limit && (p.rate_limit.per_user > 0 || p.rate_limit.per_plugin > 0) ? (
                     <div className="flex items-center gap-2">
