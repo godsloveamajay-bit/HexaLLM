@@ -1,27 +1,34 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
 
 class ChatMessageIn(BaseModel):
     role: str
-    content: str
+    content: str = Field(..., min_length=1, max_length=32000)
+
+    @field_validator("role")
+    @classmethod
+    def _role(cls, v: str) -> str:
+        if v not in {"user", "assistant", "system"}:
+            raise ValueError("invalid role")
+        return v
 
 
 class ChatRequest(BaseModel):
-    model: str
-    messages: List[ChatMessageIn]
-    system_prompt: Optional[str] = None
-    session_id: Optional[int] = None
-    temperature: Optional[float] = None
-    top_p: Optional[float] = None
-    max_tokens: Optional[int] = None
+    model: str = Field(..., min_length=1, max_length=200)
+    messages: List[ChatMessageIn] = Field(..., min_length=1, max_length=200)
+    system_prompt: Optional[str] = Field(default=None, max_length=8000)
+    session_id: Optional[int] = Field(default=None, ge=1)
+    temperature: Optional[float] = Field(default=None, ge=0.0, le=2.0)
+    top_p: Optional[float] = Field(default=None, ge=0.0, le=1.0)
+    max_tokens: Optional[int] = Field(default=None, ge=1, le=32768)
     stream: bool = True
     # Structured output: {"type": "json_object"} or {"type": "json_schema", "json_schema": {...}}.
     response_format: Optional[Dict[str, Any]] = None
-    attachment_base64: Optional[str] = None  # data URL or raw base64
-    attachment_type: Optional[str] = None    # "image" | "pdf" | "text"
-    attachment_name: Optional[str] = None
+    attachment_base64: Optional[str] = Field(default=None, max_length=15_000_000)
+    attachment_type: Optional[str] = Field(default=None, pattern="^(image|pdf|text)$")
+    attachment_name: Optional[str] = Field(default=None, max_length=255)
     personality: Optional[Dict[str, int]] = None  # Personality Engine sliders (0–100)
     regenerate: bool = False                 # re-roll the last answer: replace it in history, don't re-append the user turn
     web_search: bool = False                 # ground the answer with live web results

@@ -1,18 +1,33 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field, field_validator
+import re
 from typing import Optional, Dict, List
 from datetime import datetime
 
 
 class UserRegister(BaseModel):
     email: EmailStr
-    username: str
-    password: str
-    full_name: Optional[str] = None
+    username: str = Field(..., min_length=3, max_length=32)
+    password: str = Field(..., min_length=8, max_length=128)
+    full_name: Optional[str] = Field(default=None, max_length=100)
+
+    @field_validator("username")
+    @classmethod
+    def _username(cls, v: str) -> str:
+        if not re.fullmatch(r"[A-Za-z0-9_]+", v):
+            raise ValueError("username may only contain letters, digits, and underscores")
+        return v
+
+    @field_validator("password")
+    @classmethod
+    def _password(cls, v: str) -> str:
+        if v.strip() != v:
+            raise ValueError("password must not have leading or trailing spaces")
+        return v
 
 
 class UserLogin(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=1, max_length=128)
 
 
 class PlanBrief(BaseModel):
