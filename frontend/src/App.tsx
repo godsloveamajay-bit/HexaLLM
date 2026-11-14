@@ -1,4 +1,4 @@
-import { Suspense, lazy } from 'react'
+import { Suspense, lazy, useEffect, useState } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './store/auth'
 import { isCapacitor } from './lib/platform'
@@ -71,18 +71,44 @@ function AdminRoute({ children }: { children: React.ReactNode }) {
 
 const AppLayout = isCapacitor() ? MobileLayout : Layout
 
+
+
+function OfflineBanner() {
+  const [offline, setOffline] = useState(!navigator.onLine)
+  useEffect(() => {
+    const on = () => setOffline(false)
+    const off = () => setOffline(true)
+    window.addEventListener('online', on)
+    window.addEventListener('offline', off)
+    return () => {
+      window.removeEventListener('online', on)
+      window.removeEventListener('offline', off)
+    }
+  }, [])
+  if (!offline) return null
+  return (
+    <div className="fixed top-0 inset-x-0 z-50 bg-gray-900 border-b border-gray-700 px-4 py-2 text-center text-xs text-gray-300">
+      You are offline. Cached pages and saved data may still be available.
+    </div>
+  )
+}
+
 export default function App() {
   // The dev host (dev.hexallm.co.uk / localhost) serves a completely
   // separate developer portal — never the consumer site.
   if (isDevSite()) {
     return (
+      <>
+      <OfflineBanner />
       <Suspense fallback={<PageSpinner />}>
         <DevPortal />
       </Suspense>
+      </>
     )
   }
   return (
     <>
+      <OfflineBanner />
       <CommandPalette />
       <Suspense fallback={<PageSpinner />}>
         <Routes>
