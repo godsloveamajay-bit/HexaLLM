@@ -35,6 +35,27 @@ class Prompt(Base):
     owner = relationship("User", back_populates="prompts")
 
 
+
+class PromptVersion(Base):
+    __tablename__ = "prompt_versions"
+
+    id = Column(Integer, primary_key=True, index=True)
+    prompt_id = Column(Integer, ForeignKey("prompts.id", ondelete="CASCADE"), nullable=False, index=True)
+    version_number = Column(Integer, nullable=False)
+    title = Column(String(255), nullable=False)
+    description = Column(Text, nullable=True)
+    content = Column(Text, nullable=False)
+    variables = Column(JSON, nullable=True)
+    tags = Column(JSON, nullable=True)
+    is_public = Column(Boolean, default=False)
+    created_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc).replace(tzinfo=None))
+
+    prompt = relationship("Prompt", back_populates="versions")
+
+
+Prompt.versions = relationship("PromptVersion", back_populates="prompt", cascade="all, delete-orphan", order_by="PromptVersion.version_number")
+
 # Add to User model
 User.prompts = relationship("Prompt", back_populates="owner", cascade="all, delete-orphan")
 
@@ -76,6 +97,29 @@ class PromptResponse(BaseModel):
         from_attributes = True
 
 
+
+class PromptVersionResponse(BaseModel):
+    id: int
+    prompt_id: int
+    version_number: int
+    title: str
+    description: Optional[str]
+    content: str
+    variables: Optional[Dict[str, Any]]
+    tags: List[str]
+    is_public: bool
+    created_by: Optional[int]
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PromptVersionListResponse(BaseModel):
+    versions: List[PromptVersionResponse]
+    total: int
+
+
 class PromptListResponse(BaseModel):
     prompts: List[PromptResponse]
     total: int
@@ -85,6 +129,25 @@ class PromptListResponse(BaseModel):
 
 class PromptUseRequest(BaseModel):
     variables: Optional[Dict[str, str]] = None
+
+
+
+def _snapshot_prompt(prompt: Prompt, db: Session, user_id: int) -> PromptVersion:
+    last = db.query(PromptVersion).filter(PromptVersion.prompt_id == prompt.id).order_by(PromptVersion.version_number.desc()).first()
+    number = (last.version_number if last else 0) + 1
+    version = PromptVersion(
+        prompt_id=prompt.id,
+        version_number=number,
+        title=prompt.title,
+        description=prompt.description,
+        content=prompt.content,
+        variables=prompt.variables or {},
+        tags=prompt.tags or [],
+        is_public=prompt.is_public,
+        created_by=user_id,
+    )
+    db.add(version)
+    return version
 
 
 @router.post("", response_model=PromptResponse)
@@ -104,6 +167,8 @@ async def create_prompt(
         owner_id=current_user.id,
     )
     db.add(db_prompt)
+    db.flush()
+    _snapshot_prompt(db_prompt, db, current_user.id)
     db.commit()
     db.refresh(db_prompt)
     return _to_response(db_prompt, current_user.username)
@@ -190,6 +255,9 @@ async def update_prompt(
         raise HTTPException(403, "Not authorized to update this prompt")
 
     update_data = update.model_dump(exclude_unset=True)
+    changed = any(update_data.get(f) is not None for f in ("title", "description", "content", "variables", "tags", "is_public"))
+    if changed:
+        _snapshot_prompt(prompt, db, current_user.id)
     for field, value in update_data.items():
         setattr(prompt, field, value)
 
@@ -255,6 +323,69 @@ async def use_prompt(
     db.commit()
 
     return {"content": content}
+
+
+
+@router.get("/{prompt_id}/versions", response_model=PromptVersionListResponse)
+async def list_prompt_versions(
+    prompt_id: int,
+    db: Session = Depends(get_db),
+    current_user: Optional[User] = Depends(get_current_user),
+):
+    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
+    if not prompt:
+        raise HTTPException(404, "Prompt not found")
+    if not prompt.is_public and (not current_user or prompt.owner_id != current_user.id):
+        raise HTTPException(403, "Not authorized to view this prompt")
+    versions = db.query(PromptVersion).filter(PromptVersion.prompt_id == prompt_id).order_by(PromptVersion.version_number.desc()).all()
+    return PromptVersionListResponse(versions=versions, total=len(versions))
+
+
+@router.post("/{prompt_id}/versions", response_model=PromptVersionResponse, status_code=201)
+async def create_prompt_version(
+    prompt_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
+    if not prompt:
+        raise HTTPException(404, "Prompt not found")
+    if prompt.owner_id != current_user.id:
+        raise HTTPException(403, "Not authorized")
+    version = _snapshot_prompt(prompt, db, current_user.id)
+    db.commit()
+    db.refresh(version)
+    return version
+
+
+@router.post("/{prompt_id}/versions/{version_id}/restore", response_model=PromptResponse)
+async def restore_prompt_version(
+    prompt_id: int,
+    version_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    prompt = db.query(Prompt).filter(Prompt.id == prompt_id).first()
+    if not prompt:
+        raise HTTPException(404, "Prompt not found")
+    if prompt.owner_id != current_user.id:
+        raise HTTPException(403, "Not authorized")
+    version = db.query(PromptVersion).filter(
+        PromptVersion.id == version_id, PromptVersion.prompt_id == prompt_id
+    ).first()
+    if not version:
+        raise HTTPException(404, "Version not found")
+    _snapshot_prompt(prompt, db, current_user.id)
+    prompt.title = version.title
+    prompt.description = version.description
+    prompt.content = version.content
+    prompt.variables = version.variables or {}
+    prompt.tags = version.tags or []
+    prompt.is_public = version.is_public
+    prompt.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.commit()
+    db.refresh(prompt)
+    return _to_response(prompt, current_user.username)
 
 
 def _to_response(prompt: Prompt, owner_name: str) -> PromptResponse:
