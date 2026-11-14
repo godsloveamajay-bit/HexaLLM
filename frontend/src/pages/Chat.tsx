@@ -450,6 +450,8 @@ export default function ChatPage() {
   const [reasoningPhase, setReasoningPhase] = useState(false)
   const [systemPrompt, setSystemPrompt] = useState('')
   const [showSystem, setShowSystem] = useState(false)
+  const [showPrompts, setShowPrompts] = useState(false)
+  const [promptOptions, setPromptOptions] = useState<{ id: number; title: string; content: string }[]>([])
   const [showInspector, setShowInspector] = useState(false)
   const [variants, setVariants] = useState<HexaLLMVariant[]>([])
   const [hubModels, setHubModels] = useState<{ slug: string; name: string }[]>([])
@@ -1653,6 +1655,32 @@ export default function ChatPage() {
                 <Download className="w-4 h-4" />
               </button>
             )}
+            <div className="relative">
+              <button onClick={async () => {
+                if (promptOptions.length === 0) {
+                  try {
+                    const { data } = await api.get('/prompts', { params: { mine_only: true } })
+                    setPromptOptions(data.prompts || [])
+                  } catch { toast.error('Failed to load prompts') }
+                }
+                setShowPrompts((v) => !v)
+              }} className="btn-ghost p-1.5" title="Insert saved prompt">
+                <BookMarked className="w-4 h-4" />
+              </button>
+              {showPrompts && (
+                <div className="absolute bottom-full right-0 mb-2 w-72 max-h-64 overflow-y-auto rounded-xl border border-gray-800 bg-gray-900 shadow-xl z-20">
+                  {promptOptions.length === 0 ? (
+                    <p className="px-3 py-2 text-xs text-gray-500">No saved prompts.</p>
+                  ) : promptOptions.map((p) => (
+                    <button key={p.id} onClick={() => { setInput(p.content); setShowPrompts(false); textareaRef.current?.focus() }}
+                      className="block w-full px-3 py-2 text-left text-xs hover:bg-gray-800">
+                      <span className="block text-gray-200 font-medium truncate">{p.title}</span>
+                      <span className="block text-gray-500 truncate">{p.content}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
 
           {showTemplates && (
