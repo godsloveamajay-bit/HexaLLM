@@ -1059,6 +1059,36 @@ def list_bookmarked_messages(
     ]
 
 
+@router.patch("/messages/{message_id}", response_model=ChatMessageOut)
+def edit_message(
+    message_id: int,
+    data: dict,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Edit a message's content and drop everything that came after it."""
+    msg = (
+        db.query(ChatMessage)
+        .join(ChatSession, ChatMessage.session_id == ChatSession.id)
+        .filter(ChatMessage.id == message_id, ChatSession.user_id == current_user.id)
+        .first()
+    )
+    if not msg:
+        raise HTTPException(status_code=404, detail="Message not found")
+    if "content" in data and isinstance(data["content"], str):
+        msg.content = data["content"][:32000]
+    db.query(ChatMessage).filter(
+        ChatMessage.session_id == msg.session_id,
+        ChatMessage.id > msg.id,
+    ).delete(synchronize_session=False)
+    session = db.query(ChatSession).filter(ChatSession.id == msg.session_id).first()
+    if session:
+        session.updated_at = datetime.now(timezone.utc).replace(tzinfo=None)
+    db.commit()
+    db.refresh(msg)
+    return msg
+
+
 @router.get("/sessions/{session_id}/messages", response_model=List[ChatMessageOut])
 def get_messages(session_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     session = db.query(ChatSession).filter(

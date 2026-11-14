@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react'
 import {GitBranch, Command, 
   Send, Loader2, ChevronDown, Star,
   FileText, Sparkles, Zap, Scale, Brain, Settings2, User,
-  X, Paperclip, BookMarked, Clipboard, ClipboardCheck,
+  Pencil, X, Paperclip, BookMarked, Clipboard, ClipboardCheck,
   Mic, MicOff, Square, Download, RotateCcw, AudioLines, Volume2, Pause,
   ChevronRight, Wrench, Lock, Sparkle, SlidersHorizontal, Globe, Sigma,
   Sliders, Shuffle,
@@ -222,11 +222,11 @@ function ThinkingIndicator({ label, since }: { label?: string; since?: number })
 
 // ── Message bubble with copy/actions ────────────────────────────────────
 function MessageBubble({
-  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, onFork, onForkFromHere, onBookmark, isCliActive, activity, activitySince, reasoningPhase, model, onModelChange,
+  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, onFork, onForkFromHere, onBookmark, onEdit, isCliActive, activity, activitySince, reasoningPhase, model, onModelChange,
 }: {
   msg: Message; index: number; isLast: boolean
   isActive: boolean; streamPhase: string; warmingModel?: string; sending: boolean
-  onRegenerate: () => void; onFork?: () => void; onForkFromHere?: (messageId: number) => void; onBookmark?: (index: number) => void; isCliActive: boolean; activity?: string | null; activitySince?: number | null
+  onRegenerate: () => void; onFork?: () => void; onForkFromHere?: (messageId: number) => void; onBookmark?: (index: number) => void; onEdit?: (index: number) => void; isCliActive: boolean; activity?: string | null; activitySince?: number | null
   reasoningPhase?: boolean; model: string; onModelChange: (m: string) => void
 }) {
   const [copied, setCopied] = useState(false)
@@ -409,6 +409,11 @@ function MessageBubble({
                 <button onClick={() => onBookmark?.(index)} className="btn-ghost py-1 px-2 text-xs gap-1">
                   <Star className={clsx('w-3.5 h-3.5', msg.is_bookmarked && 'fill-current text-primary-400')} />
                   {msg.is_bookmarked ? 'Saved' : 'Save'}
+                </button>
+              )}
+              {msg.id && msg.role === 'user' && (
+                <button onClick={() => onEdit?.(index)} className="btn-ghost py-1 px-2 text-xs gap-1">
+                  <Pencil className="w-3.5 h-3.5" />Edit
                 </button>
               )}
             </div>
@@ -1086,6 +1091,19 @@ export default function ChatPage() {
       toast.success('Conversation forked')
     } catch {
       toast.error('Failed to fork conversation')
+    }
+  }
+
+  const editMessage = async (index: number) => {
+    const msg = messages[index]
+    if (!msg?.id || msg.role !== 'user') return
+    try {
+      await api.patch(`/chat/messages/${msg.id}`, { content: msg.content })
+      setMessages((prev) => prev.map((m, i) => (i === index ? { ...m, content: msg.content } : m)))
+      setInput(msg.content)
+      textareaRef.current?.focus()
+    } catch {
+      toast.error('Failed to edit message')
     }
   }
 
@@ -1925,6 +1943,7 @@ export default function ChatPage() {
                   onFork={forkSession}
                   onForkFromHere={forkFromMessage}
                   onBookmark={toggleBookmark}
+                  onEdit={editMessage}
                   isCliActive={false}
                   activity={i === messages.length - 1 ? streamActivity : null}
                   activitySince={i === messages.length - 1 ? activitySince : null}
