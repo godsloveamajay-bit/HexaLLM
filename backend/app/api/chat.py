@@ -1024,6 +1024,33 @@ def bookmark_message(
     return msg
 
 
+@router.get("/bookmarks")
+def list_bookmarked_messages(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List bookmarked messages across the caller's chats."""
+    rows = (
+        db.query(ChatMessage, ChatSession)
+        .join(ChatSession, ChatMessage.session_id == ChatSession.id)
+        .filter(ChatSession.user_id == current_user.id, ChatMessage.is_bookmarked.is_(True))
+        .order_by(ChatMessage.created_at.desc())
+        .limit(200)
+        .all()
+    )
+    return [
+        {
+            "id": msg.id,
+            "session_id": sess.id,
+            "session_title": sess.title,
+            "role": msg.role,
+            "content": msg.content,
+            "created_at": msg.created_at,
+        }
+        for msg, sess in rows
+    ]
+
+
 @router.get("/sessions/{session_id}/messages", response_model=List[ChatMessageOut])
 def get_messages(session_id: int, db: Session = Depends(get_db), current_user: User = Depends(get_current_user)):
     session = db.query(ChatSession).filter(

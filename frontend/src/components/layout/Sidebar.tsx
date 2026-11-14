@@ -3,7 +3,7 @@ import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
   MessageSquare, Cpu, ImageIcon, Clapperboard, Brain, Wand2, LayoutDashboard,
   LogOut, Settings, Sun, Moon, MonitorSmartphone, LogIn, UserPlus,
-  Pencil, ChevronDown, X, Cable, Key, Search, BookMarked, Pin,
+  Pencil, ChevronDown, X, Cable, Key, Search, BookMarked, Pin, Star,
 } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { useSessions } from '../../store/sessions'
@@ -39,6 +39,7 @@ const EXTRA_LINKS = [
   { to: '/image', icon: ImageIcon, label: 'Image Gen' },
   { to: '/video', icon: Clapperboard, label: 'Video Gen' },
   { to: '/memory', icon: Brain, label: 'Memory' },
+  { to: '/bookmarks', icon: Star, label: 'Bookmarks' },
   { to: '/prompts', icon: BookMarked, label: 'Prompts' },
   { to: '/train', icon: Wand2, label: 'Training' },
   { to: '/remote-cli', icon: Cable, label: 'Remote CLI' },
