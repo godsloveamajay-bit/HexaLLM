@@ -108,19 +108,42 @@ async def ingest_document(
         raise
 
 
+def _lexical_score(query: str, text: str) -> float:
+    q = set(re.findall(r"[a-z0-9]+", query.lower()))
+    t = set(re.findall(r"[a-z0-9]+", text.lower()))
+    if not q or not t:
+        return 0.0
+    return len(q & t) / len(q | t)
+
+
 async def search(
     db: Session,
     kb: KnowledgeBase,
     query: str,
     top_k: int = 4,
+    rerank: bool = False,
 ) -> List[Tuple[KBChunk, float]]:
-    """Embed query and return top-k chunks by cosine similarity."""
+    """Embed query and return top-k chunks by cosine similarity.
+
+    When ``rerank`` is set, a larger candidate pool is scored with a hybrid
+    of cosine similarity and lexical overlap, which helps when embeddings
+    alone miss exact terms.
+    """
     qvec = await ollama.embed(kb.embedding_model, query)
     if not qvec:
         return []
 
     chunks = db.query(KBChunk).filter(KBChunk.kb_id == kb.id).all()
     scored = [(c, cosine(qvec, c.embedding or [])) for c in chunks]
+    if rerank:
+        pool_size = min(len(scored), max(top_k * 4, top_k))
+        candidates = sorted(scored, key=lambda x: x[1], reverse=True)[:pool_size]
+        reranked = []
+        for chunk, cos in candidates:
+            lex = _lexical_score(query, chunk.content)
+            reranked.append((chunk, 0.7 * cos + 0.3 * lex))
+        reranked.sort(key=lambda x: x[1], reverse=True)
+        return reranked[:top_k]
     scored.sort(key=lambda x: x[1], reverse=True)
     return scored[:top_k]
 

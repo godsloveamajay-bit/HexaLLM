@@ -57,6 +57,7 @@ class KnowledgeBaseDetail(KnowledgeBaseOut):
 class KBQueryRequest(BaseModel):
     query: str
     top_k: int = Field(default=4, ge=1, le=20)
+    rerank: bool = False
 
 
 class KBQueryHit(BaseModel):
@@ -66,6 +67,16 @@ class KBQueryHit(BaseModel):
     score: float
     content: str
     order_idx: int
+
+
+class KBChunkOut(BaseModel):
+    chunk_id: int
+    document_id: int
+    document_filename: str
+    order_idx: int
+    content: str
+    embedding_dim: int
+    meta: Optional[dict] = None
 
 
 class KBQueryResponse(BaseModel):

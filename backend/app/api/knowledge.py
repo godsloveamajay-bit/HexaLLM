@@ -1,9 +1,9 @@
 import os
 import shutil
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, UploadFile
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Query, Request, UploadFile
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -16,6 +16,7 @@ from ..models.knowledge import KBChunk, KBDocument, KnowledgeBase
 from ..models.user import User
 from ..schemas.knowledge import (
     KBDocumentOut,
+    KBChunkOut,
     KBQueryHit,
     KBQueryRequest,
     KBQueryResponse,
@@ -265,7 +266,7 @@ async def query_knowledge_base(
     current_user: User = Depends(get_current_user),
 ):
     kb = _kb_or_404(db, kb_id, current_user)
-    matches = await search(db, kb, body.query, body.top_k)
+    matches = await search(db, kb, body.query, body.top_k, rerank=body.rerank)
     hits = [
         KBQueryHit(
             chunk_id=chunk.id,
@@ -278,6 +279,35 @@ async def query_knowledge_base(
         for chunk, score in matches
     ]
     return KBQueryResponse(query=body.query, hits=hits)
+
+
+@router.get("/{kb_id}/chunks", response_model=List[KBChunkOut])
+def list_chunks(
+    kb_id: int,
+    document_id: Optional[int] = None,
+    limit: int = Query(50, ge=1, le=200),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Inspect the chunks stored for a knowledge base."""
+    kb = _kb_or_404(db, kb_id, current_user)
+    q = db.query(KBChunk).filter(KBChunk.kb_id == kb.id)
+    if document_id is not None:
+        q = q.filter(KBChunk.document_id == document_id)
+    chunks = q.order_by(KBChunk.document_id, KBChunk.order_idx).offset(offset).limit(limit).all()
+    return [
+        KBChunkOut(
+            chunk_id=c.id,
+            document_id=c.document_id,
+            document_filename=c.document.filename if c.document else "unknown",
+            order_idx=c.order_idx,
+            content=c.content,
+            embedding_dim=len(c.embedding or []),
+            meta=c.meta,
+        )
+        for c in chunks
+    ]
 
 
 # ── URL/Website Crawl ────────────────────────────────────────────────────────

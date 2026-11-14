@@ -42,6 +42,16 @@ interface KBHit {
   content: string
   order_idx: number
 }
+interface KBChunk {
+  chunk_id: number
+  document_id: number
+  document_filename: string
+  order_idx: number
+  content: string
+  embedding_dim: number
+  meta?: any
+}
+
 
 const POPULAR_EMBED = ['nomic-embed-text', 'mxbai-embed-large', 'all-minilm', 'snowflake-arctic-embed']
 
@@ -162,6 +172,10 @@ function KBDetail({ kb, onChanged, onDelete }: {
   const [query, setQuery] = useState('')
   const [searching, setSearching] = useState(false)
   const [hits, setHits] = useState<KBHit[]>([])
+  const [rerank, setRerank] = useState(false)
+  const [chunks, setChunks] = useState<KBChunk[]>([])
+  const [loadingChunks, setLoadingChunks] = useState(false)
+  const [inspectDoc, setInspectDoc] = useState<number | null>(null)
 
   const loadDocs = async () => {
     setLoading(true)
@@ -234,12 +248,26 @@ function KBDetail({ kb, onChanged, onDelete }: {
     if (!query.trim()) return
     setSearching(true)
     try {
-      const { data } = await api.post(`/knowledge/${kb.id}/query`, { query, top_k: 5 })
+      const { data } = await api.post(`/knowledge/${kb.id}/query`, { query, top_k: 5, rerank })
       setHits(data.hits)
     } catch (err: any) {
       toast.error(err.response?.data?.detail || 'Query failed')
     } finally {
       setSearching(false)
+    }
+  }
+
+
+  const loadChunks = async (docId?: number) => {
+    setLoadingChunks(true)
+    try {
+      const { data } = await api.get(`/knowledge/${kb.id}/chunks`, { params: { document_id: docId, limit: 100 } })
+      setChunks(data || [])
+      setInspectDoc(docId ?? null)
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Failed to load chunks')
+    } finally {
+      setLoadingChunks(false)
     }
   }
 
@@ -350,6 +378,10 @@ function KBDetail({ kb, onChanged, onDelete }: {
             placeholder="Ask a question about your documents..."
             className="input flex-1"
           />
+          <label className="flex items-center gap-1.5 text-xs text-gray-400">
+            <input type="checkbox" checked={rerank} onChange={(e) => setRerank(e.target.checked)} />
+            Re-rank
+          </label>
           <button type="submit" disabled={searching || !query.trim()} className="btn-primary">
             {searching ? <Loader2 className="w-4 h-4 animate-spin" /> : <><Search className="w-4 h-4" /> Search</>}
           </button>
@@ -367,6 +399,34 @@ function KBDetail({ kb, onChanged, onDelete }: {
             ))}
           </div>
         )}
+        <div className="mt-4 border-t border-gray-800 pt-3">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-sm font-medium text-gray-200">Chunk inspector</p>
+            <div className="flex gap-2">
+              <button onClick={() => loadChunks()} disabled={loadingChunks} className="btn-secondary text-xs">
+                {loadingChunks ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'All chunks'}
+              </button>
+              {docs.map((d) => (
+                <button key={d.id} onClick={() => loadChunks(d.id)} disabled={loadingChunks} className="btn-ghost text-xs">
+                  {d.filename}
+                </button>
+              ))}
+            </div>
+          </div>
+          {chunks.length > 0 && (
+            <div className="space-y-2 max-h-80 overflow-y-auto">
+              {chunks.map((c) => (
+                <div key={c.chunk_id} className="bg-gray-950 border border-gray-800 rounded-lg p-3">
+                  <div className="flex items-center justify-between text-xs text-gray-500 mb-1">
+                    <span className="text-primary-400 font-medium">{c.document_filename} · chunk {c.order_idx}</span>
+                    <span>{c.embedding_dim} dims</span>
+                  </div>
+                  <p className="text-sm text-gray-300 whitespace-pre-wrap">{c.content}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   )
