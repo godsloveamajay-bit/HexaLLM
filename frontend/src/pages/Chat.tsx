@@ -222,11 +222,11 @@ function ThinkingIndicator({ label, since }: { label?: string; since?: number })
 
 // ── Message bubble with copy/actions ────────────────────────────────────
 function MessageBubble({
-  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, onFork, onBookmark, isCliActive, activity, activitySince, reasoningPhase, model, onModelChange,
+  msg, index, isLast, isActive, streamPhase, warmingModel, sending, onRegenerate, onFork, onForkFromHere, onBookmark, isCliActive, activity, activitySince, reasoningPhase, model, onModelChange,
 }: {
   msg: Message; index: number; isLast: boolean
   isActive: boolean; streamPhase: string; warmingModel?: string; sending: boolean
-  onRegenerate: () => void; onFork?: () => void; onBookmark?: (index: number) => void; isCliActive: boolean; activity?: string | null; activitySince?: number | null
+  onRegenerate: () => void; onFork?: () => void; onForkFromHere?: (messageId: number) => void; onBookmark?: (index: number) => void; isCliActive: boolean; activity?: string | null; activitySince?: number | null
   reasoningPhase?: boolean; model: string; onModelChange: (m: string) => void
 }) {
   const [copied, setCopied] = useState(false)
@@ -383,6 +383,11 @@ function MessageBubble({
               {msg.content && (
                 <button onClick={() => onFork?.()} className="btn-ghost py-1 px-2 text-xs gap-1">
                   <GitBranch className="w-3.5 h-3.5" />Fork
+                </button>
+              )}
+              {msg.id && msg.content && (
+                <button onClick={() => onForkFromHere?.(msg.id!)} className="btn-ghost py-1 px-2 text-xs gap-1">
+                  <GitBranch className="w-3.5 h-3.5" />Fork here
                 </button>
               )}
             </div>
@@ -1068,6 +1073,19 @@ export default function ChatPage() {
       setMessages((prev) => prev.map((m, i) => i === index ? { ...m, is_bookmarked: !!data.is_bookmarked } : m))
     } catch {
       toast.error('Failed to bookmark message')
+    }
+  }
+
+
+  const forkFromMessage = async (messageId: number) => {
+    if (!activeSession) return
+    try {
+      const { data } = await api.post(`/chat/sessions/${activeSession.id}/fork`, null, { params: { from_message_id: messageId } })
+      await fetchSessions()
+      selectSessionId(data.id)
+      toast.success('Conversation forked')
+    } catch {
+      toast.error('Failed to fork conversation')
     }
   }
 
@@ -1905,6 +1923,7 @@ export default function ChatPage() {
                   streamPhase={streamPhase} warmingModel={warmingModel} sending={sending}
                   onRegenerate={regenerate}
                   onFork={forkSession}
+                  onForkFromHere={forkFromMessage}
                   onBookmark={toggleBookmark}
                   isCliActive={false}
                   activity={i === messages.length - 1 ? streamActivity : null}

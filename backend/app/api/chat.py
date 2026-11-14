@@ -912,6 +912,7 @@ def create_session(
 @router.post("/sessions/{session_id}/fork", response_model=ChatSessionOut, status_code=201)
 def fork_session(
     session_id: int,
+    from_message_id: Optional[int] = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -921,6 +922,13 @@ def fork_session(
     if not src:
         raise HTTPException(status_code=404, detail="Session not found")
 
+    messages = list(src.messages)
+    if from_message_id is not None:
+        cutoff = next((i for i, m in enumerate(messages) if m.id == from_message_id), None)
+        if cutoff is None:
+            raise HTTPException(status_code=404, detail="Message not found")
+        messages = messages[: cutoff + 1]
+
     copy = ChatSession(
         user_id=current_user.id,
         title=f"{src.title} (fork)"[:80],
@@ -929,7 +937,7 @@ def fork_session(
     )
     db.add(copy)
     db.flush()
-    for msg in src.messages:
+    for msg in messages:
         db.add(ChatMessage(
             session_id=copy.id,
             role=msg.role,
