@@ -3,7 +3,7 @@ import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
   MessageSquare, Cpu, ImageIcon, Clapperboard, Brain, Wand2, LayoutDashboard,
   LogOut, Settings, Sun, Moon, MonitorSmartphone, LogIn, UserPlus,
-  Pencil, ChevronDown, X, Cable, Key, Search, BookMarked,
+  Pencil, ChevronDown, X, Cable, Key, Search, BookMarked, Pin,
 } from 'lucide-react'
 import { useAuth } from '../../store/auth'
 import { useSessions } from '../../store/sessions'
@@ -55,6 +55,18 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
   const [query, setQuery] = useState('')
   const [searchResults, setSearchResults] = useState<any[]>([])
   const [searching, setSearching] = useState(false)
+  const [pinned, setPinned] = useState<Set<number>>(() => {
+    try { return new Set(JSON.parse(localStorage.getItem('hexallm:pinnedChats') || '[]')) } catch { return new Set() }
+  })
+  const togglePin = (id: number) => {
+    setPinned((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      localStorage.setItem('hexallm:pinnedChats', JSON.stringify([...next]))
+      return next
+    })
+  }
   const { sessions, activeId, loaded, fetch, setActive, remove } = useSessions()
 
   useEffect(() => {
@@ -80,6 +92,7 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
 
   const q = query.trim().toLowerCase()
   const visibleSessions = q ? sessions.filter((s) => s.title.toLowerCase().includes(q)) : sessions
+  const pinnedSessions = visibleSessions.filter((s) => pinned.has(s.id))
   const groups = GROUP_ORDER
     .map((g) => ({ group: g, items: visibleSessions.filter((s) => groupOf(s.updated_at) === g) }))
     .filter((g) => g.items.length > 0)
@@ -238,6 +251,26 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
           </div>
         )}
 
+        {user && query.trim().length < 2 && pinnedSessions.length > 0 && (
+          <div key="pinned">
+            <p className="px-2 pb-1 text-xs font-medium text-gray-500">Pinned</p>
+            <div className="space-y-0.5">
+              {pinnedSessions.map((s) => (
+                <div key={s.id} onClick={() => openChat(s.id)}
+                  className={clsx('flex items-center gap-2 px-2 py-2 rounded-xl cursor-pointer group text-sm transition-colors',
+                    activeId === s.id ? 'bg-primary-900/40 text-primary-300' : 'hover:bg-gray-800 text-gray-400')}>
+                  <Pin className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="flex-1 min-w-0 truncate">{s.title}</span>
+                  <button onClick={(e) => { e.stopPropagation(); togglePin(s.id) }}
+                    className="opacity-0 group-hover:opacity-100 hover:text-primary-300 transition-opacity" title="Unpin">
+                    <Pin className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
         {user && query.trim().length < 2 && groups.map(({ group, items }) => (
           <div key={group}>
             <p className="px-2 pb-1 text-xs font-medium text-gray-500">{group}</p>
@@ -248,6 +281,13 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
                     activeId === s.id ? 'bg-primary-900/40 text-primary-300' : 'hover:bg-gray-800 text-gray-400')}>
                   <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
                   <span className="flex-1 min-w-0 truncate">{s.title}</span>
+                  <button
+                    onClick={(e) => { e.stopPropagation(); togglePin(s.id) }}
+                    className={clsx('opacity-0 group-hover:opacity-100 transition-opacity', pinned.has(s.id) ? 'text-primary-300' : 'text-gray-600 hover:text-gray-300')}
+                    title={pinned.has(s.id) ? 'Unpin' : 'Pin'}
+                  >
+                    <Pin className="w-3.5 h-3.5" />
+                  </button>
                   <button
                     onClick={(e) => { e.stopPropagation(); remove(s.id) }}
                     className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity"
