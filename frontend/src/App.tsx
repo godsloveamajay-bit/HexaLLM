@@ -40,6 +40,7 @@ const ImageGenPage   = lazy(() => import('./pages/ImageGen'))
 const VideoGenPage   = lazy(() => import('./pages/VideoGen'))
 const ApiKeysPage    = lazy(() => import('./pages/ApiKeys'))
 const MemoryPage     = lazy(() => import('./pages/Memory'))
+const PromptsPage    = lazy(() => import('./pages/Prompts'))
 const TrainPage      = lazy(() => import('./pages/Train'))
 const RemoteCliPage  = lazy(() => import('./pages/RemoteCLI'))
 
@@ -110,6 +111,7 @@ export default function App() {
             <Route path="/remote-cli" element={<PrivateRoute><RemoteCliPage /></PrivateRoute>} />
             <Route path="/api-keys" element={<PrivateRoute><ApiKeysPage /></PrivateRoute>} />
             <Route path="/memory"     element={<PrivateRoute><MemoryPage /></PrivateRoute>} />
+            <Route path="/prompts"   element={<PrivateRoute><PromptsPage /></PrivateRoute>} />
             <Route path="/settings"   element={<PrivateRoute><SettingsPage /></PrivateRoute>} />
             <Route path="/billing"    element={<PrivateRoute><BillingPage /></PrivateRoute>} />
 
