@@ -40,6 +40,27 @@ export default defineConfig({
         cleanupOutdatedCaches: true,
         navigateFallback: 'index.html',
         navigateFallbackDenylist: [/^\/api\//],
+        runtimeCaching: [
+          {
+            urlPattern: ({ url }) => url.pathname.startsWith('/api/v1/'),
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'api-runtime',
+              expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 },
+              networkTimeoutSeconds: 8,
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+          {
+            urlPattern: /\.(?:png|jpg|jpeg|svg|gif|webp|avif)$/i,
+            handler: 'CacheFirst',
+            options: {
+              cacheName: 'image-runtime',
+              expiration: { maxEntries: 120, maxAgeSeconds: 60 * 60 * 24 * 30 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     }),
   ],
