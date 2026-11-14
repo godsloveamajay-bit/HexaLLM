@@ -42,6 +42,8 @@
 
 html, body { transition: background-color 0.3s ease, color 0.3s ease; }
 
+:focus-visible { outline: 2px solid rgb(var(--p-400)); outline-offset: 2px; }
+
 @layer base {
   html {
     overflow-x: hidden;

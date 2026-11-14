@@ -188,16 +188,16 @@ function ToolCard({ tool, onPatch, onAct, onRemove }: {
         </div>
         <div className="flex items-center gap-1 flex-shrink-0">
           {tool.status === 'pending' && (
-            <button onClick={() => onAct(tool.id, 'approve')} className="btn-primary py-1.5 px-3 text-sm" title="Approve">
+            <button onClick={() => onAct(tool.id, 'approve')} className="btn-primary py-1.5 px-3 text-sm" title="Approve" aria-label="Approve">
               <Check className="w-4 h-4" /> Approve
             </button>
           )}
           {tool.status !== 'rejected' && (
-            <button onClick={() => onAct(tool.id, 'reject')} className="btn-ghost p-1.5 text-gray-400" title="Reject">
+            <button onClick={() => onAct(tool.id, 'reject')} className="btn-ghost p-1.5 text-gray-400" title="Reject" aria-label="Reject">
               <X className="w-4 h-4" />
             </button>
           )}
-          <button onClick={() => onRemove(tool.id)} className="btn-ghost p-1.5 text-red-500 hover:text-red-400" title="Delete">
+          <button onClick={() => onRemove(tool.id)} className="btn-ghost p-1.5 text-red-500 hover:text-red-400" title="Delete" aria-label="Delete">
             <Trash2 className="w-4 h-4" />
           </button>
         </div>

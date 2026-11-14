@@ -443,7 +443,7 @@ export default function AdminPage() {
                         {w.created_at ? format(new Date(w.created_at), 'MMM dd, yyyy') : '—'}
                       </td>
                       <td className="px-4 py-3">
-                        <button onClick={() => removeIp(w.id)} className="btn-ghost p-1.5" title="Remove">
+                        <button onClick={() => removeIp(w.id)} className="btn-ghost p-1.5" title="Remove" aria-label="Remove">
                           <Trash2 className="w-4 h-4 text-rose-500" />
                         </button>
                       </td>
@@ -515,7 +515,7 @@ export default function AdminPage() {
                             <button onClick={() => saveSettings(s)} disabled={saving === s.variant_id} className="btn-primary text-xs px-3 py-1.5">
                               {saving === s.variant_id ? 'Saving…' : 'Save'}
                             </button>
-                            <button onClick={() => resetSettings(s)} disabled={saving === s.variant_id} className="btn-ghost p-1.5" title="Reset to defaults">
+                            <button onClick={() => resetSettings(s)} disabled={saving === s.variant_id} className="btn-ghost p-1.5" title="Reset to defaults" aria-label="Reset to defaults">
                               <RefreshCw className="w-4 h-4 text-secondary" />
                             </button>
                           </div>

@@ -146,13 +146,13 @@ function StepCard({ step }: { step: Step }) {
         </span>
         <div className="flex items-center gap-2 flex-shrink-0">
           {step.duration_ms != null && step.duration_ms > 0 && (
-            <span className="text-xs text-gray-600 flex items-center gap-0.5" title="Duration">
+            <span className="text-xs text-gray-600 flex items-center gap-0.5" title="Duration" aria-label="Duration">
               <Clock className="w-3 h-3" />
               {step.duration_ms >= 1000 ? `${(step.duration_ms / 1000).toFixed(1)}s` : `${step.duration_ms}ms`}
             </span>
           )}
           {step.tokens?.total != null && step.tokens.total > 0 && (
-            <span className="text-xs text-gray-600 flex items-center gap-0.5" title="Tokens">
+            <span className="text-xs text-gray-600 flex items-center gap-0.5" title="Tokens" aria-label="Tokens">
               <Zap className="w-3 h-3" />
               {step.tokens.total}
             </span>

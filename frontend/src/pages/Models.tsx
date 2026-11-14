@@ -85,7 +85,7 @@ function ModelCard({ model, onDelete, onLike, isOwner }: { model: Model; onDelet
         </div>
         <div className="flex items-center gap-2">
           {model.is_public && (
-            <button onClick={copyShareLink} title="Copy share link" className="text-gray-500 hover:text-primary-400 transition-colors">
+            <button onClick={copyShareLink} title="Copy share link" aria-label="Copy share link" className="text-gray-500 hover:text-primary-400 transition-colors">
               <Share2 className="w-3.5 h-3.5" />
             </button>
           )}

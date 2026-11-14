@@ -268,18 +268,18 @@ export default function VideoGenPage() {
                     onClick={() => regenerate(current)}
                     disabled={generating}
                     className="btn-secondary"
-                    title="Regenerate"
+                    title="Regenerate" aria-label="Regenerate"
                   >
                     <RefreshCw className="w-4 h-4" />
                   </button>
                   <button
                     onClick={() => download(current.url, current.prompt)}
                     className="btn-secondary"
-                    title="Download"
+                    title="Download" aria-label="Download"
                   >
                     <Download className="w-4 h-4" />
                   </button>
-                  <button onClick={() => setCurrent(null)} className="btn-ghost p-2 text-gray-500" title="Dismiss">
+                  <button onClick={() => setCurrent(null)} className="btn-ghost p-2 text-gray-500" title="Dismiss" aria-label="Dismiss">
                     <X className="w-4 h-4" />
                   </button>
                 </div>

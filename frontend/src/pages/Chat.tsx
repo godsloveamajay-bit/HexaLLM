@@ -1554,10 +1554,10 @@ export default function ChatPage() {
             {voiceSpeaking ? 'Speaking…' : voiceLive ? 'Listening — just talk' : 'Mic paused'}
             {voiceHeld && ' · queued'}
           </span>
-          <button onClick={stopVoiceTts} className="hover:text-gray-200 transition-colors" title="Stop speaking">
+          <button onClick={stopVoiceTts} className="hover:text-gray-200 transition-colors" title="Stop speaking" aria-label="Stop speaking">
             <Pause className="w-3.5 h-3.5" />
           </button>
-          <button onClick={stopVoice} className="hover:text-red-400 transition-colors" title="Exit voice mode">
+          <button onClick={stopVoice} className="hover:text-red-400 transition-colors" title="Exit voice mode" aria-label="Exit voice mode">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -1577,7 +1577,7 @@ export default function ChatPage() {
           <div className="relative flex items-end gap-2 px-3 py-2.5">
             <input ref={fileInputRef} type="file" accept="image/*,.pdf,.txt,.md" className="hidden" onChange={handleFile} />
             {!isGuest && (
-              <button onClick={() => fileInputRef.current?.click()} className="btn-ghost p-2 flex-shrink-0" title="Attach file or image">
+              <button onClick={() => fileInputRef.current?.click()} className="btn-ghost p-2 flex-shrink-0" title="Attach file or image" aria-label="Attach file or image">
                 <Paperclip className="w-4 h-4" />
               </button>
             )}
@@ -1587,7 +1587,7 @@ export default function ChatPage() {
             <button onClick={toggleVoice} disabled={transcribing} className={clsx('btn-ghost p-2 flex-shrink-0 transition-colors', listening && 'text-red-400 bg-red-900/20', transcribing && 'opacity-60 cursor-not-allowed')} title={transcribing ? 'Transcribing…' : listening ? 'Stop recording' : 'Voice input (Whisper)'}>
               {transcribing ? <Loader2 className="w-4 h-4 animate-spin" /> : listening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
             </button>
-            <button onClick={insertMath} className="btn-ghost p-2 flex-shrink-0 text-indigo-400 hover:text-cyan-300 transition-colors" title="Insert math ($$ ... $$)">
+            <button onClick={insertMath} className="btn-ghost p-2 flex-shrink-0 text-indigo-400 hover:text-cyan-300 transition-colors" title="Insert math ($$ ... $$)" aria-label="Insert math ($$ ... $$)">
               <Sigma className="w-4 h-4" />
             </button>
             {slashMatches.length > 0 && (
@@ -1661,7 +1661,7 @@ export default function ChatPage() {
               </button>
             )}
             {!isGuest && (
-              <button onClick={() => setShowTemplates(!showTemplates)} className="btn-ghost text-xs gap-1 p-1.5" title="Prompt templates">
+              <button onClick={() => setShowTemplates(!showTemplates)} className="btn-ghost text-xs gap-1 p-1.5" title="Prompt templates" aria-label="Prompt templates">
                 <BookMarked className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Templates</span>
               </button>
@@ -1673,21 +1673,21 @@ export default function ChatPage() {
               </button>
             )}
             {(model === CUSTOM_VARIANT_ID || !model.startsWith('hex-')) && (
-              <button onClick={() => setShowPersonality(!showPersonality)} className="btn-ghost text-xs gap-1 p-1.5 relative" title="Personality">
+              <button onClick={() => setShowPersonality(!showPersonality)} className="btn-ghost text-xs gap-1 p-1.5 relative" title="Personality" aria-label="Personality">
                 <SlidersHorizontal className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Personality</span>
                 {personalityActive(personality) && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary-400" />}
               </button>
             )}
             {hasRawAccess && (
-              <button onClick={() => setShowAdvanced(!showAdvanced)} className={clsx('btn-ghost text-xs gap-1 p-1.5', showAdvanced && 'bg-primary-900/30')} title="Advanced Ollama params">
+              <button onClick={() => setShowAdvanced(!showAdvanced)} className={clsx('btn-ghost text-xs gap-1 p-1.5', showAdvanced && 'bg-primary-900/30')} title="Advanced Ollama params" aria-label="Advanced Ollama params">
                 <Sliders className="w-3.5 h-3.5" />
                 <span className="hidden sm:inline">Params</span>
                 {Object.keys(ollamaOptions).length > 0 && <span className="absolute top-1 right-1 w-1.5 h-1.5 rounded-full bg-primary-400" />}
               </button>
             )}
             {messages.length > 0 && (
-              <button onClick={exportConversation} className="btn-ghost p-1.5 ml-auto" title="Export as Markdown">
+              <button onClick={exportConversation} className="btn-ghost p-1.5 ml-auto" title="Export as Markdown" aria-label="Export as Markdown">
                 <Download className="w-4 h-4" />
               </button>
             )}
@@ -1700,7 +1700,7 @@ export default function ChatPage() {
                   } catch { toast.error('Failed to load prompts') }
                 }
                 setShowPrompts((v) => !v)
-              }} className="btn-ghost p-1.5" title="Insert saved prompt">
+              }} className="btn-ghost p-1.5" title="Insert saved prompt" aria-label="Insert saved prompt">
                 <BookMarked className="w-4 h-4" />
               </button>
               {showPrompts && (

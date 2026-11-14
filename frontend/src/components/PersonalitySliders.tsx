@@ -29,7 +29,7 @@ export default function PersonalitySliders({ value, onChange, showPresets = true
             </button>
           ))}
           <button type="button" onClick={() => onChange({ ...DEFAULT_TRAITS })}
-            title="Reset to neutral"
+            title="Reset to neutral" aria-label="Reset to neutral"
             className="badge bg-transparent text-gray-500 hover:text-gray-300 border border-gray-800 cursor-pointer inline-flex items-center gap-1">
             <RotateCcw className="w-3 h-3" /> Reset
           </button>

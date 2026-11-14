@@ -82,7 +82,7 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-        <ChartCard title="Daily Requests (30 days)">
+        <ChartCard title="Daily Requests (30 days)" aria-label="Daily Requests (30 days)">
           <ResponsiveContainer width="100%" height={220}>
             <AreaChart data={daily}>
               <defs>
@@ -101,7 +101,7 @@ export default function AnalyticsPage() {
           </ResponsiveContainer>
         </ChartCard>
 
-        <ChartCard title="Token Usage (30 days)">
+        <ChartCard title="Token Usage (30 days)" aria-label="Token Usage (30 days)">
           <ResponsiveContainer width="100%" height={220}>
             <BarChart data={daily.slice(-14)}>
               <XAxis dataKey="date" tick={{ fill: '#6b7280', fontSize: 10 }} tickLine={false} axisLine={false}
@@ -115,7 +115,7 @@ export default function AnalyticsPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <ChartCard title="Requests by Model">
+        <ChartCard title="Requests by Model" aria-label="Requests by Model">
           {modelUsage.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-gray-600 text-sm">No data yet</div>
           ) : (
@@ -141,7 +141,7 @@ export default function AnalyticsPage() {
           )}
         </ChartCard>
 
-        <ChartCard title="Model Performance">
+        <ChartCard title="Model Performance" aria-label="Model Performance">
           {modelUsage.length === 0 ? (
             <div className="h-48 flex items-center justify-center text-gray-600 text-sm">No data yet</div>
           ) : (

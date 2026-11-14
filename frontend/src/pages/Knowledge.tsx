@@ -373,7 +373,7 @@ function KBDetail({ kb, onChanged, onDelete }: {
                   )}
                 </div>
                 {statusBadge(d.status)}
-                <button onClick={() => reprocessDoc(d.id)} className="text-gray-600 hover:text-primary-400 p-1" title="Reprocess">
+                <button onClick={() => reprocessDoc(d.id)} className="text-gray-600 hover:text-primary-400 p-1" title="Reprocess" aria-label="Reprocess">
                   <RefreshCw className="w-4 h-4" />
                 </button>
                 <button onClick={() => deleteDoc(d.id)} className="text-gray-600 hover:text-red-400 p-1">

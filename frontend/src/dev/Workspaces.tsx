@@ -302,7 +302,7 @@ export default function Workspaces() {
                             onClick={() => removeKey(k)}
                             className="ml-auto p-1 rounded hover:bg-[#161b22]"
                             style={{ color: '#f87171' }}
-                            title="revoke"
+                            title="revoke" aria-label="revoke"
                           >
                             <Trash2 size={12} />
                           </button>
@@ -337,13 +337,13 @@ export default function Workspaces() {
                       <button onClick={() => useItem(item)} className="flex items-center gap-1.5 font-mono text-xs px-2.5 py-1.5 rounded transition-colors" style={{ background: '#4ade80', color: '#0d1117', fontWeight: 700 }}>
                         <Play size={11} /> load
                       </button>
-                      <button onClick={() => copyPayload(item)} className="p-1.5 rounded border transition-colors hover:bg-[#161b22]" style={{ borderColor: '#30363d', color: '#8b949e' }} title="copy JSON">
+                      <button onClick={() => copyPayload(item)} className="p-1.5 rounded border transition-colors hover:bg-[#161b22]" style={{ borderColor: '#30363d', color: '#8b949e' }} title="copy JSON" aria-label="copy JSON">
                         {copied === item.id ? <Check size={13} style={{ color: '#4ade80' }} /> : <Copy size={13} />}
                       </button>
-                      <button onClick={() => renameItemNow(item)} className="p-1.5 rounded border transition-colors hover:bg-[#161b22]" style={{ borderColor: '#30363d', color: '#8b949e' }} title="rename">
+                      <button onClick={() => renameItemNow(item)} className="p-1.5 rounded border transition-colors hover:bg-[#161b22]" style={{ borderColor: '#30363d', color: '#8b949e' }} title="rename" aria-label="rename">
                         <Pencil size={12} />
                       </button>
-                      <button onClick={() => removeItem(item)} className="p-1.5 rounded border transition-colors hover:bg-[#161b22]" style={{ borderColor: '#30363d', color: '#f87171' }} title="delete">
+                      <button onClick={() => removeItem(item)} className="p-1.5 rounded border transition-colors hover:bg-[#161b22]" style={{ borderColor: '#30363d', color: '#f87171' }} title="delete" aria-label="delete">
                         <Trash2 size={12} />
                       </button>
                     </div>

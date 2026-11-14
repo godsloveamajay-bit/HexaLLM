@@ -129,7 +129,7 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
       <aside className="flex flex-col w-16 bg-gray-900/95 light:bg-white/90 border-r border-gray-800 light:border-gray-300/40
                         flex-shrink-0">
         <div className="p-2 space-y-1">
-          <button onClick={startNew} title="Start new chat"
+          <button onClick={startNew} title="Start new chat" aria-label="Start new chat"
             className="w-full p-2.5 rounded-lg flex justify-center text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors">
             <Pencil className="w-4 h-4" />
           </button>
@@ -145,22 +145,22 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
           ))}
         </div>
         <div className="p-2 space-y-1 border-t border-gray-800 light:border-gray-300/40">
-          {user && <NavLink to="/models" title="Model Hub"
+          {user && <NavLink to="/models" title="Model Hub" aria-label="Model Hub"
             className={({ isActive }) => clsx('flex justify-center p-2.5 rounded-lg transition-colors', isActive ? 'bg-primary-900/40 text-primary-300' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800')}>
             <Cpu className="w-4 h-4" />
           </NavLink>}
           {themeButton}
-          <NavLink to="/settings" title="Settings"
+          <NavLink to="/settings" title="Settings" aria-label="Settings"
             className={({ isActive }) => clsx('flex justify-center p-2.5 rounded-lg transition-colors', isActive ? 'bg-primary-900/40 text-primary-300' : 'text-gray-500 hover:text-gray-200 hover:bg-gray-800')}>
             <Settings className="w-4 h-4" />
           </NavLink>
           {user ? (
-            <button onClick={() => { logout(); navigate('/login') }} title="Logout"
+            <button onClick={() => { logout(); navigate('/login') }} title="Logout" aria-label="Logout"
               className="w-full flex justify-center p-2.5 rounded-lg text-gray-500 hover:text-red-400 hover:bg-red-900/10 transition-colors">
               <LogOut className="w-4 h-4" />
             </button>
           ) : (
-            <Link to="/login" title="Sign in"
+            <Link to="/login" title="Sign in" aria-label="Sign in"
               className="flex justify-center p-2.5 rounded-lg text-gray-500 hover:text-gray-200 hover:bg-gray-800 transition-colors">
               <LogIn className="w-4 h-4" />
             </Link>
@@ -193,7 +193,7 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
       <div className="px-3 pt-3 pb-1 flex items-center justify-between">
         <span className="text-xs font-semibold text-gray-400 uppercase tracking-wide px-1">Recent</span>
         {user && (
-          <button onClick={startNew} title="Start new chat"
+          <button onClick={startNew} title="Start new chat" aria-label="Start new chat"
             className="p-1.5 rounded-lg text-gray-400 hover:text-gray-100 hover:bg-gray-800 transition-colors">
             <Pencil className="w-4 h-4" />
           </button>
@@ -263,7 +263,7 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
                   <Pin className="w-3.5 h-3.5 flex-shrink-0" />
                   <span className="flex-1 min-w-0 truncate">{s.title}</span>
                   <button onClick={(e) => { e.stopPropagation(); togglePin(s.id) }}
-                    className="opacity-0 group-hover:opacity-100 hover:text-primary-300 transition-opacity" title="Unpin">
+                    className="opacity-0 group-hover:opacity-100 hover:text-primary-300 transition-opacity" title="Unpin" aria-label="Unpin">
                     <Pin className="w-3.5 h-3.5" />
                   </button>
                 </div>
@@ -292,7 +292,7 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
                   <button
                     onClick={(e) => { e.stopPropagation(); remove(s.id) }}
                     className="opacity-0 group-hover:opacity-100 hover:text-red-400 transition-opacity"
-                    title="Delete chat"
+                    title="Delete chat" aria-label="Delete chat"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>

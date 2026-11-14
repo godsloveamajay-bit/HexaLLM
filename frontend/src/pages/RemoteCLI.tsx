@@ -274,7 +274,7 @@ export default function RemoteCLIPage() {
           <div className="card">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-semibold text-gray-100">Connected Machines</h2>
-              <button onClick={loadSessions} className="btn-ghost p-1" title="Refresh">
+              <button onClick={loadSessions} className="btn-ghost p-1" title="Refresh" aria-label="Refresh">
                 <RefreshCw className={clsx('w-3.5 h-3.5', loadingSessions && 'animate-spin')} />
               </button>
             </div>

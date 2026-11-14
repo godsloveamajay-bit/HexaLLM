@@ -56,7 +56,7 @@ export default function Layout() {
                          border border-gray-700/50 light:border-gray-300/50
                          text-gray-500 light:text-gray-600 hover:text-gray-300 light:hover:text-gray-900
                          hover:bg-gray-800 light:hover:bg-gray-300/70 transition-colors text-xs"
-              title="Open command palette"
+              title="Open command palette" aria-label="Open command palette"
             >
               <Search className="w-3 h-3" />
               <span>Search</span>

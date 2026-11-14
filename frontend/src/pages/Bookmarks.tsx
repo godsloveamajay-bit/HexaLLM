@@ -76,7 +76,7 @@ export default function BookmarksPage() {
                 <button onClick={() => open(item.session_id)} className="text-sm font-medium text-primary-400 hover:underline">
                   {item.session_title}
                 </button>
-                <button onClick={() => unbookmark(item.id)} className="text-gray-600 hover:text-red-400 p-1" title="Remove bookmark">
+                <button onClick={() => unbookmark(item.id)} className="text-gray-600 hover:text-red-400 p-1" title="Remove bookmark" aria-label="Remove bookmark">
                   <Star className="w-4 h-4 fill-current text-primary-400" />
                 </button>
               </div>

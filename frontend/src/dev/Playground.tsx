@@ -332,7 +332,7 @@ export default function Playground() {
             onChange={(e) => setActiveWorkspace(e.target.value ? Number(e.target.value) : null)}
             className="font-mono text-xs px-2 py-1.5 rounded border outline-none focus:border-[#4ade80]"
             style={{ background: '#0d1117', borderColor: '#30363d', color: '#8b949e' }}
-            title="active workspace"
+            title="active workspace" aria-label="active workspace"
           >
             <option value="">no workspace</option>
             {workspaces.map((w) => (
@@ -347,7 +347,7 @@ export default function Playground() {
             }}
             className="font-mono text-xs px-2 py-1.5 rounded border outline-none focus:border-[#4ade80] max-w-[180px]"
             style={{ background: '#0d1117', borderColor: '#30363d', color: '#8b949e' }}
-            title="load a saved preset"
+            title="load a saved preset" aria-label="load a saved preset"
           >
             <option value="">load preset…</option>
             {presets.map((p) => (
@@ -358,7 +358,7 @@ export default function Playground() {
             onClick={savePreset}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border transition-colors hover:bg-[#0d1117]"
             style={{ borderColor: savedFlash ? 'rgba(74,222,128,0.6)' : '#30363d', color: savedFlash ? '#4ade80' : '#8b949e' }}
-            title="save current config to the active workspace"
+            title="save current config to the active workspace" aria-label="save current config to the active workspace"
           >
             <Save size={13} /> {savedFlash ? 'saved' : 'save'}
           </button>
@@ -417,7 +417,7 @@ export default function Playground() {
                     reader.onload = () => setPgAttachment({ base64: reader.result as string, type, name: file.name })
                     reader.readAsDataURL(file)
                   }} />
-                <button onClick={() => pgImgRef.current?.click()} title="Attach image or document" className="p-1.5 rounded-md hover:bg-[#1e2430] text-secondary-500 hover:text-primary-400 transition-colors flex-shrink-0">
+                <button onClick={() => pgImgRef.current?.click()} title="Attach image or document" aria-label="Attach image or document" className="p-1.5 rounded-md hover:bg-[#1e2430] text-secondary-500 hover:text-primary-400 transition-colors flex-shrink-0">
                   <Paperclip className="w-4 h-4" />
                 </button>
               </div>

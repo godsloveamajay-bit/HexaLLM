@@ -269,8 +269,8 @@ export default function ApiKeysPage() {
                   </td>
                   <td className="px-4 py-3">
                     <div className="flex items-center gap-1">
-                      <button onClick={() => copy(k.key)} className="btn-ghost p-1.5" title="Copy key"><Copy className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => deleteKey(k.id)} className="btn-ghost p-1.5 text-red-500 hover:text-red-400" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => copy(k.key)} className="btn-ghost p-1.5" title="Copy key" aria-label="Copy key"><Copy className="w-3.5 h-3.5" /></button>
+                      <button onClick={() => deleteKey(k.id)} className="btn-ghost p-1.5 text-red-500 hover:text-red-400" title="Delete" aria-label="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                     </div>
                   </td>
                 </tr>

@@ -146,7 +146,7 @@ export default function ApiExplorer() {
             onChange={(e) => setActiveWorkspace(e.target.value ? Number(e.target.value) : null)}
             className="font-mono text-xs px-2 py-1.5 rounded border outline-none focus:border-[#4ade80]"
             style={{ background: '#0d1117', borderColor: '#30363d', color: '#8b949e' }}
-            title="active workspace"
+            title="active workspace" aria-label="active workspace"
           >
             <option value="">no workspace</option>
             {workspaces.map((w) => (
@@ -161,7 +161,7 @@ export default function ApiExplorer() {
             }}
             className="font-mono text-xs px-2 py-1.5 rounded border outline-none focus:border-[#4ade80] max-w-[180px]"
             style={{ background: '#0d1117', borderColor: '#30363d', color: '#8b949e' }}
-            title="load a saved request"
+            title="load a saved request" aria-label="load a saved request"
           >
             <option value="">load request…</option>
             {requests.map((r) => (
@@ -172,7 +172,7 @@ export default function ApiExplorer() {
             onClick={save}
             className="flex items-center gap-1.5 px-2.5 py-1.5 rounded border transition-colors hover:bg-[#0d1117]"
             style={{ borderColor: savedFlash ? 'rgba(74,222,128,0.6)' : '#30363d', color: savedFlash ? '#4ade80' : '#8b949e' }}
-            title="save this request to the active workspace"
+            title="save this request to the active workspace" aria-label="save this request to the active workspace"
           >
             <Save size={13} /> {savedFlash ? 'saved' : 'save'}
           </button>
