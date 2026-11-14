@@ -11,6 +11,7 @@ import { useTheme } from '../../lib/theme'
 import { DEV_FEATURES } from '../../lib/devFeatures'
 import UserAvatar from '../ui/UserAvatar'
 import { clsx } from 'clsx'
+import api from '../../lib/api'
 import { useState } from 'react'
 
 interface Props {
@@ -52,6 +53,8 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
   const [theme, setTheme] = useTheme()
   const [showApps, setShowApps] = useState(false)
   const [query, setQuery] = useState('')
+  const [searchResults, setSearchResults] = useState<any[]>([])
+  const [searching, setSearching] = useState(false)
   const { sessions, activeId, loaded, fetch, setActive, remove } = useSessions()
 
   useEffect(() => {
@@ -80,6 +83,17 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
   const groups = GROUP_ORDER
     .map((g) => ({ group: g, items: visibleSessions.filter((s) => groupOf(s.updated_at) === g) }))
     .filter((g) => g.items.length > 0)
+  useEffect(() => {
+    const q = query.trim()
+    if (!user || q.length < 2) { setSearchResults([]); setSearching(false); return }
+    let cancelled = false
+    setSearching(true)
+    api.get('/chat/sessions/search', { params: { q } })
+      .then(({ data }) => { if (!cancelled) setSearchResults(data || []) })
+      .catch(() => { if (!cancelled) setSearchResults([]) })
+      .finally(() => { if (!cancelled) setSearching(false) })
+    return () => { cancelled = true }
+  }, [query, user])
 
   const links = [...EXTRA_LINKS, ...(user?.is_admin ? [ADMIN_LINK] : [])]
 
@@ -199,7 +213,32 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
             </Link>
           </div>
         )}
-        {user && groups.map(({ group, items }) => (
+        {user && query.trim().length >= 2 && (
+          <div className="space-y-0.5">
+            {searching && <p className="px-2 py-2 text-xs text-gray-600">Searching…</p>}
+            {!searching && searchResults.length === 0 && (
+              <p className="px-2 py-2 text-xs text-gray-600">No matches.</p>
+            )}
+            {searchResults.map((r: any) => (
+              <div key={r.id} onClick={() => openChat(r.id)}
+                className={clsx('px-2 py-2 rounded-xl cursor-pointer group text-sm transition-colors',
+                  activeId === r.id ? 'bg-primary-900/40 text-primary-300' : 'hover:bg-gray-800 text-gray-400')}>
+                <div className="flex items-center gap-2">
+                  <MessageSquare className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="flex-1 min-w-0 truncate">{r.title}</span>
+                  {typeof r.match_count === 'number' && r.match_count > 0 && (
+                    <span className="text-[10px] text-gray-600">{r.match_count}</span>
+                  )}
+                </div>
+                {r.snippet && (
+                  <p className="mt-1 pl-5 text-[11px] text-gray-600 line-clamp-2">{r.snippet}</p>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {user && query.trim().length < 2 && groups.map(({ group, items }) => (
           <div key={group}>
             <p className="px-2 pb-1 text-xs font-medium text-gray-500">{group}</p>
             <div className="space-y-0.5">
