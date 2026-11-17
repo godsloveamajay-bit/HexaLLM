@@ -118,6 +118,9 @@ export default function RemoteCLIPage() {
   const [remoteFile, setRemoteFile] = useState('')
   const [remoteContent, setRemoteContent] = useState('')
   const [loadingFiles, setLoadingFiles] = useState(false)
+  const [termCmd, setTermCmd] = useState('')
+  const [termOutput, setTermOutput] = useState('')
+  const [runningTerm, setRunningTerm] = useState(false)
   const outputRef = useRef<HTMLDivElement>(null)
   const cliImgRef = useRef<HTMLInputElement>(null)
 
@@ -145,6 +148,20 @@ export default function RemoteCLIPage() {
       setRemoteContent(data.output || '')
     } catch (e: any) {
       toast.error(e?.response?.data?.detail || 'Failed to read remote file')
+    }
+  }
+
+
+  const runRemoteCommand = async () => {
+    if (!selectedSession || !termCmd.trim()) return
+    setRunningTerm(true)
+    try {
+      const { data } = await api.post('/cli/tool', { session_id: selectedSession, tool: 'run_command', input: termCmd })
+      setTermOutput(data.output || '')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Command failed')
+    } finally {
+      setRunningTerm(false)
     }
   }
 
@@ -381,6 +398,26 @@ export default function RemoteCLIPage() {
                   {remoteContent.slice(0, 8000)}
                 </pre>
               </div>
+            )}
+          </div>
+
+
+          {/* Terminal */}
+          <div className="card space-y-3">
+            <h2 className="text-sm font-semibold text-gray-100">Terminal</h2>
+            <div className="flex gap-2">
+              <input value={termCmd} onChange={(e) => setTermCmd(e.target.value)}
+                onKeyDown={(e) => e.key === 'Enter' && runRemoteCommand()}
+                placeholder="pwd, ls, git status…" className="input flex-1 text-sm font-mono" />
+              <button onClick={runRemoteCommand} disabled={!selectedSession || runningTerm || !termCmd.trim()}
+                className="btn-secondary px-3 py-2 text-xs">
+                {runningTerm ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'Run'}
+              </button>
+            </div>
+            {termOutput && (
+              <pre className="max-h-64 overflow-auto rounded-lg border border-gray-800 bg-gray-950 p-3 text-xs text-gray-300 whitespace-pre-wrap font-mono">
+                {termOutput.slice(0, 12000)}
+              </pre>
             )}
           </div>
 
