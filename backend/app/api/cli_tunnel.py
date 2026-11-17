@@ -135,6 +135,54 @@ class CliRunRequest(BaseModel):
     images: Optional[List[str]] = None  # base64 images for vision-aware tasks
 
 
+class CliToolRequest(BaseModel):
+    tool: str
+    input: Any = ""
+    session_id: Optional[str] = None
+
+
+@router.post("/cli/tool")
+async def run_tool_on_cli(
+    data: CliToolRequest,
+    current_user: User = Depends(get_current_user),
+):
+    """Run a single tool on a connected CLI and return its output."""
+    user_sessions = _registry.get(current_user.id, {})
+    if not user_sessions:
+        raise HTTPException(status_code=404, detail="No CLI connected. Run `hexallm daemon` first.")
+    sid = data.session_id or next(iter(user_sessions))
+    session = user_sessions.get(sid)
+    if not session:
+        raise HTTPException(status_code=404, detail=f"Session '{sid}' not found.")
+
+    task_id = str(uuid.uuid4())
+    q: asyncio.Queue = asyncio.Queue()
+    session.task_queues[task_id] = q
+
+    tool_input = data.input
+    if isinstance(tool_input, (dict, list)):
+        tool_input = json.dumps(tool_input)
+
+    await session.ws.send_json({
+        "type": "run_tool",
+        "task_id": task_id,
+        "tool": data.tool,
+        "input": tool_input,
+    })
+
+    try:
+        msg = await asyncio.wait_for(q.get(), timeout=60)
+    except asyncio.TimeoutError:
+        session.task_queues.pop(task_id, None)
+        raise HTTPException(status_code=504, detail="CLI tool timed out")
+    finally:
+        session.task_queues.pop(task_id, None)
+
+    if msg.get("type") == "error":
+        raise HTTPException(status_code=400, detail=msg.get("error", "CLI error"))
+    return {"output": msg.get("output", ""), "session_id": sid}
+
+
 @router.post("/cli/run")
 async def run_on_cli(
     data: CliRunRequest,

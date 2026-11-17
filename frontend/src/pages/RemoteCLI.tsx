@@ -113,8 +113,40 @@ export default function RemoteCLIPage() {
   const [ollamaModels, setOllamaModels] = useState<string[]>([])
   const [variants, setVariants] = useState<VariantInfo[]>([])
   const [runState, setRunState] = useState<RunState>({ status: 'idle', steps: [] })
+  const [remotePath, setRemotePath] = useState('.')
+  const [remoteFiles, setRemoteFiles] = useState('')
+  const [remoteFile, setRemoteFile] = useState('')
+  const [remoteContent, setRemoteContent] = useState('')
+  const [loadingFiles, setLoadingFiles] = useState(false)
   const outputRef = useRef<HTMLDivElement>(null)
   const cliImgRef = useRef<HTMLInputElement>(null)
+
+
+  const loadRemoteFiles = async () => {
+    if (!selectedSession) return
+    setLoadingFiles(true)
+    try {
+      const { data } = await api.post('/cli/tool', { session_id: selectedSession, tool: 'list_files', input: remotePath || '.' })
+      setRemoteFiles(data.output || '')
+      setRemoteFile('')
+      setRemoteContent('')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Failed to list remote files')
+    } finally {
+      setLoadingFiles(false)
+    }
+  }
+
+  const readRemoteFile = async (path: string) => {
+    if (!selectedSession) return
+    setRemoteFile(path)
+    try {
+      const { data } = await api.post('/cli/tool', { session_id: selectedSession, tool: 'read_file', input: path })
+      setRemoteContent(data.output || '')
+    } catch (e: any) {
+      toast.error(e?.response?.data?.detail || 'Failed to read remote file')
+    }
+  }
 
   const isAdmin = !!user?.is_admin
   const modelOptions = isAdmin
@@ -310,6 +342,44 @@ export default function RemoteCLIPage() {
                     <p className="text-xs text-gray-700 pl-6 font-mono">#{s.session_id}</p>
                   </button>
                 ))}
+              </div>
+            )}
+          </div>
+
+
+          {/* Remote files */}
+          <div className="card space-y-3">
+            <h2 className="text-sm font-semibold text-gray-100">Remote Files</h2>
+            <div className="flex gap-2">
+              <input value={remotePath} onChange={(e) => setRemotePath(e.target.value)}
+                placeholder="." className="input flex-1 text-sm" />
+              <button onClick={loadRemoteFiles} disabled={!selectedSession || loadingFiles}
+                className="btn-secondary px-3 py-2 text-xs">
+                {loadingFiles ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : 'List'}
+              </button>
+            </div>
+            {remoteFiles && (
+              <div className="max-h-48 overflow-y-auto rounded-lg border border-gray-800 bg-gray-950 p-2 space-y-1">
+                {remoteFiles.split('\n').filter(Boolean).map((line, i) => {
+                  const trimmed = line.trim()
+                  const isDir = trimmed.endsWith('/')
+                  const path = trimmed.replace(/^📁\s*|^📄\s*/, '').split('  (')[0].trim()
+                  if (!path || path === '.') return null
+                  return (
+                    <button key={i} onClick={() => isDir ? (setRemotePath(path), loadRemoteFiles()) : readRemoteFile(path)}
+                      className="block w-full text-left px-2 py-1 rounded text-xs font-mono text-gray-300 hover:bg-gray-800 truncate">
+                      {trimmed}
+                    </button>
+                  )
+                })}
+              </div>
+            )}
+            {remoteContent && (
+              <div>
+                <p className="text-xs text-gray-500 mb-1">{remoteFile}</p>
+                <pre className="max-h-64 overflow-auto rounded-lg border border-gray-800 bg-gray-950 p-3 text-xs text-gray-300 whitespace-pre-wrap">
+                  {remoteContent.slice(0, 8000)}
+                </pre>
               </div>
             )}
           </div>
