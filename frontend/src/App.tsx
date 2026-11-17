@@ -31,6 +31,7 @@ const SharedModelPage  = lazy(() => import('./pages/SharedModel'))
 
 // Authenticated pages — all lazy-loaded so the initial bundle stays tiny
 const ChatPage       = lazy(() => import('./pages/Chat'))
+const CodePage       = lazy(() => import('./pages/Code'))
 const ModelsPage     = lazy(() => import('./pages/Models'))
 const AdminPage      = lazy(() => import('./pages/Admin'))
 const SettingsPage   = lazy(() => import('./pages/Settings'))
@@ -43,7 +44,6 @@ const MemoryPage     = lazy(() => import('./pages/Memory'))
 const BookmarksPage  = lazy(() => import('./pages/Bookmarks'))
 const PromptsPage    = lazy(() => import('./pages/Prompts'))
 const TrainPage      = lazy(() => import('./pages/Train'))
-const RemoteCliPage  = lazy(() => import('./pages/RemoteCLI'))
 
 // Dev-variant pages — only bundled/routed when VITE_DEV_FEATURES=1.
 const DevPages: Record<string, React.LazyExoticComponent<() => JSX.Element>> = DEV_FEATURES ? {
@@ -130,12 +130,12 @@ export default function App() {
           <Route element={<AppLayout />}>
             <Route path="/"           element={<Navigate to="/chat" replace />} />
             <Route path="/chat"       element={<ChatPage />} />
+            <Route path="/code"       element={<PrivateRoute><CodePage /></PrivateRoute>} />
             <Route path="/admin"      element={<PrivateRoute><AdminRoute><AdminPage /></AdminRoute></PrivateRoute>} />
             <Route path="/image"      element={<PrivateRoute><ImageGenPage /></PrivateRoute>} />
             <Route path="/video"      element={<PrivateRoute><VideoGenPage /></PrivateRoute>} />
             <Route path="/models"     element={<PrivateRoute><ModelsPage /></PrivateRoute>} />
             <Route path="/train"      element={<PrivateRoute><TrainPage /></PrivateRoute>} />
-            <Route path="/remote-cli" element={<PrivateRoute><RemoteCliPage /></PrivateRoute>} />
             <Route path="/api-keys" element={<PrivateRoute><ApiKeysPage /></PrivateRoute>} />
             <Route path="/memory"     element={<PrivateRoute><MemoryPage /></PrivateRoute>} />
             <Route path="/bookmarks" element={<PrivateRoute><BookmarksPage /></PrivateRoute>} />

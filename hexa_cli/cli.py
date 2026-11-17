@@ -1023,3 +1023,60 @@ def cmd_plugin_publish(path: str, server: Optional[str], token: Optional[str]):
             archive_path.unlink()
         except OSError:
             pass
+
+
+@main.command("run")
+@click.argument("task")
+@click.option("--model", "-m", default=None, help="Model to use (overrides config).")
+def cmd_run(task: str, model: Optional[str]):
+    """Run a single coding task non-interactively and print the result."""
+    async def _run_once():
+        cfg = load_config()
+        if model:
+            cfg.model = model
+
+        backend, backend_label, hexa, hexa_user = await _pick_backend(cfg)
+        from .hexallm import PollinationsClient
+        if isinstance(backend, PollinationsClient):
+            if cfg.model not in PollinationsClient.MODELS:
+                cfg.model = PollinationsClient.DEFAULT_MODEL
+        elif hexa is None:
+            if ":" not in cfg.model:
+                cfg.model = "llama3:8B"
+
+        agent = Agent(
+            model=cfg.model,
+            max_steps=cfg.max_steps,
+            temperature=cfg.temperature,
+            backend=backend,
+        )
+
+        if not isinstance(backend, PollinationsClient):
+            try:
+                models = await backend.list_models()
+                if models and cfg.model not in models:
+                    cfg.model = _pick_default_model(models)
+                    agent.model = cfg.model
+            except Exception as e:
+                src = "HexaLLM" if hexa else "Ollama"
+                console.print(f"[red]Cannot reach {src}:[/] {e}")
+                sys.exit(1)
+
+        active_tool_funcs = dict(TOOL_FUNCS)
+        active_tool_descs = dict(TOOL_DESCRIPTIONS)
+
+        async for event in agent.run(task, active_tool_funcs, active_tool_descs):
+            etype = event.get("type")
+            if etype == "tool":
+                console.print(f"[cyan]{event.get('name')}[/] {event.get('input','')[:120]}")
+                out = (event.get("output") or "").strip()
+                if out:
+                    console.print(f"  [dim]{out[:500]}[/]")
+            elif etype == "done":
+                console.print(f"\n[green]Result:[/] {event.get('text','')}")
+            elif etype == "error":
+                console.print(f"[red]Error:[/] {event.get('text','')}")
+            elif etype == "answer_chunk":
+                pass
+
+    asyncio.run(_run_once())

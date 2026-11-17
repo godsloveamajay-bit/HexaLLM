@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { NavLink, useNavigate, Link } from 'react-router-dom'
 import {
-  MessageSquare, Cpu, ImageIcon, Clapperboard, Brain, Wand2, LayoutDashboard,
+  Code2, MessageSquare, Cpu, ImageIcon, Clapperboard, Brain, Wand2, LayoutDashboard,
   LogOut, Settings, Sun, Moon, MonitorSmartphone, LogIn, UserPlus,
   Pencil, ChevronDown, X, Cable, Key, Search, BookMarked, Pin, Star,
 } from 'lucide-react'
@@ -39,10 +39,10 @@ const EXTRA_LINKS = [
   { to: '/image', icon: ImageIcon, label: 'Image Gen' },
   { to: '/video', icon: Clapperboard, label: 'Video Gen' },
   { to: '/memory', icon: Brain, label: 'Memory' },
+  { to: '/code', icon: Code2, label: 'Code' },
   { to: '/bookmarks', icon: Star, label: 'Bookmarks' },
   { to: '/prompts', icon: BookMarked, label: 'Prompts' },
   { to: '/train', icon: Wand2, label: 'Training' },
-  { to: '/remote-cli', icon: Cable, label: 'Remote CLI' },
   { to: '/api-keys', icon: Key, label: 'API Keys' },
 ]
 
