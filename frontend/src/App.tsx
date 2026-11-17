@@ -32,6 +32,7 @@ const SharedModelPage  = lazy(() => import('./pages/SharedModel'))
 // Authenticated pages — all lazy-loaded so the initial bundle stays tiny
 const ChatPage       = lazy(() => import('./pages/Chat'))
 const CodePage       = lazy(() => import('./pages/Code'))
+const PetPage        = lazy(() => import('./pages/Pet'))
 const ModelsPage     = lazy(() => import('./pages/Models'))
 const AdminPage      = lazy(() => import('./pages/Admin'))
 const SettingsPage   = lazy(() => import('./pages/Settings'))
@@ -131,6 +132,7 @@ export default function App() {
             <Route path="/"           element={<Navigate to="/chat" replace />} />
             <Route path="/chat"       element={<ChatPage />} />
             <Route path="/code"       element={<PrivateRoute><CodePage /></PrivateRoute>} />
+            <Route path="/pet"        element={<PetPage />} />
             <Route path="/admin"      element={<PrivateRoute><AdminRoute><AdminPage /></AdminRoute></PrivateRoute>} />
             <Route path="/image"      element={<PrivateRoute><ImageGenPage /></PrivateRoute>} />
             <Route path="/video"      element={<PrivateRoute><VideoGenPage /></PrivateRoute>} />

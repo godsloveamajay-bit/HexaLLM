@@ -9,6 +9,7 @@ import {GitBranch, Command,
 } from 'lucide-react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../store/auth'
+import { isTauri, pet } from '../lib/tauri'
 import { useSessions, activeSessionOf, type Session } from '../store/sessions'
 import { prettyModel } from '../lib/models'
 import PersonalitySliders from '../components/PersonalitySliders'
@@ -1532,6 +1533,7 @@ export default function ChatPage() {
     { name: '/voice', label: 'Toggle voice mode', run: () => (voiceMode ? stopVoice() : startVoiceMode()) },
     { name: '/system', label: 'Edit system prompt', run: () => setShowSystem(true) },
     { name: '/share', label: 'Copy share link', run: () => shareSession() },
+    { name: '/pet', label: 'Toggle the coding pet', run: () => { if (isTauri()) pet.open(); else window.location.href = '/pet' } },
   ]
   const slashQuery = input.startsWith('/') && !input.includes(' ') ? input.slice(1).toLowerCase() : null
   const slashMatches = slashQuery === null ? [] : SLASH_COMMANDS.filter((c) => c.name.slice(1).startsWith(slashQuery))

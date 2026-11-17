@@ -48,6 +48,9 @@ pub fn run() {
             commands::backend::backend_stop,
             commands::backend::backend_status,
             commands::backend::backend_health,
+            // Pet window
+            commands::pet::pet_open,
+            commands::pet::pet_close,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]

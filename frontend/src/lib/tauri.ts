@@ -1,5 +1,5 @@
 import { invoke } from '@tauri-apps/api/core'
-import { listen } from '@tauri-apps/api/event'
+import { emit, listen } from '@tauri-apps/api/event'
 
 export const isTauri = () => {
   try {
@@ -58,6 +58,12 @@ export const native = {
     status: () => invoke('backend_status'),
     health: (port: number) => invoke('backend_health', { port }),
   },
+}
+
+export const pet = {
+  open: () => invoke('pet_open'),
+  close: () => invoke('pet_close'),
+  status: (status: string, message = '') => emit('pet:status', { status, message }),
 }
 
 export interface BrowserAction {

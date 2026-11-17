@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { Code2, Folder, FileText, Terminal, Play, Loader2, RefreshCw } from 'lucide-react'
-import { isTauri, native } from '../lib/tauri'
+import { isTauri, native, pet } from '../lib/tauri'
 import toast from 'react-hot-toast'
 
 interface Entry { name: string; path: string; is_dir: boolean; size: number }
@@ -88,6 +88,7 @@ export default function CodePage() {
     if (!task.trim()) return
     setAgentOutput('')
     setRunningAgent(true)
+    if (isTauri()) pet.status('working', 'Running agent…')
     try {
       await native.shell.execStream(
         'python3',
@@ -96,7 +97,9 @@ export default function CodePage() {
         (line) => setAgentOutput((t) => t + line + '\n'),
         () => {},
       )
+      if (isTauri()) pet.status('done', 'Agent finished')
     } catch (e: any) {
+      if (isTauri()) pet.status('needs_input', e?.message || 'Agent failed')
       toast.error(e?.message || 'Agent failed')
     } finally {
       setRunningAgent(false)

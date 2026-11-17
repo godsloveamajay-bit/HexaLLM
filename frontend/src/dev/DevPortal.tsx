@@ -4,6 +4,7 @@ import { FlaskConical, Braces, Server, Activity, LogOut, LogIn, TerminalSquare, 
 import { useAuth } from '../store/auth'
 import { baseURL } from '../lib/api'
 import { isDevSite } from './isDev'
+import PetPage from '../pages/Pet'
 
 const PlaygroundPage = lazy(() => import('./Playground'))
 const LandingPage = lazy(() => import('./Landing'))
@@ -255,6 +256,7 @@ export default function DevPortal() {
         <Route path="system" element={<SystemPage />} />
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="logs" element={<LogsPage />} />
+      <Route path="pet" element={<PetPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/playground" replace />} />
     </Routes>
