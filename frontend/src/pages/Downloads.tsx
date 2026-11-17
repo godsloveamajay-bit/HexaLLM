@@ -635,7 +635,7 @@ export default function DownloadsPage() {
     })
   }, [])
 
-  const version = release?.tag_name?.replace(/^v/, '') ?? '14.0.3'
+  const version = release?.tag_name?.replace(/^v/, '') ?? '15.22.0'
   const ghAssets: GHAsset[] = release?.assets ?? []
   const cliItems = localItems.filter(i => i.type === 'python-wheel')
 
@@ -685,7 +685,7 @@ export default function DownloadsPage() {
                 </p>
               </div>
               <a
-                href={`https://pypi.org/project/hexallm/${version === '14.0.3' ? '#files' : ''}`}
+                href={`https://pypi.org/project/hexallm/${version === '15.22.0' ? '#files' : ''}`}
                 target="_blank" rel="noopener noreferrer"
                 className="btn-primary gap-2 flex-shrink-0 text-sm"
               >
