@@ -28,6 +28,7 @@ export default function CodePage() {
   const [scrollDelta, setScrollDelta] = useState(3)
   const [devices, setDevices] = useState('')
   const [loadingDevices, setLoadingDevices] = useState(false)
+  const [screenImage, setScreenImage] = useState('')
 
 
   const runInputText = async () => {
@@ -85,6 +86,11 @@ export default function CodePage() {
       }
       case 'list_files': return JSON.stringify(await native.fs.list(arg || '.'))
       case 'devices': return String(await native.input.devices())
+      case 'screen_capture': {
+        const img = String(await native.screen.capture())
+        setScreenImage(img)
+        return img
+      }
       default: return `Unknown tool: ${tool}`
     }
   }
@@ -95,7 +101,7 @@ export default function CodePage() {
     setComputerLog('')
     const log = (line: string) => setComputerLog((t) => t + line + '\n')
     const model = 'qwen2.5:7b'
-    const system = `You are a computer-use agent. Use tools to complete the task. Reply ONLY with JSON: {"thought":"...", "tool":"tool_name", "input":"..."} or {"thought":"...", "tool":"done", "input":"final answer"}. Tools: type_text, press_key, move_mouse, click, scroll, run_command, read_file, write_file, list_files, devices.`
+    const system = `You are a computer-use agent. Use tools to complete the task. Reply ONLY with JSON: {"thought":"...", "tool":"tool_name", "input":"..."} or {"thought":"...", "tool":"done", "input":"final answer"}. Tools: type_text, press_key, move_mouse, click, scroll, run_command, read_file, write_file, list_files, devices, screen_capture. screen_capture returns a screenshot image.`
     const messages: { role: string; content: string }[] = [{ role: 'user', content: computerTask }]
     try {
       for (let step = 0; step < 6; step++) {
@@ -114,7 +120,11 @@ export default function CodePage() {
         const output = await runComputerTool(String(obj.tool || ''), obj.input)
         log(`Tool ${obj.tool}: ${String(output).slice(0, 500)}`)
         messages.push({ role: 'assistant', content: raw })
-        messages.push({ role: 'user', content: `Tool result: ${String(output).slice(0, 2000)}` })
+        if (obj.tool === 'screen_capture' && String(output).startsWith('data:image')) {
+          messages.push({ role: 'user', content: 'Here is the current screenshot.', images: [String(output).split(',', 1)[1] || ''] } as any)
+        } else {
+          messages.push({ role: 'user', content: `Tool result: ${String(output).slice(0, 2000)}` })
+        }
       }
     } catch (e: any) {
       log(`Error: ${e?.message || e}`)
@@ -292,6 +302,18 @@ export default function CodePage() {
                 {computerLog}
               </pre>
             )}
+          </div>
+
+
+          <div className="card space-y-3">
+            <h2 className="text-sm font-semibold text-gray-100">Screen</h2>
+            <p className="text-xs text-gray-500">Capture the screen so the computer agent can see it.</p>
+            <button onClick={async () => {
+              try { const img = String(await native.screen.capture()); setScreenImage(img); toast.success('Captured') } catch (e: any) { toast.error(e?.message || 'Capture failed') }
+            }} className="btn-secondary px-3 py-2 text-xs">
+              Capture Screen
+            </button>
+            {screenImage && <img src={screenImage} alt="screen" className="max-h-64 rounded-lg border border-gray-800" />}
           </div>
 
           <div className="card space-y-3">

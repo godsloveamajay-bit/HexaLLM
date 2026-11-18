@@ -4,6 +4,7 @@ pub mod git;
 pub mod browser;
 pub mod backend;
 pub mod input;
+pub mod screen;
 pub mod pet;
 
 pub use shell::*;
@@ -12,4 +13,5 @@ pub use git::*;
 pub use browser::*;
 pub use backend::*;
 pub use input::*;
+pub use screen::*;
 pub use pet::*;

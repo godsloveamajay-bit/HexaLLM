@@ -60,6 +60,9 @@ export const native = {
     scroll: (delta: number) => invoke('mouse_scroll', { delta }),
     devices: () => invoke('devices_list'),
   },
+  screen: {
+    capture: () => invoke('screen_capture'),
+  },
   backend: {
     start: () => invoke('backend_start'),
     stop: () => invoke('backend_stop'),
