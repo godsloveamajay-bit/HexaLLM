@@ -1,2 +1,2 @@
 """HexaLLM — AI coding assistant for the terminal."""
-__version__ = "15.24.0"
+__version__ = "15.25.0"

@@ -86,6 +86,70 @@ export default function CodePage() {
       }
       case 'list_files': return JSON.stringify(await native.fs.list(arg || '.'))
       case 'devices': return String(await native.input.devices())
+      case 'browser_open': {
+        const url = typeof input === 'string' ? input : String(input?.url || input?.target || '')
+        await native.browser.open(url, 'agent')
+        return `opened ${url}`
+      }
+      case 'browser_navigate': {
+        let url = ''
+        let label = 'agent'
+        try {
+          const data = typeof input === 'string' ? JSON.parse(input) : input
+          url = String(data?.url || data?.target || input || '')
+          label = String(data?.label || 'agent')
+        } catch {
+          if (String(input).includes('|')) {
+            const [l, u] = String(input).split('|', 2)
+            label = l.trim() || 'agent'
+            url = u.trim()
+          } else url = String(input || '')
+        }
+        await native.browser.navigate(label, url)
+        return `navigated ${label} to ${url}`
+      }
+      case 'browser_click': {
+        let selector = ''
+        try {
+          const data = typeof input === 'string' ? JSON.parse(input) : input
+          selector = String(data?.selector || data?.target || input || '')
+        } catch { selector = String(input || '') }
+        await native.browser.executeActions('agent', [{ type: 'click', selector }])
+        return `clicked ${selector}`
+      }
+      case 'browser_type': {
+        let selector = ''
+        let text = ''
+        try {
+          const data = typeof input === 'string' ? JSON.parse(input) : input
+          selector = String(data?.selector || data?.target || '')
+          text = String(data?.text || data?.value || '')
+        } catch {
+          const parts = String(input || '').split('|', 2)
+          selector = parts[0]?.trim() || ''
+          text = parts[1]?.trim() || ''
+        }
+        await native.browser.executeActions('agent', [{ type: 'type', selector, value: text }])
+        return `typed into ${selector}`
+      }
+      case 'browser_content': {
+        let selector: string | undefined
+        try {
+          const data = typeof input === 'string' ? JSON.parse(input) : input
+          selector = data?.selector ? String(data.selector) : undefined
+        } catch { selector = String(input || '').trim() || undefined }
+        const content = await native.browser.getContent('agent', selector)
+        return String(content || '')
+      }
+      case 'browser_close': {
+        const label = String(input || 'agent')
+        await native.browser.close(label)
+        return `closed ${label}`
+      }
+      case 'browser_script': {
+        await native.browser.executeScript('agent', String(input || ''))
+        return 'script executed'
+      }
       case 'screen_capture': {
         const img = String(await native.screen.capture())
         setScreenImage(img)
@@ -101,7 +165,7 @@ export default function CodePage() {
     setComputerLog('')
     const log = (line: string) => setComputerLog((t) => t + line + '\n')
     const model = 'qwen2.5:7b'
-    const system = `You are a computer-use agent. Use tools to complete the task. Reply ONLY with JSON: {"thought":"...", "tool":"tool_name", "input":"..."} or {"thought":"...", "tool":"done", "input":"final answer"}. Tools: type_text, press_key, move_mouse, click, scroll, run_command, read_file, write_file, list_files, devices, screen_capture. screen_capture returns a screenshot image.`
+    const system = `You are a computer-use agent. Use tools to complete the task. Reply ONLY with JSON: {"thought":"...", "tool":"tool_name", "input":"..."} or {"thought":"...", "tool":"done", "input":"final answer"}. Tools: type_text, press_key, move_mouse, click, scroll, run_command, read_file, write_file, list_files, devices, screen_capture, browser_open, browser_navigate, browser_click, browser_type, browser_content, browser_close. screen_capture returns a screenshot image; browser tools control an embedded browser.`
     const messages: { role: string; content: string }[] = [{ role: 'user', content: computerTask }]
     try {
       for (let step = 0; step < 6; step++) {
