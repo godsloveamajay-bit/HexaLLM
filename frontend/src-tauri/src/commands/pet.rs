@@ -25,6 +25,15 @@ pub async fn pet_open(app: AppHandle) -> Result<(), String> {
 }
 
 #[command]
+pub async fn pet_focus_main(app: AppHandle) -> Result<(), String> {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.show();
+        window.set_focus().map_err(|e| e.to_string())?;
+    }
+    Ok(())
+}
+
+#[command]
 pub async fn pet_close(app: AppHandle) -> Result<(), String> {
     if let Some(window) = app.get_webview_window("pet") {
         window.close().map_err(|e| e.to_string())?;

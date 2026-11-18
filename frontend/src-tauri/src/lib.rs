@@ -51,6 +51,7 @@ pub fn run() {
             // Pet window
             commands::pet::pet_open,
             commands::pet::pet_close,
+            commands::pet::pet_focus_main,
         ])
         .setup(|app| {
             #[cfg(debug_assertions)]

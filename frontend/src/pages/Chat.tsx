@@ -10,6 +10,7 @@ import {GitBranch, Command,
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../store/auth'
 import { isTauri, pet } from '../lib/tauri'
+import { listen } from '@tauri-apps/api/event'
 import { useSessions, activeSessionOf, type Session } from '../store/sessions'
 import { prettyModel } from '../lib/models'
 import PersonalitySliders from '../components/PersonalitySliders'
@@ -486,6 +487,21 @@ export default function ChatPage() {
   const [suggestions, setSuggestions] = useState<string[]>(SUGGESTIONS)
   const [suggestionsPersonal, setSuggestionsPersonal] = useState(false)
 
+  useEffect(() => {
+    if (!isTauri()) return
+    let unlisten: (() => void) | undefined
+    ;(async () => {
+      unlisten = await listen('pet:reply', (e: any) => {
+        const text = e?.payload?.text
+        if (typeof text === 'string' && text.trim()) {
+          setInput(text)
+          textareaRef.current?.focus()
+        }
+      })
+    })()
+    return () => { if (unlisten) unlisten() }
+  }, [])
+
   // ── Voice mode (hands-free talk-and-hear) ───────────────────────────────
   // Continuous loop: mic → VAD → server Whisper (invisible plumbing) → send →
   // spoken reply via TTS. Transcripts still land in chat history — that's how
@@ -786,6 +802,7 @@ export default function ChatPage() {
     // key needed): detect the intent, generate, then hand the data URL to the
     // backend so it streams the reply exactly like the old Stability path.
     const lastUserText = [...userMessages].reverse().find((m) => m.role === 'user')?.content || ''
+    if (isTauri()) pet.status('working', lastUserText.slice(0, 80))
     let imageResultB64: string | null = null
     if (!attachment && lastUserText.trim()) {
       try {
@@ -846,6 +863,7 @@ export default function ChatPage() {
       if (!mountedRef.current) return
       setLast({ content: entry.content, citations: entry.citations.length ? entry.citations : undefined, route: entry.route, usage: entry.usage, latency_ms: entry.latency_ms })
       setSending(false); setStreamPhase('idle'); setWarmingModel(''); setStreamActivity(null); setActivitySince(null); setReasoningPhase(false)
+      if (isTauri()) pet.status('done', entry.content.slice(0, 80))
       voiceBusyRef.current = false
       voiceDrainRef.current?.()
     }
@@ -981,6 +999,7 @@ export default function ChatPage() {
       liveStreams.delete(session.id)
       entry.done = true
       if (mountedRef.current) { setSending(false); setStreamPhase('idle'); setStreamActivity(null); setActivitySince(null); setReasoningPhase(false) }
+      if (isTauri()) pet.status('needs_input', 'Chat failed')
       voiceBusyRef.current = false
       return
     } finally {

@@ -74,7 +74,9 @@ export const native = {
 export const pet = {
   open: () => invoke('pet_open'),
   close: () => invoke('pet_close'),
+  focusMain: () => invoke('pet_focus_main'),
   status: (status: string, message = '') => emit('pet:status', { status, message }),
+  reply: (text: string) => emit('pet:reply', { text }),
 }
 
 export interface BrowserAction {
