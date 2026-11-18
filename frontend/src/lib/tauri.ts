@@ -52,6 +52,14 @@ export const native = {
     executeActions: (label: string, actions: BrowserAction[]) => invoke('browser_execute_actions', { window_label: label, actions }),
     getContent: (label: string, selector?: string) => invoke('browser_get_content', { window_label: label, selector }),
   },
+  input: {
+    typeText: (text: string) => invoke('input_type_text', { text }),
+    key: (key: string) => invoke('input_key', { key }),
+    move: (x: number, y: number) => invoke('mouse_move', { x, y }),
+    click: (button: string) => invoke('mouse_click', { button }),
+    scroll: (delta: number) => invoke('mouse_scroll', { delta }),
+    devices: () => invoke('devices_list'),
+  },
   backend: {
     start: () => invoke('backend_start'),
     stop: () => invoke('backend_stop'),
