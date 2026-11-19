@@ -11,7 +11,7 @@ from .core.config import settings
 from .core.database import Base, engine
 from .models import user, chat, template, memory, billing, workspace, plugin  # noqa: F401
 from .api import (
-    auth, models, chat as chat_api, image as image_api,
+    auth, models, chat as chat_api, image as image_api, video as video_api,
     templates as templates_api, memory as memory_api,
     transcribe as transcribe_api, billing as billing_api,
     admin as admin_api, agents as agents_api, mcp_clients as mcp_api,
@@ -242,6 +242,7 @@ app.include_router(auth.router,           prefix="/api/v1")
 app.include_router(models.router,         prefix="/api/v1")
 app.include_router(chat_api.router,       prefix="/api/v1")
 app.include_router(image_api.router,      prefix="/api/v1")
+app.include_router(video_api.router,      prefix="/api/v1")
 app.include_router(templates_api.router,  prefix="/api/v1")
 app.include_router(memory_api.router,     prefix="/api/v1")
 app.include_router(transcribe_api.router, prefix="/api/v1")

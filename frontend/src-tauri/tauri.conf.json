@@ -1,7 +1,7 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "HexaLLM",
-  "version": "15.25.1",
+  "version": "15.29.0",
   "identifier": "ai.hexallm.app",
   "build": {
     "frontendDist": "../dist",

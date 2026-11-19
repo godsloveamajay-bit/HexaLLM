@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Clapperboard, Sparkles, Download, RefreshCw, Loader2, X, Wand2 } from 'lucide-react'
 import api from '../lib/api'
 import toast from 'react-hot-toast'
@@ -46,6 +46,7 @@ const STYLE_PRESETS = [
 export default function VideoGenPage() {
   const [prompt, setPrompt] = useState('')
   const [model, setModel] = useState('sora-2')
+  const [serverModels, setServerModels] = useState<{ id: string; name: string; available: boolean }[]>([])
   const [seconds, setSeconds] = useState(8)
   const [size, setSize] = useState('1280x720')
   const [enhancePrompt, setEnhancePrompt] = useState(false)
@@ -53,6 +54,10 @@ export default function VideoGenPage() {
   const [enhancing, setEnhancing] = useState(false)
   const [current, setCurrent] = useState<GeneratedVideo | null>(null)
   const [history, setHistory] = useState<GeneratedVideo[]>([])
+
+  useEffect(() => {
+    api.get('/video/models').then(({ data }) => setServerModels((data?.pollinations || []).filter((m: any) => m.available))).catch(() => {})
+  }, [])
 
   const applyPreset = (prefix: string) => {
     setPrompt((p) => {
@@ -73,18 +78,31 @@ export default function VideoGenPage() {
         enhanced = finalPrompt
       }
 
-      const { puter } = await import('@heyputer/puter.js')
-      const videoEl = await puter.ai.txt2vid({
-        prompt: finalPrompt,
-        model,
-        seconds,
-        size,
-      })
-      if (!videoEl?.src) throw new Error('no video returned')
+      let url = ''
+      if (model.startsWith('pollinations-')) {
+        const { data } = await api.post('/video/generate', {
+          prompt: finalPrompt,
+          model,
+          seconds,
+          size,
+        })
+        if (!data?.url) throw new Error('no video returned')
+        url = data.url
+      } else {
+        const { puter } = await import('@heyputer/puter.js')
+        const videoEl = await puter.ai.txt2vid({
+          prompt: finalPrompt,
+          model,
+          seconds,
+          size,
+        })
+        if (!videoEl?.src) throw new Error('no video returned')
+        url = videoEl.src
+      }
 
       setEnhancing(false)
       const vid: GeneratedVideo = {
-        url: videoEl.src,
+        url,
         prompt: opts.prompt,
         enhancedPrompt: enhanced ?? undefined,
       }
@@ -172,6 +190,13 @@ export default function VideoGenPage() {
                 {PUTER_VIDEO_MODELS.map((m) => (
                   <option key={m.id} value={m.id}>{m.name}</option>
                 ))}
+                {serverModels.length > 0 && (
+                  <optgroup label="Server (Pollinations)">
+                    {serverModels.map((m) => (
+                      <option key={m.id} value={m.id}>{m.name}</option>
+                    ))}
+                  </optgroup>
+                )}
               </select>
             </div>
 

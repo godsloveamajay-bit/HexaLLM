@@ -3,7 +3,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     APP_NAME: str = "HexaLLM AI Platform"
-    VERSION: str = "15.25.1"
+    VERSION: str = "15.29.0"
     DEBUG: bool = False
 
     DATABASE_URL: str = "sqlite:///./hexallm.db"
@@ -82,6 +82,8 @@ class Settings(BaseSettings):
     # discovery is off unless explicitly turned on.
     PLUGINS_ENABLED: bool = True
     PLUGINS_DIR: str = "./plugins"
+    # Optional Pollinations secret key for server-side video generation.
+    POLLINATIONS_API_KEY: str = ""
     # Optional remote plugin marketplace. Comma-separated JSON source URLs.
     PLUGIN_MARKETPLACE_URLS: str = ""
     # Optional Ed25519 public key (PEM) used to verify plugin archives and
