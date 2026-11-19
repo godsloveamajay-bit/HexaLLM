@@ -263,6 +263,7 @@ export default function Sidebar({ collapsed, mobileOpen, onCloseMobile }: Props)
                     activeId === s.id ? 'bg-primary-900/40 text-primary-300' : 'hover:bg-gray-800 text-gray-400')}>
                   <Pin className="w-3.5 h-3.5 flex-shrink-0" />
                   <span className="flex-1 min-w-0 truncate">{s.title}</span>
+                  {s.parent_session_id && <span className="text-[10px] text-gray-600">fork</span>}
                   <button onClick={(e) => { e.stopPropagation(); togglePin(s.id) }}
                     className="opacity-0 group-hover:opacity-100 hover:text-primary-300 transition-opacity" title="Unpin" aria-label="Unpin">
                     <Pin className="w-3.5 h-3.5" />

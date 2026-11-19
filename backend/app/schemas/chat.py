@@ -51,6 +51,7 @@ class ChatSessionOut(BaseModel):
     title: str
     model_name: str
     system_prompt: Optional[str]
+    parent_session_id: Optional[int] = None
     created_at: datetime
     updated_at: datetime
 

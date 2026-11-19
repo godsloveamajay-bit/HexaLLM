@@ -934,6 +934,7 @@ def fork_session(
         title=f"{src.title} (fork)"[:80],
         model_name=src.model_name,
         system_prompt=src.system_prompt,
+        parent_session_id=src.id,
     )
     db.add(copy)
     db.flush()

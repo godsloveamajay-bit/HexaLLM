@@ -5,6 +5,7 @@ export interface Session {
   id: number
   title: string
   model_name: string
+  parent_session_id?: number | null
   updated_at: string
 }
 

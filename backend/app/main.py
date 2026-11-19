@@ -32,6 +32,8 @@ def _migrate_db():
     inspector = inspect(engine)
     with engine.begin() as conn:
         existing_cols = {c["name"] for c in inspector.get_columns("chat_sessions")}
+        if "parent_session_id" not in existing_cols:
+            conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN parent_session_id INTEGER"))
         if "share_token" not in existing_cols:
             conn.execute(text("ALTER TABLE chat_sessions ADD COLUMN share_token VARCHAR"))
             conn.execute(text(
